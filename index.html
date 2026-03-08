@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tennessee Saints | Youth Basketball</title>
+  <style>
+    :root {
+      --saints-blue: #0b3a8d;
+      --saints-blue-dark: #06255c;
+      --saints-gold: #f5cf00;
+      --saints-gold-dark: #d9af00;
+      --saints-white: #ffffff;
+      --saints-light: #f3f5f9;
+      --saints-gray: #dfe3ea;
+      --saints-text: #13233d;
+      --shadow: 0 12px 30px rgba(6, 37, 92, 0.18);
+      --radius: 18px;
+      --max-width: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--saints-text);
+      background: linear-gradient(180deg, #f7f8fb 0%, #eef2f8 100%);
+      line-height: 1.5;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    .container {
+      width: min(92%, var(--max-width));
+      margin: 0 auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      transition: box-shadow 0.25s ease;
+    }
+
+    .site-header.header-shadow {
+      box-shadow: 0 10px 28px rgba(6,37,92,0.22);
+    }
+
+    
+
+    .topbar {
+      background: var(--saints-blue-dark);
+      color: var(--saints-white);
+      font-size: 0.95rem;
+    }
+
+    .topbar-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.65rem 0;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+
+    .navbar {
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px);
+      border-bottom: 4px solid var(--saints-gold);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      padding: 0.85rem 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      min-width: 0;
+    }
+
+    .brand img {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      border-radius: 14px;
+      background: transparent;
+    }
+
+    .brand-text {
+      min-width: 0;
+    }
+
+    .brand-text h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      color: var(--saints-blue-dark);
+      letter-spacing: 0.02em;
+    }
+
+    .brand-text p {
+      margin: 0.15rem 0 0;
+      color: #57657c;
+      font-size: 0.92rem;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav-links a {
+      padding: 0.6rem 0.9rem;
+      border-radius: 999px;
+      font-weight: 700;
+      color: var(--saints-blue-dark);
+      transition: 0.2s ease;
+      position: relative;
+    }
+
+    .nav-links a::after {
+      content: "";
+      position: absolute;
+      left: 0.9rem;
+      right: 0.9rem;
+      bottom: 0.28rem;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--saints-gold);
+      transform: scaleX(0);
+      transform-origin: center;
+      transition: transform 0.2s ease;
+    }
+
+    .nav-links a:hover,
+    .nav-links a:focus {
+      background: var(--saints-blue);
+      color: var(--saints-white);
+      transform: translateY(-1px);
+    }
+
+    .nav-links a:hover::after,
+    .nav-links a:focus::after {
+      transform: scaleX(1);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.9rem 1.3rem;
+      border-radius: 999px;
+      font-weight: 800;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      box-shadow: var(--shadow);
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 34px rgba(6, 37, 92, 0.24);
+    }
+
+    .btn-primary {
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+    }
+
+    .btn-secondary {
+      background: var(--saints-blue);
+      color: var(--saints-white);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(245, 207, 0, 0.32), transparent 24%),
+        radial-gradient(circle at 85% 10%, rgba(11, 58, 141, 0.12), transparent 24%),
+        linear-gradient(135deg, var(--saints-blue-dark) 0%, var(--saints-blue) 58%, #174cae 100%);
+      color: var(--saints-white);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.14;
+      background-image: url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%23ffffff' stroke-width='2' fill='none'%3E%3Ccircle cx='200' cy='200' r='60'/%3E%3Cline x1='0' y1='200' x2='400' y2='200'/%3E%3Crect x='120' y='0' width='160' height='400'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: 520px 520px;
+      background-repeat: repeat;
+      mix-blend-mode: overlay;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 6px;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--saints-gold) 20%,
+        var(--saints-gold-dark) 50%,
+        var(--saints-gold) 80%,
+        transparent 100%
+      );
+      background-size: 200% 100%;
+      animation: goldFlow 6s linear infinite;
+      opacity: 0.95;
+      z-index: 2;
+    }
+
+    @keyframes goldFlow {
+      0% { background-position: 0% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .hero-glow {
+      position: absolute;
+      inset: auto -10% -120px auto;
+      width: 480px;
+      height: 480px;
+      border-radius: 50%;
+      background: rgba(245, 207, 0, 0.12);
+      filter: blur(8px);
+      z-index: 0;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 2rem;
+      align-items: center;
+      padding: 4.5rem 0 4rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-copy h2 {
+      font-size: clamp(2.3rem, 4vw, 4.3rem);
+      line-height: 1.05;
+      margin: 0 0 1rem;
+    }
+
+    .hero-copy p {
+      font-size: 1.08rem;
+      max-width: 640px;
+      color: rgba(255, 255, 255, 0.92);
+      margin-bottom: 1.6rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .hero-badges {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      gap: 0.9rem;
+      margin-top: 1.2rem;
+      max-width: 520px;
+    }
+
+    .badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+      letter-spacing: 0.02em;
+    }
+
+    .hero-card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.07));
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 28px;
+      padding: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-card img {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+      filter: drop-shadow(0 18px 26px rgba(0, 0, 0, 0.18));
+    }
+
+    section {
+      padding: 4rem 0;
+      scroll-margin-top: 130px;
+    }
+
+    .section-head {
+      margin-bottom: 2rem;
+      max-width: 760px;
+    }
+
+    .eyebrow {
+      color: var(--saints-blue);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 900;
+      font-size: 0.82rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .section-head h3 {
+      margin: 0 0 0.6rem;
+      font-size: clamp(1.8rem, 2.2vw, 2.5rem);
+      color: var(--saints-blue-dark);
+    }
+
+    .section-head p {
+      margin: 0;
+      color: #5a6a80;
+      font-size: 1rem;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.3rem;
+    }
+
+    .card {
+      background: var(--saints-white);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      border-top: 5px solid var(--saints-gold);
+    }
+
+    .card h4 {
+      margin: 0 0 0.7rem;
+      font-size: 1.2rem;
+      color: var(--saints-blue-dark);
+    }
+
+    .card p,
+    .card li {
+      color: #536277;
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: stretch;
+    }
+
+    .panel {
+      background: var(--saints-white);
+      border-radius: 22px;
+      padding: 1.7rem;
+      box-shadow: var(--shadow);
+    }
+
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.3rem;
+    }
+
+    .team-card {
+      background: var(--saints-white);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      border: 1px solid #e8ecf2;
+    }
+
+    .team-card .top {
+      background: linear-gradient(135deg, var(--saints-blue) 0%, var(--saints-blue-dark) 100%);
+      color: var(--saints-white);
+      padding: 1.2rem;
+    }
+
+    .team-card .top h4 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .team-card .top p {
+      margin: 0.35rem 0 0;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .team-card .body {
+      padding: 1.2rem;
+    }
+
+    .team-card .body img {
+      border-radius: 12px;
+      margin-bottom: 10px;
+      aspect-ratio: 4 / 5;
+      object-fit: cover;
+      width: 100%;
+    }
+
+    .team-card ul {
+      padding-left: 1.1rem;
+      margin: 0.8rem 0 0;
+      color: #536277;
+    }
+
+    .socials {
+      display: flex;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+      margin-top: 1.2rem;
+    }
+
+    .socials a {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+      border-radius: 50%;
+      font-size: 18px;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .socials a:hover,
+    .socials a:focus {
+      transform: translateY(-4px) scale(1.04);
+      background: var(--saints-blue);
+      color: var(--saints-white);
+      box-shadow: 0 18px 34px rgba(6, 37, 92, 0.24);
+    }
+
+    form {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    label {
+      font-weight: 700;
+      color: var(--saints-blue-dark);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+
+    select,
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid #d7deea;
+      border-radius: 14px;
+      padding: 0.95rem 1rem;
+      font: inherit;
+      background: #fbfcfe;
+    }
+
+    select:focus,
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(11, 58, 141, 0.65);
+      box-shadow: 0 0 0 4px rgba(11, 58, 141, 0.1);
+    }
+
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.7rem;
+      background: #f6f8fc;
+      border: 1px solid #e6ebf3;
+      border-radius: 14px;
+      padding: 0.95rem 1rem;
+    }
+
+    .checkbox-row input {
+      width: auto;
+      margin-top: 0.2rem;
+      flex-shrink: 0;
+    }
+
+    .checkbox-row label {
+      margin: 0;
+      font-weight: 600;
+      color: #536277;
+    }
+
+    footer {
+      background: var(--saints-blue-dark);
+      color: var(--saints-white);
+      padding: 2rem 0;
+      margin-top: 2rem;
+      border-top: 3px solid var(--saints-gold);
+    }
+
+    .footer-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .footer-nav {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .footer-nav a {
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 37, 92, 0.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      z-index: 2000;
+    }
+
+    .modal-overlay.show {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(100%, 520px);
+      background: var(--saints-white);
+      border-radius: 24px;
+      padding: 2rem;
+      box-shadow: 0 24px 60px rgba(6, 37, 92, 0.28);
+      text-align: center;
+      border-top: 6px solid var(--saints-gold);
+    }
+
+    .modal-card h4 {
+      margin: 0 0 0.7rem;
+      color: var(--saints-blue-dark);
+      font-size: 1.6rem;
+    }
+
+    .modal-card p {
+      margin: 0 0 1.25rem;
+      color: #536277;
+    }
+
+    @media (max-width: 960px) {
+      .hero-grid,
+      .contact-grid,
+      .cards,
+      .team-grid,
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-inner {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .nav-links {
+        justify-content: flex-start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .hero-copy h2 {
+        font-size: 2rem;
+      }
+
+      .brand img {
+        width: 60px;
+        height: 60px;
+      }
+
+      .btn {
+        width: 100%;
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+</head>
+<body>
+  <div class="site-header">
+    <div class="topbar">
+      <div class="container topbar-inner">
+        <div>
+          Faith. Teamwork. Discipline. Development.
+          <div class="socials" style="margin-top: 6px;">
+            <a href="#" aria-label="Instagram"><i class="fab fa-instagram"></i></a>
+            <a href="#" aria-label="Facebook"><i class="fab fa-facebook-f"></i></a>
+            <a href="#" aria-label="X"><i class="fab fa-x-twitter"></i></a>
+            <a href="#" aria-label="YouTube"><i class="fab fa-youtube"></i></a>
+          </div>
+        </div>
+        <div>Building great players and even better young men.</div>
+      </div>
+    </div>
+
+    <header class="navbar">
+      <div class="container nav-inner">
+        <a href="#home" class="brand">
+          <img src="Saints Logo Updated v2.png" alt="Tennessee Saints logo" />
+          <div class="brand-text">
+            <h1>The Tennessee Saints</h1>
+            <p>Competitive Youth Basketball</p>
+          </div>
+        </a>
+
+        <nav class="nav-links" aria-label="Main navigation">
+          <a href="#home">Home</a>
+          <a href="#mission">Mission</a>
+          <a href="#team">Team</a>
+          <a href="#leadership">Leadership</a>
+          <a href="#contact">Contact</a>
+        </nav>
+      </div>
+    </header>
+  </div>
+
+  <main>
+    <section class="hero" id="home">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <h2>Where faith, fundamentals, and fire come together.</h2>
+          <p>
+            The Tennessee Saints are a youth competitive basketball program focused on skill development,
+            character, teamwork, and competitive growth. We are here to build disciplined athletes,
+            confident leaders, and a culture families are proud to be part of.
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#team">View Teams</a>
+            <a class="btn btn-secondary" href="#contact">Contact the Program</a>
+          </div>
+
+          <div class="hero-badges">
+            <span class="badge"><i class="fas fa-basketball-ball" style="margin-right:6px;color:var(--saints-gold);"></i>Player Development</span>
+            <span class="badge"><i class="fas fa-cross" style="margin-right:6px;color:var(--saints-gold);"></i>Faith‑Driven Culture</span>
+            <span class="badge"><i class="fas fa-fire" style="margin-right:6px;color:var(--saints-gold);"></i>Competitive Basketball</span>
+          </div>
+        </div>
+
+        <div class="hero-card">
+          <img src="Saints Logo Updated v2.png" alt="Tennessee Saints emblem" />
+        </div>
+      </div>
+    </section>
+
+    <section id="mission">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Mission</div>
+          <h3>Our Mission</h3>
+          <p>
+            The Tennessee Saints exist to develop young athletes through faith, discipline, teamwork, and a love for the game of basketball. Our goal is to help players grow not only as competitors, but as leaders, teammates, and young men of character.
+          </p>
+        </div>
+
+        <div class="cards">
+          <article class="card">
+            <h4>Faith</h4>
+            <p>We believe strong character starts with strong values. Our program emphasizes humility, gratitude, and respect both on and off the court.</p>
+          </article>
+
+          <article class="card">
+            <h4>Development</h4>
+            <p>Every player should improve. We focus on skill development, basketball IQ, and confidence so athletes continue to grow year after year.</p>
+          </article>
+
+          <article class="card">
+            <h4>Team First</h4>
+            <p>Basketball is a team game. We teach players to communicate, trust teammates, and compete together with discipline and effort.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="team">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Team</div>
+          <h3>Current Team</h3>
+          <p>The Tennessee Saints currently field one competitive team made up of 5th grade players focused on strong fundamentals, team basketball, and player development.</p>
+        </div>
+
+        <div class="team-grid">
+          <article class="team-card">
+            <div class="top">
+              <h4>5th Grade Team</h4>
+              <p>Competitive Development Team</p>
+            </div>
+            <div class="body">
+              <strong>Program Focus</strong>
+              <ul>
+                <li>Ball handling, passing, and shooting fundamentals</li>
+                <li>Defensive effort, positioning, and communication</li>
+                <li>Basketball IQ and decision making</li>
+                <li>Team-first mentality and leadership</li>
+                <li>Competitive tournament play</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="leadership">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Leadership</div>
+          <h3>Our Coaches &amp; Leadership</h3>
+          <p>The Tennessee Saints program is led by coaches committed to developing great basketball players and even better young men. Add full bios later — these are placeholders for now.</p>
+        </div>
+
+        <div class="team-grid">
+          <article class="team-card">
+            <div class="top">
+              <h4>Jacob Adams</h4>
+              <p>Co-Founder</p>
+            </div>
+            <div class="body">
+              <img src="jacob-adams.jpg" alt="Jacob Adams" />
+              <p>Bio placeholder. Add Jacob's coaching background, basketball experience, leadership philosophy, and vision for the Tennessee Saints program.</p>
+              <a class="btn btn-secondary" href="leadership-bios.html#jacob-adams">Learn More</a>
+            </div>
+          </article>
+
+          <article class="team-card">
+            <div class="top">
+              <h4>Mike Posusney</h4>
+              <p>Co-Founder</p>
+            </div>
+            <div class="body">
+              <img src="mike-posusney.jpg" alt="Mike Posusney" />
+              <p>Bio placeholder. Add Mike's basketball experience, coaching strengths, and the role he plays in developing the team.</p>
+              <a class="btn btn-secondary" href="leadership-bios.html#mike-posusney">Learn More</a>
+            </div>
+          </article>
+
+          <article class="team-card">
+            <div class="top">
+              <h4>Josh Souder</h4>
+              <p>Co-Founder</p>
+            </div>
+            <div class="body">
+              <img src="josh-souder.jpg" alt="Josh Souder" />
+              <p>Bio placeholder. Add Josh's basketball background, coaching style, and contributions to player development.</p>
+              <a class="btn btn-secondary" href="leadership-bios.html#josh-souder">Learn More</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Contact</div>
+          <h3>Ready to connect?</h3>
+          <p>This section works for parent questions, player interest, tryouts, sponsorships, coaching interest, or volunteer support.</p>
+        </div>
+
+        <div class="contact-grid">
+          <div class="panel" style="grid-column: 1 / -1;">
+            <h4>Connect With Tennessee Saints</h4>
+
+            <form id="saints-dynamic-form" novalidate>
+              <div>
+                <label for="form-purpose">Purpose</label>
+                <select id="form-purpose" name="purpose" required>
+                  <option value="general">General Contact</option>
+                  <option value="player-interest">Player Interest</option>
+                  <option value="coaching-interest">Coaching Interest</option>
+                  <option value="tryout">Tryout Registration</option>
+                  <option value="waiver">Waiver / Participation Agreement</option>
+                </select>
+              </div>
+
+              <div id="dynamic-form-fields"></div>
+
+              <button class="btn btn-primary" type="submit">Submit Form</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-overlay" id="success-modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="success-modal-title">
+      <h4 id="success-modal-title">Thanks for reaching out</h4>
+      <p>Your form passed validation and is ready to be connected to your backend workflow.</p>
+      <button class="btn btn-primary" type="button" id="close-success-modal">Close</button>
+    </div>
+  </div>
+
+  <footer>
+    <div class="container footer-grid">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <img src="Saints Logo Updated v2_transparent.png" alt="Tennessee Saints logo" style="width: 60px; height: 60px; object-fit: contain;" />
+        <div>
+          <strong>The Tennessee Saints</strong><br />
+          Competitive Youth Basketball Program<br />
+          info@tnsaints.com · Middle Tennessee
+        </div>
+      </div>
+
+      <nav class="footer-nav" aria-label="Footer navigation">
+        <a href="#home">Home</a>
+        <a href="#mission">Mission</a>
+        <a href="#leadership">Leadership</a>
+        <a href="#team">Team</a>
+        <a href="#contact">Contact</a>
+        <a href="terms-and-conditions.html">Terms &amp; Conditions</a>
+        <a href="privacy-policy.html">Privacy Policy</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    const purposeSelect = document.getElementById('form-purpose');
+    const dynamicFields = document.getElementById('dynamic-form-fields');
+    const successModal = document.getElementById('success-modal');
+    const closeSuccessModalButton = document.getElementById('close-success-modal');
+    const form = document.getElementById('saints-dynamic-form');
+
+    const phonePattern = '^(?:\\+1\\s?)?(?:\\(\\d{3}\\)|\\d{3})[ -]?\\d{3}[ -]?\\d{4}$';
+    const namePattern = "[A-Za-zÀ-ÿ' -]{2,60}";
+    const schoolPattern = "[A-Za-z0-9À-ÿ'&., -]{2,80}";
+    const locationPattern = "[A-Za-zÀ-ÿ0-9'., -]{2,80}";
+
+    const formTemplates = {
+      general: `
+        <div>
+          <label for="contact-name">Name</label>
+          <input id="contact-name" name="name" type="text" placeholder="Your name" required pattern="${namePattern}" title="Please enter a valid name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="contact-email">Email</label>
+          <input id="contact-email" name="email" type="email" placeholder="Your email" required autocomplete="email" />
+        </div>
+        <div>
+          <label for="contact-message">Message</label>
+          <textarea id="contact-message" name="message" placeholder="Tell us how we can help." required minlength="10" maxlength="1000"></textarea>
+        </div>
+      `,
+      'player-interest': `
+        <div class="form-grid">
+          <div>
+            <label for="player-name">Player Name</label>
+            <input id="player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
+          </div>
+          <div>
+            <label for="player-grade">Grade</label>
+            <select id="player-grade" name="grade" required>
+              <option value="" selected disabled>Select grade</option>
+              <option value="3rd">3rd</option>
+              <option value="4th">4th</option>
+              <option value="5th">5th</option>
+              <option value="6th">6th</option>
+              <option value="7th">7th</option>
+              <option value="8th">8th</option>
+              <option value="9th">9th</option>
+              <option value="10th">10th</option>
+              <option value="11th">11th</option>
+              <option value="12th">12th</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="parent-name">Parent / Guardian Name</label>
+          <input id="parent-name" name="parent_name" type="text" placeholder="Parent full name" required pattern="${namePattern}" title="Please enter a valid parent name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="parent-email">Parent Email</label>
+          <input id="parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="school">School</label>
+            <input id="school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
+          </div>
+          <div>
+            <label for="position">Primary Position</label>
+            <select id="position" name="position" required>
+              <option value="" selected disabled>Select position</option>
+              <option value="Point Guard">Point Guard</option>
+              <option value="Shooting Guard">Shooting Guard</option>
+              <option value="Small Forward">Small Forward</option>
+              <option value="Power Forward">Power Forward</option>
+              <option value="Center">Center</option>
+              <option value="Combo Guard">Combo Guard</option>
+              <option value="Wing">Wing</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="highlight-link">Highlight Link</label>
+          <input id="highlight-link" name="highlight_link" type="url" placeholder="https://example.com/highlights" required pattern="https?://.+" title="Please enter a valid full URL starting with http:// or https://" inputmode="url" />
+        </div>
+        <div>
+          <label for="player-notes">Player Notes</label>
+          <textarea id="player-notes" name="player_notes" placeholder="Share experience, strengths, goals, and anything else coaches should know." required minlength="20" maxlength="1000"></textarea>
+        </div>
+      `,
+      'coaching-interest': `
+        <div class="form-grid">
+          <div>
+            <label for="coach-name">Coach Name</label>
+            <input id="coach-name" name="coach_name" type="text" placeholder="Full name" required pattern="${namePattern}" title="Please enter a valid full name using letters only." autocomplete="name" />
+          </div>
+          <div>
+            <label for="coach-role">Interest Area</label>
+            <select id="coach-role" name="coach_role" required>
+              <option value="" selected disabled>Select interest area</option>
+              <option value="Head Coach">Head Coach</option>
+              <option value="Assistant Coach">Assistant Coach</option>
+              <option value="Skills Trainer">Skills Trainer</option>
+              <option value="Strength & Conditioning">Strength & Conditioning</option>
+              <option value="Team Manager">Team Manager</option>
+              <option value="Volunteer Support">Volunteer Support</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="coach-email">Email</label>
+          <input id="coach-email" name="coach_email" type="email" placeholder="Your email" required autocomplete="email" />
+        </div>
+        <div>
+          <label for="coach-phone">Phone</label>
+          <input id="coach-phone" name="coach_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+        </div>
+        <div>
+          <label for="coach-location">Location</label>
+          <input id="coach-location" name="coach_location" type="text" placeholder="City, State" required pattern="${locationPattern}" title="Please enter a valid location." />
+        </div>
+        <div>
+          <label for="coach-experience">Coaching / Basketball Experience</label>
+          <textarea id="coach-experience" name="coach_experience" placeholder="Share your playing, coaching, training, or volunteer background." required minlength="20" maxlength="1000"></textarea>
+        </div>
+      `,
+      tryout: `
+        <div class="form-grid">
+          <div>
+            <label for="tryout-player-name">Player Name</label>
+            <input id="tryout-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
+          </div>
+          <div>
+            <label for="tryout-grade">Grade</label>
+            <select id="tryout-grade" name="grade" required>
+              <option value="" selected disabled>Select grade</option>
+              <option value="3rd">3rd</option>
+              <option value="4th">4th</option>
+              <option value="5th">5th</option>
+              <option value="6th">6th</option>
+              <option value="7th">7th</option>
+              <option value="8th">8th</option>
+              <option value="9th">9th</option>
+              <option value="10th">10th</option>
+              <option value="11th">11th</option>
+              <option value="12th">12th</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="tryout-parent-name">Parent / Guardian Name</label>
+          <input id="tryout-parent-name" name="parent_name" type="text" placeholder="Parent full name" required pattern="${namePattern}" title="Please enter a valid parent name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="tryout-parent-email">Parent Email</label>
+          <input id="tryout-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="tryout-phone">Parent Phone</label>
+            <input id="tryout-phone" name="phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+          </div>
+          <div>
+            <label for="tryout-school">School</label>
+            <input id="tryout-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
+          </div>
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="tryout-emergency-name">Emergency Contact Name</label>
+            <input id="tryout-emergency-name" name="emergency_contact_name" type="text" placeholder="Emergency contact full name" required pattern="${namePattern}" title="Please enter a valid emergency contact name using letters only." />
+          </div>
+          <div>
+            <label for="tryout-emergency-phone">Emergency Contact Phone</label>
+            <input id="tryout-emergency-phone" name="emergency_contact_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid emergency contact phone number." autocomplete="tel" />
+          </div>
+        </div>
+        <div>
+          <label for="tryout-highlight-link">Highlight Link</label>
+          <input id="tryout-highlight-link" name="highlight_link" type="url" placeholder="https://example.com/highlights" required pattern="https?://.+" title="Please enter a valid full URL starting with http:// or https://" inputmode="url" />
+        </div>
+        <div>
+          <label for="tryout-medical">Medical Notes</label>
+          <textarea id="tryout-medical" name="medical_notes" placeholder="Allergies, asthma, injuries, medications, or anything coaches should know." required minlength="15" maxlength="1000"></textarea>
+        </div>
+      `,
+      waiver: `
+        <div class="form-grid">
+          <div>
+            <label for="waiver-player-name">Player Name</label>
+            <input id="waiver-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
+          </div>
+          <div>
+            <label for="waiver-grade">Grade</label>
+            <select id="waiver-grade" name="grade" required>
+              <option value="" selected disabled>Select grade</option>
+              <option value="3rd">3rd</option>
+              <option value="4th">4th</option>
+              <option value="5th">5th</option>
+              <option value="6th">6th</option>
+              <option value="7th">7th</option>
+              <option value="8th">8th</option>
+              <option value="9th">9th</option>
+              <option value="10th">10th</option>
+              <option value="11th">11th</option>
+              <option value="12th">12th</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="waiver-dob">Date of Birth</label>
+            <input id="waiver-dob" name="dob" type="date" required />
+          </div>
+          <div>
+            <label for="waiver-school">School</label>
+            <input id="waiver-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
+          </div>
+        </div>
+        <div>
+          <label for="waiver-parent-name">Parent / Guardian Name</label>
+          <input id="waiver-parent-name" name="parent_name" type="text" placeholder="Legal parent / guardian" required pattern="${namePattern}" title="Please enter a valid parent or guardian name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="waiver-parent-email">Parent Email</label>
+          <input id="waiver-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+        </div>
+        <div>
+          <label for="waiver-parent-phone">Parent Phone</label>
+          <input id="waiver-parent-phone" name="parent_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+        </div>
+        <div class="checkbox-row">
+          <input id="waiver-risk" name="assumption_of_risk" type="checkbox" required />
+          <label for="waiver-risk">I acknowledge basketball activities involve inherent risk, including injury, and I accept those risks on behalf of my child.</label>
+        </div>
+        <div class="checkbox-row">
+          <input id="waiver-medical" name="medical_release" type="checkbox" required />
+          <label for="waiver-medical">I authorize emergency medical care if needed and confirm I will communicate any relevant health conditions.</label>
+        </div>
+        <div class="checkbox-row">
+          <input id="waiver-media" name="photo_video_release" type="checkbox" required />
+          <label for="waiver-media">I grant permission for Tennessee Saints to use photos or video of my child for team, website, and social media promotion.</label>
+        </div>
+        <div>
+          <label for="waiver-signature">Parent / Guardian Signature</label>
+          <input id="waiver-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
+        </div>
+      `
+    };
+
+    function renderDynamicForm() {
+      const selected = purposeSelect.value;
+      dynamicFields.innerHTML = formTemplates[selected] || formTemplates.general;
+    }
+
+    purposeSelect.addEventListener('change', renderDynamicForm);
+
+    form.addEventListener('submit', (event) => {
+      if (!form.checkValidity()) {
+        event.preventDefault();
+        form.reportValidity();
+        return;
+      }
+
+      event.preventDefault();
+      successModal.classList.add('show');
+      successModal.setAttribute('aria-hidden', 'false');
+      closeSuccessModalButton.focus();
+    });
+
+    closeSuccessModalButton.addEventListener('click', () => {
+      successModal.classList.remove('show');
+      successModal.setAttribute('aria-hidden', 'true');
+    });
+
+    successModal.addEventListener('click', (event) => {
+      if (event.target === successModal) {
+        successModal.classList.remove('show');
+        successModal.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        successModal.classList.remove('show');
+        successModal.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    renderDynamicForm();
+
+    // subtle shadow when page scrolls
+    const siteHeader = document.querySelector('.site-header');
+
+    function toggleHeaderShadow() {
+      if (window.scrollY > 6) {
+        siteHeader.classList.add('header-shadow');
+      } else {
+        siteHeader.classList.remove('header-shadow');
+      }
+    }
+
+    window.addEventListener('scroll', toggleHeaderShadow);
+    toggleHeaderShadow();
+
+    
+  </script>
+</body>
+</html>
