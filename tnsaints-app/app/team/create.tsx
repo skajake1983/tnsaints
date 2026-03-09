@@ -18,6 +18,7 @@ import { Colors } from '../../constants/Colors';
 import { useTeamStore, TeamInput, AGE_GROUPS, AgeGroup, TeamGender } from '../../stores/teamStore';
 import { useAuthStore } from '../../stores/authStore';
 import { sanitizeText, sanitizeAddress } from '../../lib/validation';
+import { cleanData } from '../../lib/firestoreHelpers';
 
 const GENDER_OPTIONS: { label: string; value: TeamGender }[] = [
   { label: 'Boys', value: 'boys' },
@@ -32,15 +33,6 @@ type FieldErrors = {
   gender?: string;
   maxRosterSize?: string;
 };
-
-/** Strip undefined keys so Firestore never receives them */
-function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
-  const clean = {} as T;
-  for (const key of Object.keys(obj) as (keyof T)[]) {
-    if (obj[key] !== undefined) clean[key] = obj[key];
-  }
-  return clean;
-}
 
 export default function CreateTeamScreen() {
   const router = useRouter();
@@ -120,7 +112,7 @@ export default function CreateTeamScreen() {
 
     setSaving(true);
     try {
-      const data: TeamInput = stripUndefined({
+      const data: TeamInput = cleanData({
         name: cleanName,
         orgId: 'tn-saints',
         season: sanitizeText(season.trim()) || undefined,

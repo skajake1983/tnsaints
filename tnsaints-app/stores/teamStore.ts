@@ -11,6 +11,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { cleanData } from '../lib/firestoreHelpers';
 
 export type TeamGender = 'boys' | 'girls' | 'coed';
 
@@ -106,7 +107,7 @@ export const useTeamStore = create<TeamState>((set, get) => ({
 
   addTeam: async (data) => {
     const ref = await addDoc(collection(db, 'teams'), {
-      ...data,
+      ...cleanData(data as Record<string, unknown>),
       createdAt: Timestamp.now(),
     });
     return ref.id;
@@ -114,6 +115,6 @@ export const useTeamStore = create<TeamState>((set, get) => ({
 
   updateTeam: async (teamId, data) => {
     const ref = doc(db, 'teams', teamId);
-    await updateDoc(ref, data);
+    await updateDoc(ref, cleanData(data as Record<string, unknown>));
   },
 }));

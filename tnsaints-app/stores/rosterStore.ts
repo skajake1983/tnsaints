@@ -10,6 +10,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { cleanData } from '../lib/firestoreHelpers';
 import { createInvite } from '../lib/invites';
 
 export type MemberRole = 'player' | 'parent' | 'coach';
@@ -96,7 +97,7 @@ export const useRosterStore = create<RosterState>((set) => ({
   addPlayer: async (teamId, data) => {
     try {
       const ref = collection(db, 'teams', teamId, 'players');
-      const docRef = await addDoc(ref, { ...data, createdAt: Timestamp.now() });
+      const docRef = await addDoc(ref, { ...cleanData(data as Record<string, unknown>), createdAt: Timestamp.now() });
 
       // If invite requested and email provided, create a pending invite
       if (data.sendInvite && data.email) {
@@ -120,7 +121,7 @@ export const useRosterStore = create<RosterState>((set) => ({
   updatePlayer: async (teamId, playerId, data) => {
     try {
       const ref = doc(db, 'teams', teamId, 'players', playerId);
-      await updateDoc(ref, data);
+      await updateDoc(ref, cleanData(data as Record<string, unknown>));
     } catch (e: any) {
       set({ error: e.message });
     }

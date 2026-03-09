@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot as onDocSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { cleanData } from '../lib/firestoreHelpers';
 import { redeemPendingInvites } from '../lib/invites';
 import { UserRole } from '../constants/Roles';
 
@@ -56,7 +57,7 @@ async function ensureProfile(user: User): Promise<UserProfile> {
     teamIds: [],
     avatarUrl: user.photoURL ?? undefined,
   };
-  await setDoc(ref, profile);
+  await setDoc(ref, cleanData(profile as unknown as Record<string, unknown>));
   return profile;
 }
 

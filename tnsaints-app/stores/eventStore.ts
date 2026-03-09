@@ -11,6 +11,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { cleanData } from '../lib/firestoreHelpers';
 
 // Re-export pure helpers for backward compatibility
 export { getEventMeta, formatEventDate, formatEventTime, groupEventsByDate, filterUpcoming, filterPast } from '../lib/eventHelpers';
@@ -69,23 +70,14 @@ export const useEventStore = create<EventState>((set) => ({
   },
 
   addEvent: async (teamId, data) => {
-    // Strip undefined values — Firestore rejects them
-    const clean: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) clean[k] = v;
-    }
     const ref = collection(db, 'teams', teamId, 'events');
-    const docRef = await addDoc(ref, { ...clean, createdAt: Timestamp.now() });
+    const docRef = await addDoc(ref, { ...cleanData(data as Record<string, unknown>), createdAt: Timestamp.now() });
     return docRef.id;
   },
 
   updateEvent: async (teamId, eventId, data) => {
-    const clean: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(data)) {
-      if (v !== undefined) clean[k] = v;
-    }
     const ref = doc(db, 'teams', teamId, 'events', eventId);
-    await updateDoc(ref, clean);
+    await updateDoc(ref, cleanData(data as Record<string, unknown>));
   },
 
   removeEvent: async (teamId, eventId) => {

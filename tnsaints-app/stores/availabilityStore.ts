@@ -9,6 +9,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { cleanData } from '../lib/firestoreHelpers';
 
 // Re-export pure helpers for backward compatibility
 export { summariseRsvps } from '../lib/availabilityHelpers';
@@ -82,12 +83,12 @@ export const useAvailabilityStore = create<AvailabilityState>((set, get) => ({
     // Use deterministic doc id so each user has exactly one entry per event
     const docId = `${eventId}_${uid}`;
     const ref = doc(db, 'teams', teamId, 'availability', docId);
-    await setDoc(ref, {
+    await setDoc(ref, cleanData({
       eventId,
       uid,
       playerName,
       status,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 }));
