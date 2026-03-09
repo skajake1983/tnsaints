@@ -212,7 +212,7 @@ export default function PlayerFormScreen() {
       parentName: role === 'player' ? cleanParentName || undefined : undefined,
       parentEmail: role === 'player' ? cleanParentEmail || undefined : undefined,
       parentPhone: role === 'player' ? (cleanParentPhone ? formatPhone(cleanParentPhone) : undefined) : undefined,
-      active: role === 'parent' ? true : active,
+      active: role === 'player' ? active : true,
       sendInvite: sendInvite && !!cleanEmail,
     };
 
@@ -286,33 +286,61 @@ export default function PlayerFormScreen() {
         </View>
 
         <Text style={styles.label}>Birthdate *</Text>
-        <TouchableOpacity
-          style={styles.datePickerBtn}
-          onPress={() => setShowDatePicker(true)}
-        >
-          <FontAwesome5 name="calendar-alt" size={16} color={Colors.saintsBlue} />
-          <Text style={[styles.datePickerText, !birthdate && styles.datePickerPlaceholder]}>
-            {birthdate || 'Select date'}
-          </Text>
-        </TouchableOpacity>
-        {showDatePicker && (
-          <DateTimePicker
-            value={birthdateObj ?? new Date(2010, 0, 1)}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            maximumDate={new Date()}
-            minimumDate={new Date(1920, 0, 1)}
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(Platform.OS === 'ios');
-              if (selectedDate) {
-                setBirthdateObj(selectedDate);
-                const y = selectedDate.getFullYear();
-                const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
-                const d = String(selectedDate.getDate()).padStart(2, '0');
-                setBirthdate(`${y}-${m}-${d}`);
-              }
-            }}
-          />
+        {Platform.OS === 'web' ? (
+          <View style={styles.datePickerBtn}>
+            <FontAwesome5 name="calendar-alt" size={16} color={Colors.saintsBlue} />
+            <input
+              type="date"
+              value={birthdate}
+              max={new Date().toISOString().split('T')[0]}
+              min="1920-01-01"
+              onChange={(e: any) => {
+                const val = e.target.value;
+                setBirthdate(val);
+                if (val) setBirthdateObj(new Date(val + 'T00:00:00'));
+              }}
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                fontSize: 15,
+                color: Colors.textPrimary,
+                backgroundColor: 'transparent',
+                fontFamily: 'inherit',
+              }}
+            />
+          </View>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.datePickerBtn}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <FontAwesome5 name="calendar-alt" size={16} color={Colors.saintsBlue} />
+              <Text style={[styles.datePickerText, !birthdate && styles.datePickerPlaceholder]}>
+                {birthdate || 'Select date'}
+              </Text>
+            </TouchableOpacity>
+            {showDatePicker && (
+              <DateTimePicker
+                value={birthdateObj ?? new Date(2010, 0, 1)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={new Date()}
+                minimumDate={new Date(1920, 0, 1)}
+                onChange={(event, selectedDate) => {
+                  setShowDatePicker(Platform.OS === 'ios');
+                  if (selectedDate) {
+                    setBirthdateObj(selectedDate);
+                    const y = selectedDate.getFullYear();
+                    const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                    const d = String(selectedDate.getDate()).padStart(2, '0');
+                    setBirthdate(`${y}-${m}-${d}`);
+                  }
+                }}
+              />
+            )}
+          </>
         )}
 
         {/* Gender */}
@@ -399,8 +427,8 @@ export default function PlayerFormScreen() {
           </>
         )}
 
-        {/* Active toggle — only for players and coaches */}
-        {role !== 'parent' && (
+        {/* Active toggle — only for players */}
+        {role === 'player' && (
           <View style={styles.toggleRow}>
             <Text style={styles.toggleLabel}>Active on Roster</Text>
             <Switch

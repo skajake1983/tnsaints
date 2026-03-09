@@ -15,21 +15,23 @@ import { Colors } from '../../constants/Colors';
 import { useRosterStore, Player, computeAge } from '../../stores/rosterStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useTeamStore } from '../../stores/teamStore';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function TeamScreen() {
   const { players, loading, listen } = useRosterStore();
   const profile = useAuthStore((s) => s.profile);
   const { teams, activeTeamId, setActiveTeam, listen: listenTeams, loading: teamsLoading } = useTeamStore();
+  const { can } = usePermissions();
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [showTeamPicker, setShowTeamPicker] = useState(false);
 
-  const canEdit = profile?.role === 'admin' || profile?.role === 'coach';
+  const canEdit = can('roster.add');
 
   // Listen to user's teams
   useEffect(() => {
-    if (!profile?.teamIds?.length) return;
-    const unsub = listenTeams(profile.teamIds);
+    const ids = profile?.teamIds ?? [];
+    const unsub = listenTeams(ids);
     return unsub;
   }, [profile?.teamIds]);
 

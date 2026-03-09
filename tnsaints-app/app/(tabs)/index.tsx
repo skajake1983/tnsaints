@@ -17,8 +17,8 @@ export default function HomeScreen() {
 
   // Subscribe to user's teams
   useEffect(() => {
-    if (!profile?.teamIds?.length) return;
-    const unsub = listenTeams(profile.teamIds);
+    const ids = profile?.teamIds ?? [];
+    const unsub = listenTeams(ids);
     return unsub;
   }, [profile?.teamIds]);
 
