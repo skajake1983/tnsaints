@@ -139,8 +139,15 @@ export default function EventFormScreen() {
         await addEvent(teamId, data);
       }
       router.back();
-    } catch {
-      setErrors({ form: 'Failed to save event. Please try again.' });
+    } catch (e: any) {
+      const code = e?.code ?? '';
+      if (code === 'permission-denied' || code === 'PERMISSION_DENIED') {
+        setErrors({ form: 'Permission denied. You do not have access to create events for this team.' });
+      } else if (code === 'unavailable' || code === 'deadline-exceeded') {
+        setErrors({ form: 'Network error. Please check your connection and try again.' });
+      } else {
+        setErrors({ form: e?.message ?? 'Failed to save event. Please try again.' });
+      }
     } finally {
       setSaving(false);
     }
