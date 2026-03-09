@@ -82,6 +82,14 @@ function RootLayoutNav() {
           name="player/form"
           options={{ headerShown: true, title: 'Player Form', headerBackTitle: 'Back', presentation: 'modal' }}
         />
+        <Stack.Screen
+          name="event/[id]"
+          options={{ headerShown: true, title: 'Event Details', headerBackTitle: 'Schedule' }}
+        />
+        <Stack.Screen
+          name="event/form"
+          options={{ headerShown: true, title: 'Event Form', headerBackTitle: 'Back', presentation: 'modal' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
