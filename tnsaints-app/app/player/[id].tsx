@@ -127,6 +127,33 @@ export default function PlayerDetailScreen() {
     : 'Player';
   const age = player.birthdate ? computeAge(player.birthdate) : null;
 
+  // Compute linked guardians from BOTH directions so the display is resilient
+  // to one-sided sync gaps. Union of:
+  //   1. player.linkedParentIds (reverse links stored on this player)
+  //   2. any parent/coach in the roster whose linkedPlayerIds includes this player
+  const resolvedGuardianIds: string[] = (() => {
+    if (player.role !== 'player') return [];
+    const fromPlayer = new Set(player.linkedParentIds ?? []);
+    for (const m of allMembers) {
+      if ((m.role === 'parent' || m.role === 'coach') && m.linkedPlayerIds?.includes(player.id)) {
+        fromPlayer.add(m.id);
+      }
+    }
+    return Array.from(fromPlayer);
+  })();
+
+  // Compute linked players from BOTH directions (for parents/coaches)
+  const resolvedPlayerIds: string[] = (() => {
+    if (player.role !== 'parent' && player.role !== 'coach') return [];
+    const fromMember = new Set(player.linkedPlayerIds ?? []);
+    for (const m of allMembers) {
+      if (m.role === 'player' && m.linkedParentIds?.includes(player.id)) {
+        fromMember.add(m.id);
+      }
+    }
+    return Array.from(fromMember);
+  })();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header card */}
@@ -190,10 +217,10 @@ export default function PlayerDetailScreen() {
       )}
 
       {/* Linked Parents / Guardians from roster */}
-      {player.role === 'player' && (player.linkedParentIds?.length ?? 0) > 0 && (
+      {resolvedGuardianIds.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Linked Guardians</Text>
-          {player.linkedParentIds!.map((pid) => {
+          {resolvedGuardianIds.map((pid) => {
             const member = allMembers.find((m) => m.id === pid);
             const memberInitials = member
               ? (member.firstName[0] ?? '') + (member.lastName[0] ?? '')
@@ -230,10 +257,10 @@ export default function PlayerDetailScreen() {
       )}
 
       {/* Linked Players (for parents/coaches) */}
-      {(player.role === 'parent' || player.role === 'coach') && (player.linkedPlayerIds?.length ?? 0) > 0 && (
+      {resolvedPlayerIds.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Linked Players</Text>
-          {player.linkedPlayerIds!.map((pid) => {
+          {resolvedPlayerIds.map((pid) => {
             const member = allMembers.find((m) => m.id === pid);
             const memberInitials = member
               ? (member.firstName[0] ?? '') + (member.lastName[0] ?? '')
