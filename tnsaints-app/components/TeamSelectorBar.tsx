@@ -121,7 +121,7 @@ export default function TeamSelectorBar() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { zIndex: 100 },
+  wrapper: { zIndex: 100, overflow: 'visible' as any, position: 'relative' as any },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

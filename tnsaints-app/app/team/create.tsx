@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,10 +25,28 @@ const GENDER_OPTIONS: { label: string; value: TeamGender }[] = [
   { label: 'Co-ed', value: 'coed' },
 ];
 
+type FieldErrors = {
+  name?: string;
+  season?: string;
+  ageGroup?: string;
+  gender?: string;
+  maxRosterSize?: string;
+};
+
+/** Strip undefined keys so Firestore never receives them */
+function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const clean = {} as T;
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    if (obj[key] !== undefined) clean[key] = obj[key];
+  }
+  return clean;
+}
+
 export default function CreateTeamScreen() {
   const router = useRouter();
   const { addTeam, setActiveTeam } = useTeamStore();
   const profile = useAuthStore((s) => s.profile);
+  const scrollRef = useRef<ScrollView>(null);
 
   const [name, setName] = useState('');
   const [season, setSeason] = useState('');
@@ -42,34 +60,53 @@ export default function CreateTeamScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [touched, setTouched] = useState(false);
 
-  const handleCreate = async () => {
-    setError('');
+  const validate = (): FieldErrors => {
+    const errs: FieldErrors = {};
     const cleanName = sanitizeText(name.trim());
     if (!cleanName) {
-      setError('Team name is required.');
-      return;
-    }
-    if (cleanName.length < 2 || cleanName.length > 80) {
-      setError('Team name must be 2–80 characters.');
-      return;
-    }
-    if (!season.trim()) {
-      setError('Season is required.');
-      return;
-    }
-    if (!ageGroup) {
-      setError('Age group is required.');
-      return;
-    }
-    if (!gender) {
-      setError('Gender is required.');
-      return;
+      errs.name = 'Team name is required.';
+    } else if (cleanName.length < 2) {
+      errs.name = 'Team name must be at least 2 characters.';
+    } else if (cleanName.length > 80) {
+      errs.name = 'Team name must be 80 characters or less.';
     }
 
-    const parsedRoster = parseInt(maxRosterSize, 10);
-    if (maxRosterSize.trim() && (isNaN(parsedRoster) || parsedRoster < 1 || parsedRoster > 30)) {
-      setError('Max roster size must be between 1 and 30.');
+    if (!season.trim()) {
+      errs.season = 'Season is required.';
+    } else if (season.trim().length > 50) {
+      errs.season = 'Season must be 50 characters or less.';
+    }
+
+    if (!ageGroup) {
+      errs.ageGroup = 'Please select an age group.';
+    }
+
+    if (!gender) {
+      errs.gender = 'Please select a gender.';
+    }
+
+    const rosterStr = maxRosterSize.trim();
+    if (rosterStr) {
+      const parsed = parseInt(rosterStr, 10);
+      if (isNaN(parsed) || parsed < 1 || parsed > 30) {
+        errs.maxRosterSize = 'Must be between 1 and 30.';
+      }
+    }
+
+    return errs;
+  };
+
+  const handleCreate = async () => {
+    setTouched(true);
+    setError('');
+    const errs = validate();
+    setFieldErrors(errs);
+
+    if (Object.keys(errs).length > 0) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -78,9 +115,12 @@ export default function CreateTeamScreen() {
       return;
     }
 
+    const cleanName = sanitizeText(name.trim());
+    const parsedRoster = parseInt(maxRosterSize.trim() || '15', 10);
+
     setSaving(true);
     try {
-      const data: TeamInput = {
+      const data: TeamInput = stripUndefined({
         name: cleanName,
         orgId: 'tn-saints',
         season: sanitizeText(season.trim()) || undefined,
@@ -92,7 +132,7 @@ export default function CreateTeamScreen() {
         league: sanitizeText(league.trim()) || undefined,
         maxRosterSize: maxRosterSize.trim() ? parsedRoster : undefined,
         description: sanitizeText(description.trim()) || undefined,
-      };
+      });
       const teamId = await addTeam(data);
 
       // Add the new team to the creator's teamIds
@@ -102,21 +142,40 @@ export default function CreateTeamScreen() {
       // Switch to the newly created team
       setActiveTeam(teamId);
       router.back();
-    } catch {
-      setError('Failed to create team. Please try again.');
+    } catch (e: any) {
+      const code = e?.code ?? '';
+      if (code === 'permission-denied' || code === 'PERMISSION_DENIED') {
+        setError('Permission denied. Only Super Admins can create teams.');
+      } else if (code === 'unavailable' || code === 'deadline-exceeded') {
+        setError('Network error. Please check your connection and try again.');
+      } else {
+        setError(e?.message ?? 'Failed to create team. Please try again.');
+      }
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSaving(false);
     }
   };
 
+  const fieldError = (key: keyof FieldErrors) =>
+    touched && fieldErrors[key] ? (
+      <Text style={styles.fieldError}>{fieldErrors[key]}</Text>
+    ) : null;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.heading}>Create a New Team</Text>
         <Text style={styles.subheading}>Set up a new team under your organization.</Text>
 
         {error ? (
           <View style={styles.errorBox}>
+            <FontAwesome5 name="exclamation-circle" size={14} color={Colors.danger} />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
@@ -126,7 +185,7 @@ export default function CreateTeamScreen() {
 
         <Text style={styles.label}>Team Name *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, touched && fieldErrors.name ? styles.inputError : null]}
           value={name}
           onChangeText={setName}
           placeholder="e.g. TN Saints 12U Boys"
@@ -134,42 +193,54 @@ export default function CreateTeamScreen() {
           maxLength={80}
           autoFocus
         />
+        {fieldError('name')}
 
         <Text style={styles.label}>Season *</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, touched && fieldErrors.season ? styles.inputError : null]}
           value={season}
           onChangeText={setSeason}
           placeholder="e.g. Spring 2026"
           placeholderTextColor={Colors.textMuted}
           maxLength={50}
         />
+        {fieldError('season')}
 
         <Text style={styles.label}>Age Group *</Text>
         <View style={styles.chipRow}>
           {AGE_GROUPS.map((ag) => (
             <TouchableOpacity
               key={ag}
-              style={[styles.chip, ageGroup === ag && styles.chipActive]}
+              style={[
+                styles.chip,
+                ageGroup === ag && styles.chipActive,
+                touched && fieldErrors.ageGroup && !ageGroup ? styles.chipError : null,
+              ]}
               onPress={() => setAgeGroup(ag)}
             >
               <Text style={[styles.chipText, ageGroup === ag && styles.chipTextActive]}>{ag}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        {fieldError('ageGroup')}
 
         <Text style={styles.label}>Gender *</Text>
         <View style={styles.chipRow}>
           {GENDER_OPTIONS.map((g) => (
             <TouchableOpacity
               key={g.value}
-              style={[styles.chip, gender === g.value && styles.chipActive]}
+              style={[
+                styles.chip,
+                gender === g.value && styles.chipActive,
+                touched && fieldErrors.gender && !gender ? styles.chipError : null,
+              ]}
               onPress={() => setGender(g.value)}
             >
               <Text style={[styles.chipText, gender === g.value && styles.chipTextActive]}>{g.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        {fieldError('gender')}
 
         {/* ── Optional fields ─────────────────── */}
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Additional Info</Text>
@@ -216,7 +287,7 @@ export default function CreateTeamScreen() {
 
         <Text style={styles.label}>Max Roster Size</Text>
         <TextInput
-          style={[styles.input, { width: 100 }]}
+          style={[styles.input, { width: 100 }, touched && fieldErrors.maxRosterSize ? styles.inputError : null]}
           value={maxRosterSize}
           onChangeText={(v) => setMaxRosterSize(v.replace(/[^0-9]/g, ''))}
           placeholder="15"
@@ -224,6 +295,7 @@ export default function CreateTeamScreen() {
           keyboardType="number-pad"
           maxLength={2}
         />
+        {fieldError('maxRosterSize')}
 
         <Text style={styles.label}>Team Description</Text>
         <TextInput
@@ -270,8 +342,18 @@ const styles = StyleSheet.create({
 
   sectionTitle: { fontSize: 16, fontWeight: '800', color: Colors.saintsBlue, marginBottom: 8, marginTop: 4 },
 
-  errorBox: { backgroundColor: '#fdecea', padding: 12, borderRadius: 10, marginBottom: 16 },
-  errorText: { color: Colors.danger, fontWeight: '600', textAlign: 'center' },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fdecea',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  errorText: { color: Colors.danger, fontWeight: '600', flex: 1 },
+
+  fieldError: { color: Colors.danger, fontSize: 12, fontWeight: '600', marginTop: 4 },
 
   label: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginTop: 16, marginBottom: 6 },
   input: {
@@ -283,6 +365,9 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     borderWidth: 1.5,
     borderColor: Colors.gray,
+  },
+  inputError: {
+    borderColor: Colors.danger,
   },
   multiline: {
     minHeight: 100,
@@ -301,6 +386,9 @@ const styles = StyleSheet.create({
   chipActive: {
     backgroundColor: Colors.saintsBlue,
     borderColor: Colors.saintsBlue,
+  },
+  chipError: {
+    borderColor: Colors.danger,
   },
   chipText: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
   chipTextActive: { color: Colors.white },

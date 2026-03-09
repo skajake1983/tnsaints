@@ -23,7 +23,7 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ backgroundColor: Colors[colorScheme].card, paddingTop: 4, paddingBottom: 2 }}>
+      <View style={{ backgroundColor: Colors[colorScheme].card, paddingTop: 4, paddingBottom: 2, zIndex: 100, overflow: 'visible' as any }}>
         <TeamSelectorBar />
       </View>
       <Tabs
