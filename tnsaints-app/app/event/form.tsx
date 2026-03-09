@@ -248,6 +248,7 @@ export default function EventFormScreen() {
             {!isAllDay && (
               <input
                 type="time"
+                step="900"
                 value={`${pad(startDate.getHours())}:${pad(startDate.getMinutes())}`}
                 onChange={(e) => {
                   const [h, m] = e.target.value.split(':').map(Number);
@@ -291,6 +292,7 @@ export default function EventFormScreen() {
                 />
                 <input
                   type="time"
+                  step="900"
                   value={`${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`}
                   onChange={(e) => {
                     const [h, m] = e.target.value.split(':').map(Number);
@@ -322,6 +324,7 @@ export default function EventFormScreen() {
           <DateTimePicker
             value={showPicker.startsWith('start') ? startDate : endDate}
             mode={showPicker.endsWith('Date') ? 'date' : 'time'}
+            minuteInterval={15}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
             onChange={(_e: any, date?: Date) => handlePickerChange(showPicker, date)}
           />
