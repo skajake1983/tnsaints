@@ -10,7 +10,7 @@ import {
   signInWithCredential,
   User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot as onDocSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { redeemPendingInvites } from '../lib/invites';
 import { UserRole } from '../constants/Roles';
@@ -158,26 +158,37 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearError: () => set({ error: null }),
 
   listen: () => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      // Clean up any previous profile listener
+      unsubProfile?.();
+      unsubProfile = null;
+
       if (user) {
-        const profile = await ensureProfile(user);
+        // Ensure the profile doc exists (first-time login)
+        await ensureProfile(user);
+
         // Auto-redeem any pending team invites for this email
         if (user.email) {
           await redeemPendingInvites(user.uid, user.email);
-          // Re-read profile in case teamIds changed
-          const ref = doc(db, 'users', user.uid);
-          const snap = await getDoc(ref);
-          if (snap.exists()) {
-            const updated = snap.data() as UserProfile;
-            set({ user, profile: updated, loading: false });
-            return;
-          }
         }
-        set({ user, profile, loading: false });
+
+        // Subscribe to real-time updates on the user profile
+        const ref = doc(db, 'users', user.uid);
+        unsubProfile = onDocSnapshot(ref, (snap) => {
+          if (snap.exists()) {
+            set({ user, profile: snap.data() as UserProfile, loading: false });
+          }
+        });
       } else {
         set({ user: null, profile: null, loading: false });
       }
     });
-    return unsubscribe;
+
+    return () => {
+      unsubAuth();
+      unsubProfile?.();
+    };
   },
 }));
