@@ -12,13 +12,27 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
+export type TeamGender = 'boys' | 'girls' | 'coed';
+
+export const AGE_GROUPS = [
+  '8U', '9U', '10U', '11U', '12U', '13U', '14U', '15U', '16U', '17U', 'High School',
+] as const;
+export type AgeGroup = (typeof AGE_GROUPS)[number];
+
 export interface Team {
   id: string;
   name: string;
   /** Organization this team belongs to (e.g. "tn-saints") */
   orgId: string;
   season?: string;
-  ageGroup?: string;
+  ageGroup?: AgeGroup;
+  gender?: TeamGender;
+  headCoach?: string;
+  practiceFacility?: string;
+  facilityAddress?: string;
+  league?: string;
+  maxRosterSize?: number;
+  description?: string;
   createdAt: Timestamp;
 }
 

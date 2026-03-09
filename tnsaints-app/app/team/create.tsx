@@ -15,9 +15,15 @@ import { useRouter } from 'expo-router';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
-import { useTeamStore, TeamInput } from '../../stores/teamStore';
+import { useTeamStore, TeamInput, AGE_GROUPS, AgeGroup, TeamGender } from '../../stores/teamStore';
 import { useAuthStore } from '../../stores/authStore';
-import { sanitizeText } from '../../lib/validation';
+import { sanitizeText, sanitizeAddress } from '../../lib/validation';
+
+const GENDER_OPTIONS: { label: string; value: TeamGender }[] = [
+  { label: 'Boys', value: 'boys' },
+  { label: 'Girls', value: 'girls' },
+  { label: 'Co-ed', value: 'coed' },
+];
 
 export default function CreateTeamScreen() {
   const router = useRouter();
@@ -26,7 +32,14 @@ export default function CreateTeamScreen() {
 
   const [name, setName] = useState('');
   const [season, setSeason] = useState('');
-  const [ageGroup, setAgeGroup] = useState('');
+  const [ageGroup, setAgeGroup] = useState<AgeGroup | ''>('');
+  const [gender, setGender] = useState<TeamGender | ''>('');
+  const [headCoach, setHeadCoach] = useState('');
+  const [practiceFacility, setPracticeFacility] = useState('');
+  const [facilityAddress, setFacilityAddress] = useState('');
+  const [league, setLeague] = useState('');
+  const [maxRosterSize, setMaxRosterSize] = useState('15');
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -41,6 +54,24 @@ export default function CreateTeamScreen() {
       setError('Team name must be 2–80 characters.');
       return;
     }
+    if (!season.trim()) {
+      setError('Season is required.');
+      return;
+    }
+    if (!ageGroup) {
+      setError('Age group is required.');
+      return;
+    }
+    if (!gender) {
+      setError('Gender is required.');
+      return;
+    }
+
+    const parsedRoster = parseInt(maxRosterSize, 10);
+    if (maxRosterSize.trim() && (isNaN(parsedRoster) || parsedRoster < 1 || parsedRoster > 30)) {
+      setError('Max roster size must be between 1 and 30.');
+      return;
+    }
 
     if (!profile) {
       setError('You must be signed in.');
@@ -53,7 +84,14 @@ export default function CreateTeamScreen() {
         name: cleanName,
         orgId: 'tn-saints',
         season: sanitizeText(season.trim()) || undefined,
-        ageGroup: sanitizeText(ageGroup.trim()) || undefined,
+        ageGroup: ageGroup || undefined,
+        gender: gender || undefined,
+        headCoach: sanitizeText(headCoach.trim()) || undefined,
+        practiceFacility: sanitizeText(practiceFacility.trim()) || undefined,
+        facilityAddress: sanitizeAddress(facilityAddress.trim()) || undefined,
+        league: sanitizeText(league.trim()) || undefined,
+        maxRosterSize: maxRosterSize.trim() ? parsedRoster : undefined,
+        description: sanitizeText(description.trim()) || undefined,
       };
       const teamId = await addTeam(data);
 
@@ -83,6 +121,9 @@ export default function CreateTeamScreen() {
           </View>
         ) : null}
 
+        {/* ── Required fields ─────────────────── */}
+        <Text style={styles.sectionTitle}>Team Details</Text>
+
         <Text style={styles.label}>Team Name *</Text>
         <TextInput
           style={styles.input}
@@ -94,7 +135,7 @@ export default function CreateTeamScreen() {
           autoFocus
         />
 
-        <Text style={styles.label}>Season (optional)</Text>
+        <Text style={styles.label}>Season *</Text>
         <TextInput
           style={styles.input}
           value={season}
@@ -104,14 +145,97 @@ export default function CreateTeamScreen() {
           maxLength={50}
         />
 
-        <Text style={styles.label}>Age Group (optional)</Text>
+        <Text style={styles.label}>Age Group *</Text>
+        <View style={styles.chipRow}>
+          {AGE_GROUPS.map((ag) => (
+            <TouchableOpacity
+              key={ag}
+              style={[styles.chip, ageGroup === ag && styles.chipActive]}
+              onPress={() => setAgeGroup(ag)}
+            >
+              <Text style={[styles.chipText, ageGroup === ag && styles.chipTextActive]}>{ag}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Gender *</Text>
+        <View style={styles.chipRow}>
+          {GENDER_OPTIONS.map((g) => (
+            <TouchableOpacity
+              key={g.value}
+              style={[styles.chip, gender === g.value && styles.chipActive]}
+              onPress={() => setGender(g.value)}
+            >
+              <Text style={[styles.chipText, gender === g.value && styles.chipTextActive]}>{g.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Optional fields ─────────────────── */}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Additional Info</Text>
+
+        <Text style={styles.label}>Head Coach</Text>
         <TextInput
           style={styles.input}
-          value={ageGroup}
-          onChangeText={setAgeGroup}
-          placeholder="e.g. 12U, 14U, High School"
+          value={headCoach}
+          onChangeText={setHeadCoach}
+          placeholder="e.g. Coach Williams"
           placeholderTextColor={Colors.textMuted}
-          maxLength={30}
+          maxLength={80}
+        />
+
+        <Text style={styles.label}>Practice Facility</Text>
+        <TextInput
+          style={styles.input}
+          value={practiceFacility}
+          onChangeText={setPracticeFacility}
+          placeholder="e.g. Franklin Road Academy Gym"
+          placeholderTextColor={Colors.textMuted}
+          maxLength={100}
+        />
+
+        <Text style={styles.label}>Facility Address</Text>
+        <TextInput
+          style={styles.input}
+          value={facilityAddress}
+          onChangeText={setFacilityAddress}
+          placeholder="e.g. 114 Libertyville Rd, Franklin, TN"
+          placeholderTextColor={Colors.textMuted}
+          maxLength={200}
+        />
+
+        <Text style={styles.label}>League / Circuit</Text>
+        <TextInput
+          style={styles.input}
+          value={league}
+          onChangeText={setLeague}
+          placeholder="e.g. Nike EYBL, AAU District"
+          placeholderTextColor={Colors.textMuted}
+          maxLength={80}
+        />
+
+        <Text style={styles.label}>Max Roster Size</Text>
+        <TextInput
+          style={[styles.input, { width: 100 }]}
+          value={maxRosterSize}
+          onChangeText={(v) => setMaxRosterSize(v.replace(/[^0-9]/g, ''))}
+          placeholder="15"
+          placeholderTextColor={Colors.textMuted}
+          keyboardType="number-pad"
+          maxLength={2}
+        />
+
+        <Text style={styles.label}>Team Description</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Notes, bio, or anything relevant to this team..."
+          placeholderTextColor={Colors.textMuted}
+          multiline
+          numberOfLines={4}
+          maxLength={500}
+          textAlignVertical="top"
         />
 
         <TouchableOpacity
@@ -144,6 +268,8 @@ const styles = StyleSheet.create({
   heading: { fontSize: 24, fontWeight: '800', color: Colors.saintsBlueDark, marginBottom: 4 },
   subheading: { fontSize: 14, color: Colors.textSecondary, marginBottom: 20 },
 
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: Colors.saintsBlue, marginBottom: 8, marginTop: 4 },
+
   errorBox: { backgroundColor: '#fdecea', padding: 12, borderRadius: 10, marginBottom: 16 },
   errorText: { color: Colors.danger, fontWeight: '600', textAlign: 'center' },
 
@@ -158,6 +284,26 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.gray,
   },
+  multiline: {
+    minHeight: 100,
+    paddingTop: 12,
+  },
+
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.gray,
+  },
+  chipActive: {
+    backgroundColor: Colors.saintsBlue,
+    borderColor: Colors.saintsBlue,
+  },
+  chipText: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  chipTextActive: { color: Colors.white },
 
   createBtn: {
     flexDirection: 'row',
