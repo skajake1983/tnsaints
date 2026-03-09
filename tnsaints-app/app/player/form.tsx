@@ -440,15 +440,17 @@ export default function PlayerFormScreen() {
           </View>
         )}
 
-        {/* Invite toggle — for parents and coaches */}
-        {(role === 'parent' || role === 'coach') && (
+        {/* Invite toggle — for players, parents, and coaches */}
+        {(role === 'player' || role === 'parent' || role === 'coach') && (
           <View style={styles.toggleRow}>
             <View style={styles.toggleLabelGroup}>
               <Text style={styles.toggleLabel}>Send Invite to Sign Up</Text>
               <Text style={styles.toggleHint}>
                 {role === 'parent'
                   ? "Invited parents can view this team's roster and schedules."
-                  : 'Invited coaches can manage this team.'}
+                  : role === 'coach'
+                    ? 'Invited coaches can manage this team.'
+                    : 'Invited players can view their schedule and RSVP.'}
               </Text>
             </View>
             <Switch

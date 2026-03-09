@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,18 +9,11 @@ import { Colors } from '../../constants/Colors';
 export default function HomeScreen() {
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
-  const { teams, activeTeamId, listen: listenTeams } = useTeamStore();
+  const { teams, activeTeamId } = useTeamStore();
   const router = useRouter();
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Saint';
   const activeTeam = teams.find((t) => t.id === activeTeamId);
-
-  // Subscribe to user's teams
-  useEffect(() => {
-    const ids = profile?.teamIds ?? [];
-    const unsub = listenTeams(ids);
-    return unsub;
-  }, [profile?.teamIds]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

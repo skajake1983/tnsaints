@@ -16,7 +16,7 @@ export interface Invite {
   email: string;            // normalised lower-case email of invitee
   teamId: string;
   teamName: string;
-  role: 'parent' | 'coach'; // what role the invite grants
+  role: 'player' | 'parent' | 'coach'; // what role the invite grants
   playerId?: string;        // roster entry id to link after acceptance
   status: 'pending' | 'accepted';
   createdAt: Timestamp;
@@ -32,7 +32,7 @@ export async function createInvite(params: {
   email: string;
   teamId: string;
   teamName: string;
-  role: 'parent' | 'coach';
+  role: 'player' | 'parent' | 'coach';
   playerId?: string;
 }): Promise<string> {
   const normalEmail = params.email.trim().toLowerCase();

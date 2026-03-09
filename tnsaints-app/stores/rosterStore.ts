@@ -108,7 +108,7 @@ export const useRosterStore = create<RosterState>((set) => ({
           email: data.email,
           teamId,
           teamName,
-          role: data.role === 'coach' ? 'coach' : 'parent',
+          role: data.role,
           playerId: docRef.id,
         });
       }

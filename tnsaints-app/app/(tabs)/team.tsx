@@ -20,20 +20,12 @@ import { usePermissions } from '../../hooks/usePermissions';
 export default function TeamScreen() {
   const { players, loading, listen } = useRosterStore();
   const profile = useAuthStore((s) => s.profile);
-  const { teams, activeTeamId, setActiveTeam, listen: listenTeams, loading: teamsLoading } = useTeamStore();
+  const { activeTeamId, loading: teamsLoading } = useTeamStore();
   const { can } = usePermissions();
   const router = useRouter();
   const [search, setSearch] = useState('');
-  const [showTeamPicker, setShowTeamPicker] = useState(false);
 
   const canEdit = can('roster.add');
-
-  // Listen to user's teams
-  useEffect(() => {
-    const ids = profile?.teamIds ?? [];
-    const unsub = listenTeams(ids);
-    return unsub;
-  }, [profile?.teamIds]);
 
   // Listen to the active team's roster
   useEffect(() => {
@@ -41,8 +33,6 @@ export default function TeamScreen() {
     const unsub = listen(activeTeamId);
     return unsub;
   }, [activeTeamId]);
-
-  const activeTeam = teams.find((t) => t.id === activeTeamId);
 
   const filtered = players.filter((p) => {
     if (!search.trim()) return true;
@@ -101,33 +91,6 @@ export default function TeamScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Team selector */}
-      {teams.length > 1 && (
-        <TouchableOpacity
-          style={styles.teamSelector}
-          onPress={() => setShowTeamPicker(!showTeamPicker)}
-        >
-          <FontAwesome5 name="users" size={14} color={Colors.saintsBlue} />
-          <Text style={styles.teamSelectorText}>{activeTeam?.name ?? 'Select Team'}</Text>
-          <FontAwesome5 name={showTeamPicker ? 'chevron-up' : 'chevron-down'} size={12} color={Colors.textMuted} />
-        </TouchableOpacity>
-      )}
-      {showTeamPicker && (
-        <View style={styles.teamDropdown}>
-          {teams.map((t) => (
-            <TouchableOpacity
-              key={t.id}
-              style={[styles.teamOption, t.id === activeTeamId && styles.teamOptionActive]}
-              onPress={() => { setActiveTeam(t.id); setShowTeamPicker(false); }}
-            >
-              <Text style={[styles.teamOptionText, t.id === activeTeamId && styles.teamOptionTextActive]}>
-                {t.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
       {/* No team state */}
       {!activeTeamId && !teamsLoading ? (
         <View style={styles.center}>
@@ -135,8 +98,8 @@ export default function TeamScreen() {
           <Text style={styles.emptyTitle}>No teams yet</Text>
           <Text style={styles.emptySub}>
             {canEdit
-              ? 'You haven\'t been assigned to any teams yet. Ask an admin to add you.'
-              : 'You\'ll see your team here once you\'re added.'}
+              ? "You haven't been assigned to any teams yet. Ask an admin to add you."
+              : "You'll see your team here once you're added."}
           </Text>
         </View>
       ) : (
@@ -217,34 +180,6 @@ export default function TeamScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light },
-
-  teamSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 12,
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: Colors.gray,
-  },
-  teamSelectorText: { flex: 1, fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
-  teamDropdown: {
-    marginHorizontal: 16,
-    backgroundColor: Colors.white,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.gray,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  teamOption: { paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.gray },
-  teamOptionActive: { backgroundColor: Colors.saintsBlue },
-  teamOptionText: { fontSize: 15, color: Colors.textPrimary },
-  teamOptionTextActive: { color: Colors.white, fontWeight: '700' },
 
   searchRow: {
     flexDirection: 'row',
