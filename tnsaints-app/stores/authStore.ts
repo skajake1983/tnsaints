@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { redeemPendingInvites } from '../lib/invites';
 import { UserRole } from '../constants/Roles';
 
 export interface UserProfile {
@@ -59,6 +60,32 @@ async function ensureProfile(user: User): Promise<UserProfile> {
   return profile;
 }
 
+/** Map Firebase error codes to user-friendly messages */
+function friendlyAuthError(e: any): string {
+  const code: string = e?.code ?? '';
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Try signing in or resetting your password.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact your administrator.';
+    case 'auth/user-not-found':
+      return 'No account found with this email. Would you like to sign up?';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Incorrect email or password. Please try again.';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please wait a moment and try again.';
+    case 'auth/weak-password':
+      return 'Password is too weak. Please choose a stronger password.';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your connection and try again.';
+    default:
+      return e?.message ?? 'An unexpected error occurred.';
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
@@ -70,7 +97,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (e: any) {
-      set({ error: e.message, loading: false });
+      set({ error: friendlyAuthError(e), loading: false });
     }
   },
 
@@ -87,7 +114,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       };
       await setDoc(doc(db, 'users', cred.user.uid), profile);
     } catch (e: any) {
-      set({ error: e.message, loading: false });
+      set({ error: friendlyAuthError(e), loading: false });
     }
   },
 
@@ -134,6 +161,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const profile = await ensureProfile(user);
+        // Auto-redeem any pending team invites for this email
+        if (user.email) {
+          await redeemPendingInvites(user.uid, user.email);
+          // Re-read profile in case teamIds changed
+          const ref = doc(db, 'users', user.uid);
+          const snap = await getDoc(ref);
+          if (snap.exists()) {
+            const updated = snap.data() as UserProfile;
+            set({ user, profile: updated, loading: false });
+            return;
+          }
+        }
         set({ user, profile, loading: false });
       } else {
         set({ user: null, profile: null, loading: false });

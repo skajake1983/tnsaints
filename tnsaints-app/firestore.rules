@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userDoc().role == 'admin';
+    }
+
+    function isMemberOfTeam(teamId) {
+      return isSignedIn() && teamId in userDoc().teamIds;
+    }
+
+    function isTeamAdminOrCoach(teamId) {
+      return isMemberOfTeam(teamId) && (userDoc().role == 'admin' || userDoc().role == 'coach');
+    }
+
+    // ── User profiles ─────────────────────────────────────────────────
+    match /users/{uid} {
+      // Users can read their own profile; admins can read any
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Users can create their own profile on signup
+      allow create: if isSignedIn() && request.auth.uid == uid;
+
+      // Users can update their own non-role fields; admins can update anything
+      allow update: if isSignedIn() && (
+        (request.auth.uid == uid && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        || isAdmin()
+      );
+
+      allow delete: if false;
+    }
+
+    // ── Teams ─────────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      // Only team members can read their team doc
+      allow read: if isMemberOfTeam(teamId);
+
+      // Only admins can create or delete teams
+      allow create: if isAdmin();
+      allow delete: if isAdmin();
+
+      // Admin or coach of the team can update
+      allow update: if isTeamAdminOrCoach(teamId);
+
+      // ── Roster (players / parents / coaches entries) ──────────────
+      match /players/{playerId} {
+        // Team members can read the roster
+        allow read: if isMemberOfTeam(teamId);
+
+        // Admin or coach can create / update / delete members
+        allow create: if isTeamAdminOrCoach(teamId);
+        allow update: if isTeamAdminOrCoach(teamId);
+        allow delete: if isTeamAdminOrCoach(teamId);
+      }
+
+      // ── Future subcollections (events, chat, files) ───────────────
+      match /events/{eventId} {
+        allow read: if isMemberOfTeam(teamId);
+        allow write: if isTeamAdminOrCoach(teamId);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isMemberOfTeam(teamId);
+        // Any team member can send messages
+        allow create: if isMemberOfTeam(teamId);
+        allow update, delete: if false;
+      }
+    }
+
+    // ── Invites ───────────────────────────────────────────────────────
+    // Pending invites keyed by invited email (normalised to lowercase)
+    match /invites/{inviteId} {
+      // Admins can read all invites; invited user can read their own
+      allow read: if isSignedIn() && (
+        isAdmin()
+        || resource.data.email == request.auth.token.email
+      );
+
+      // Only admin/coach can create invites
+      allow create: if isSignedIn() && (isAdmin() || userDoc().role == 'coach');
+
+      // Only the system (admin SDK) or admin can update/delete
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ── Deny everything else ──────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

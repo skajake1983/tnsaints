@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuthStore } from '../../stores/authStore';
 import { Colors } from '../../constants/Colors';
@@ -26,6 +26,7 @@ export default function SignUpScreen() {
   const { signUp, loading, error, clearError } = useAuthStore();
   const [localError, setLocalError] = useState('');
   const { handleGoogleSignIn, googleReady } = useGoogleAuth();
+  const router = useRouter();
   const [appleAvailable, setAppleAvailable] = useState(false);
 
   const pwCheck = validatePassword(password);
@@ -61,6 +62,7 @@ export default function SignUpScreen() {
   };
 
   const displayError = localError || error;
+  const isEmailInUse = !!error && error.includes('already exists');
 
   return (
     <KeyboardAvoidingView
@@ -76,6 +78,17 @@ export default function SignUpScreen() {
         {displayError ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{displayError}</Text>
+            {isEmailInUse && (
+              <View style={styles.errorActions}>
+                <TouchableOpacity onPress={() => { clearError(); router.replace('/(auth)/login'); }}>
+                  <Text style={styles.errorLink}>Sign In</Text>
+                </TouchableOpacity>
+                <Text style={styles.errorDivider}>or</Text>
+                <TouchableOpacity onPress={() => { clearError(); router.push('/(auth)/forgot-password'); }}>
+                  <Text style={styles.errorLink}>Reset Password</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ) : null}
 
@@ -261,4 +274,7 @@ const styles = StyleSheet.create({
 
   errorBox: { backgroundColor: '#fdecea', padding: 12, borderRadius: 10, marginBottom: 8 },
   errorText: { color: Colors.danger, fontSize: 14 },
+  errorActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
+  errorLink: { color: Colors.saintsBlue, fontWeight: '800', fontSize: 14, textDecorationLine: 'underline' },
+  errorDivider: { color: Colors.textMuted, fontSize: 13 },
 });

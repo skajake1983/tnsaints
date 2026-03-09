@@ -1,16 +1,26 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../stores/authStore';
+import { useTeamStore } from '../../stores/teamStore';
 import { Colors } from '../../constants/Colors';
 
 export default function HomeScreen() {
   const profile = useAuthStore((s) => s.profile);
   const signOut = useAuthStore((s) => s.signOut);
+  const { teams, activeTeamId, listen: listenTeams } = useTeamStore();
   const router = useRouter();
 
   const firstName = profile?.name?.split(' ')[0] ?? 'Saint';
+  const activeTeam = teams.find((t) => t.id === activeTeamId);
+
+  // Subscribe to user's teams
+  useEffect(() => {
+    if (!profile?.teamIds?.length) return;
+    const unsub = listenTeams(profile.teamIds);
+    return unsub;
+  }, [profile?.teamIds]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -19,6 +29,12 @@ export default function HomeScreen() {
         <Text style={styles.welcomeLabel}>Welcome back,</Text>
         <Text style={styles.welcomeName}>{firstName}</Text>
         <Text style={styles.welcomeRole}>{profile?.role ?? 'Member'}</Text>
+        {activeTeam && (
+          <View style={styles.teamBadge}>
+            <FontAwesome5 name="shield-alt" size={12} color={Colors.saintsGold} />
+            <Text style={styles.teamBadgeText}>{activeTeam.name}</Text>
+          </View>
+        )}
       </View>
 
       {/* Quick actions */}
@@ -83,6 +99,22 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     marginTop: 6,
+  },
+  teamBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  teamBadgeText: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   sectionTitle: {

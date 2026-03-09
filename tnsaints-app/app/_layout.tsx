@@ -74,6 +74,14 @@ function RootLayoutNav() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="player/[id]"
+          options={{ headerShown: true, title: 'Player Details', headerBackTitle: 'Team' }}
+        />
+        <Stack.Screen
+          name="player/form"
+          options={{ headerShown: true, title: 'Player Form', headerBackTitle: 'Back', presentation: 'modal' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
