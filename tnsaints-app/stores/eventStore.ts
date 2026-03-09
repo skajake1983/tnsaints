@@ -31,6 +31,7 @@ export interface TeamEvent {
   opponent?: string;    // for games
   homeAway?: 'home' | 'away' | 'neutral';
   isAllDay?: boolean;
+  recurrenceGroupId?: string; // links recurring event instances
   createdBy: string;    // uid
   createdAt: Timestamp;
 }

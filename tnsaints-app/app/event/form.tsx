@@ -20,6 +20,7 @@ import { Colors } from '../../constants/Colors';
 import { useEventStore, EventType, EventInput, TeamEvent, getEventMeta } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { sanitizeText } from '../../lib/validation';
+import { generateRecurringDates, RecurrencePattern } from '../../lib/eventHelpers';
 
 const EVENT_TYPES: { value: EventType; label: string; icon: string }[] = [
   { value: 'practice', label: 'Practice', icon: 'running' },
@@ -33,6 +34,16 @@ const HOME_AWAY_OPTIONS: { value: 'home' | 'away' | 'neutral'; label: string }[]
   { value: 'home', label: 'Home' },
   { value: 'away', label: 'Away' },
   { value: 'neutral', label: 'Neutral' },
+];
+
+const DAYS_OF_WEEK: { value: number; label: string }[] = [
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
 ];
 
 /** Pad a number to 2 digits */
@@ -73,6 +84,13 @@ export default function EventFormScreen() {
   const [homeAway, setHomeAway] = useState<'home' | 'away' | 'neutral'>('home');
   const [isAllDay, setIsAllDay] = useState(false);
 
+  // Recurrence state (create-only, not shown for edit)
+  const [recurring, setRecurring] = useState(false);
+  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]);
+  const [repeatCount, setRepeatCount] = useState('');
+  const [repeatUntil, setRepeatUntil] = useState<Date | null>(null);
+  const [showRepeatUntilPicker, setShowRepeatUntilPicker] = useState(false);
+
   // Native picker visibility
   const [showPicker, setShowPicker] = useState<null | 'startDate' | 'startTime' | 'endDate' | 'endTime'>(null);
 
@@ -111,8 +129,23 @@ export default function EventFormScreen() {
     if (locationUrl.trim() && !/^https?:\/\/.+/i.test(locationUrl.trim())) {
       e.locationUrl = 'Must be a valid URL (https://...)';
     }
+    if (recurring && !isEdit) {
+      if (recurrenceDays.length === 0) e.recurrenceDays = 'Select at least one day';
+      const count = parseInt(repeatCount, 10);
+      if (!repeatCount && !repeatUntil) {
+        e.repeatCount = 'Enter a count or select an end date';
+      } else if (repeatCount && (isNaN(count) || count < 2 || count > 200)) {
+        e.repeatCount = 'Must be between 2 and 200';
+      }
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  const toggleDay = (day: number) => {
+    setRecurrenceDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
   };
 
   const handleSave = async () => {
@@ -135,6 +168,33 @@ export default function EventFormScreen() {
 
       if (isEdit && eventId) {
         await updateEvent(teamId, eventId, data);
+      } else if (recurring && recurrenceDays.length > 0) {
+        // Generate recurring events
+        const count = parseInt(repeatCount, 10);
+        const pattern: RecurrencePattern = {
+          daysOfWeek: recurrenceDays,
+          repeatCount: !isNaN(count) && count >= 2 ? count : undefined,
+          repeatUntil: repeatUntil ? repeatUntil.toISOString().slice(0, 10) : undefined,
+        };
+        const additionalDates = generateRecurringDates(startDate, pattern);
+        const groupId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const durationMs = endDate.getTime() - startDate.getTime();
+
+        // Create the first event (the original start date)
+        await addEvent(teamId, { ...data, recurrenceGroupId: groupId });
+
+        // Create each recurring instance
+        for (const d of additionalDates) {
+          const recStart = new Date(d);
+          recStart.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+          const recEnd = new Date(recStart.getTime() + durationMs);
+          await addEvent(teamId, {
+            ...data,
+            startDate: toLocalISO(recStart),
+            endDate: toLocalISO(recEnd),
+            recurrenceGroupId: groupId,
+          });
+        }
       } else {
         await addEvent(teamId, data);
       }
@@ -238,6 +298,99 @@ export default function EventFormScreen() {
             thumbColor={Colors.white}
           />
         </View>
+
+        {/* Recurring Toggle (create-only) */}
+        {!isEdit && (
+          <>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Recurring Event</Text>
+              <Switch
+                value={recurring}
+                onValueChange={setRecurring}
+                trackColor={{ false: Colors.gray, true: Colors.saintsBlue }}
+                thumbColor={Colors.white}
+              />
+            </View>
+
+            {recurring && (
+              <View style={styles.recurrenceSection}>
+                {/* Day-of-week chips */}
+                <Text style={styles.label}>Repeat On</Text>
+                <View style={styles.dayRow}>
+                  {DAYS_OF_WEEK.map((d) => {
+                    const active = recurrenceDays.includes(d.value);
+                    return (
+                      <TouchableOpacity
+                        key={d.value}
+                        style={[styles.dayChip, active && styles.dayChipActive]}
+                        onPress={() => toggleDay(d.value)}
+                      >
+                        <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>{d.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                {errors.recurrenceDays && <Text style={styles.errorText}>{errors.recurrenceDays}</Text>}
+
+                {/* Number of occurrences */}
+                <Text style={styles.label}>Number of Occurrences</Text>
+                <TextInput
+                  style={[styles.input, errors.repeatCount && styles.inputError]}
+                  placeholder="e.g. 10"
+                  placeholderTextColor={Colors.textMuted}
+                  value={repeatCount}
+                  onChangeText={(t) => setRepeatCount(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  maxLength={3}
+                />
+                {errors.repeatCount && <Text style={styles.errorText}>{errors.repeatCount}</Text>}
+
+                {/* Repeat Until date */}
+                <Text style={styles.label}>Repeat Until (optional)</Text>
+                {Platform.OS === 'web' ? (
+                  <View style={styles.webDateTimeRow}>
+                    <input
+                      type="date"
+                      value={repeatUntil ? repeatUntil.toISOString().slice(0, 10) : ''}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value + 'T23:59:59');
+                        if (!isNaN(d.getTime())) setRepeatUntil(d);
+                        else setRepeatUntil(null);
+                      }}
+                      style={webInputStyle}
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.dateTimeRow}>
+                    <TouchableOpacity style={styles.dateBtn} onPress={() => setShowRepeatUntilPicker(true)}>
+                      <FontAwesome5 name="calendar-alt" size={14} color={Colors.saintsBlue} />
+                      <Text style={styles.dateBtnText}>
+                        {repeatUntil ? displayDate(repeatUntil) : 'Select date'}
+                      </Text>
+                    </TouchableOpacity>
+                    {repeatUntil && (
+                      <TouchableOpacity onPress={() => setRepeatUntil(null)} style={styles.clearBtn}>
+                        <FontAwesome5 name="times" size={14} color={Colors.danger} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+                {showRepeatUntilPicker && Platform.OS !== 'web' && (
+                  <DateTimePicker
+                    value={repeatUntil ?? new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000)}
+                    mode="date"
+                    minimumDate={startDate}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(_e: any, date?: Date) => {
+                      setShowRepeatUntilPicker(false);
+                      if (date) setRepeatUntil(date);
+                    }}
+                  />
+                )}
+              </View>
+            )}
+          </>
+        )}
 
         {/* Start Date / Time */}
         <Text style={styles.label}>Start</Text>
@@ -506,4 +659,35 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: Colors.white, fontSize: 16, fontWeight: '800' },
+
+  recurrenceSection: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.gray,
+  },
+  dayRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  dayChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.gray,
+    backgroundColor: Colors.white,
+  },
+  dayChipActive: {
+    backgroundColor: Colors.saintsBlue,
+    borderColor: Colors.saintsBlue,
+  },
+  dayChipText: { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  dayChipTextActive: { color: Colors.white },
+  clearBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
 });

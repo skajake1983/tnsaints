@@ -58,3 +58,61 @@ export function filterPast<T extends TeamEventLike>(events: T[]): T[] {
   const todayStr = new Date().toISOString().slice(0, 10);
   return events.filter((e) => e.startDate.slice(0, 10) < todayStr);
 }
+
+/* ── Recurring-event helpers ─────────────────────────────── */
+
+export interface RecurrencePattern {
+  /** Days of week the event recurs on (0 = Sunday … 6 = Saturday) */
+  daysOfWeek: number[];
+  /** Maximum number of occurrences (optional) */
+  repeatCount?: number;
+  /** Stop generating after this date YYYY-MM-DD (optional, inclusive) */
+  repeatUntil?: string;
+}
+
+/** Hard cap to prevent accidental unbounded generation */
+const MAX_OCCURRENCES = 200;
+
+/**
+ * Generate an array of Date objects for each occurrence of a recurring event.
+ *
+ * Starting the day AFTER `startDate`, walks forward day-by-day and collects
+ * dates whose day-of-week is in `pattern.daysOfWeek`.  Stops when either
+ * `repeatCount` occurrences have been collected, or the date exceeds
+ * `repeatUntil`, whichever comes first.  If neither is provided the hard cap
+ * of 200 occurrences is used.
+ *
+ * The original `startDate` is NOT included in the output – it is treated as
+ * the first occurrence by the caller.
+ */
+export function generateRecurringDates(
+  startDate: Date,
+  pattern: RecurrencePattern,
+): Date[] {
+  const { daysOfWeek, repeatCount, repeatUntil } = pattern;
+  if (!daysOfWeek.length) return [];
+
+  const limit = Math.min(repeatCount ?? MAX_OCCURRENCES, MAX_OCCURRENCES);
+  // We need (limit - 1) additional dates because the original event counts as #1
+  const needed = limit - 1;
+  if (needed <= 0) return [];
+
+  const endDate = repeatUntil ? new Date(repeatUntil + 'T23:59:59') : null;
+  const daySet = new Set(daysOfWeek);
+  const results: Date[] = [];
+
+  const cursor = new Date(startDate);
+  cursor.setDate(cursor.getDate() + 1); // start from the day after
+
+  // Walk forward up to ~2 years as safety
+  const maxDays = 731;
+  for (let i = 0; i < maxDays && results.length < needed; i++) {
+    if (endDate && cursor > endDate) break;
+    if (daySet.has(cursor.getDay())) {
+      results.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return results;
+}
