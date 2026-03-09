@@ -15,18 +15,54 @@ import { cleanData } from '../lib/firestoreHelpers';
 
 export type TeamGender = 'boys' | 'girls' | 'coed';
 
+export const SPORTS = [
+  'Baseball', 'Basketball', 'Cheerleading', 'Cricket', 'Field Hockey',
+  'Football', 'Golf', 'Gymnastics', 'Ice Hockey', 'Lacrosse',
+  'Rugby', 'Soccer', 'Softball', 'Swimming', 'Tennis',
+  'Track & Field', 'Volleyball', 'Water Polo', 'Wrestling', 'Other',
+] as const;
+export type Sport = (typeof SPORTS)[number];
+
 export const AGE_GROUPS = [
-  '8U', '9U', '10U', '11U', '12U', '13U', '14U', '15U', '16U', '17U', 'High School',
+  '6U', '7U', '8U', '9U', '10U', '11U', '12U', '13U', '14U', '15U', '16U', '17U', '18U', 'High School', 'Adult',
 ] as const;
 export type AgeGroup = (typeof AGE_GROUPS)[number];
+
+export const COUNTRIES = [
+  'United States', 'Canada', 'United Kingdom', 'Australia', 'Mexico',
+  'France', 'Germany', 'Spain', 'Italy', 'Japan', 'South Korea',
+  'Brazil', 'Argentina', 'New Zealand', 'Ireland', 'Other',
+] as const;
+export type Country = (typeof COUNTRIES)[number];
+
+export const TIME_ZONES = [
+  { label: 'Eastern (ET)', value: 'America/New_York' },
+  { label: 'Central (CT)', value: 'America/Chicago' },
+  { label: 'Mountain (MT)', value: 'America/Denver' },
+  { label: 'Pacific (PT)', value: 'America/Los_Angeles' },
+  { label: 'Alaska (AKT)', value: 'America/Anchorage' },
+  { label: 'Hawaii (HT)', value: 'Pacific/Honolulu' },
+  { label: 'Atlantic (AT)', value: 'America/Halifax' },
+  { label: 'Newfoundland (NT)', value: 'America/St_Johns' },
+  { label: 'GMT / UTC', value: 'Europe/London' },
+  { label: 'Central European (CET)', value: 'Europe/Berlin' },
+  { label: 'Australian Eastern (AET)', value: 'Australia/Sydney' },
+  { label: 'Japan (JST)', value: 'Asia/Tokyo' },
+] as const;
+export type TimeZone = (typeof TIME_ZONES)[number]['value'];
 
 export interface Team {
   id: string;
   name: string;
   /** Organization this team belongs to (e.g. "tn-saints") */
   orgId: string;
-  season?: string;
+  sport?: Sport;
   ageGroup?: AgeGroup;
+  country?: Country;
+  timeZone?: TimeZone;
+  /** @deprecated Use sport instead. Kept for backward compatibility. */
+  season?: string;
+  /** @deprecated Kept for backward compatibility. */
   gender?: TeamGender;
   headCoach?: string;
   practiceFacility?: string;

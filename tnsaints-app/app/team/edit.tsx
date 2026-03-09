@@ -15,22 +15,28 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
-import { useTeamStore, Team, AGE_GROUPS, AgeGroup, TeamGender } from '../../stores/teamStore';
-import { sanitizeText, sanitizeAddress } from '../../lib/validation';
+import {
+  useTeamStore,
+  Team,
+  SPORTS,
+  Sport,
+  AGE_GROUPS,
+  AgeGroup,
+  COUNTRIES,
+  Country,
+  TIME_ZONES,
+  TimeZone,
+} from '../../stores/teamStore';
+import { sanitizeText } from '../../lib/validation';
 import { cleanData } from '../../lib/firestoreHelpers';
-
-const GENDER_OPTIONS: { label: string; value: TeamGender }[] = [
-  { label: 'Boys', value: 'boys' },
-  { label: 'Girls', value: 'girls' },
-  { label: 'Co-ed', value: 'coed' },
-];
+import DropdownPicker from '../../components/DropdownPicker';
 
 type FieldErrors = {
   name?: string;
-  season?: string;
+  sport?: string;
   ageGroup?: string;
-  gender?: string;
-  maxRosterSize?: string;
+  country?: string;
+  timeZone?: string;
 };
 
 export default function EditTeamScreen() {
@@ -41,15 +47,10 @@ export default function EditTeamScreen() {
 
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [name, setName] = useState('');
-  const [season, setSeason] = useState('');
+  const [sport, setSport] = useState<Sport | ''>('');
   const [ageGroup, setAgeGroup] = useState<AgeGroup | ''>('');
-  const [gender, setGender] = useState<TeamGender | ''>('');
-  const [headCoach, setHeadCoach] = useState('');
-  const [practiceFacility, setPracticeFacility] = useState('');
-  const [facilityAddress, setFacilityAddress] = useState('');
-  const [league, setLeague] = useState('');
-  const [maxRosterSize, setMaxRosterSize] = useState('15');
-  const [description, setDescription] = useState('');
+  const [country, setCountry] = useState<Country | ''>('');
+  const [timeZone, setTimeZone] = useState<TimeZone | ''>('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -62,15 +63,10 @@ export default function EditTeamScreen() {
       if (snap.exists()) {
         const t = snap.data() as Omit<Team, 'id'>;
         setName(t.name ?? '');
-        setSeason(t.season ?? '');
+        setSport((t.sport as Sport) ?? '');
         setAgeGroup(t.ageGroup ?? '');
-        setGender(t.gender ?? '');
-        setHeadCoach(t.headCoach ?? '');
-        setPracticeFacility(t.practiceFacility ?? '');
-        setFacilityAddress(t.facilityAddress ?? '');
-        setLeague(t.league ?? '');
-        setMaxRosterSize(t.maxRosterSize != null ? String(t.maxRosterSize) : '15');
-        setDescription(t.description ?? '');
+        setCountry((t.country as Country) ?? '');
+        setTimeZone((t.timeZone as TimeZone) ?? '');
       }
       setLoadingTeam(false);
     };
@@ -88,27 +84,10 @@ export default function EditTeamScreen() {
       errs.name = 'Team name must be 80 characters or less.';
     }
 
-    if (!season.trim()) {
-      errs.season = 'Season is required.';
-    } else if (season.trim().length > 50) {
-      errs.season = 'Season must be 50 characters or less.';
-    }
-
-    if (!ageGroup) {
-      errs.ageGroup = 'Please select an age group.';
-    }
-
-    if (!gender) {
-      errs.gender = 'Please select a gender.';
-    }
-
-    const rosterStr = maxRosterSize.trim();
-    if (rosterStr) {
-      const parsed = parseInt(rosterStr, 10);
-      if (isNaN(parsed) || parsed < 1 || parsed > 30) {
-        errs.maxRosterSize = 'Must be between 1 and 30.';
-      }
-    }
+    if (!sport) errs.sport = 'Please select a sport.';
+    if (!ageGroup) errs.ageGroup = 'Please select a team age.';
+    if (!country) errs.country = 'Please select a country.';
+    if (!timeZone) errs.timeZone = 'Please select a time zone.';
 
     return errs;
   };
@@ -130,21 +109,15 @@ export default function EditTeamScreen() {
     }
 
     const cleanName = sanitizeText(name.trim());
-    const parsedRoster = parseInt(maxRosterSize.trim() || '15', 10);
 
     setSaving(true);
     try {
       const data = cleanData({
         name: cleanName,
-        season: sanitizeText(season.trim()) || undefined,
+        sport: sport || undefined,
         ageGroup: ageGroup || undefined,
-        gender: gender || undefined,
-        headCoach: sanitizeText(headCoach.trim()) || undefined,
-        practiceFacility: sanitizeText(practiceFacility.trim()) || undefined,
-        facilityAddress: sanitizeAddress(facilityAddress.trim()) || undefined,
-        league: sanitizeText(league.trim()) || undefined,
-        maxRosterSize: maxRosterSize.trim() ? parsedRoster : undefined,
-        description: sanitizeText(description.trim()) || undefined,
+        country: country || undefined,
+        timeZone: timeZone || undefined,
       });
       await updateTeam(teamId, data);
       router.back();
@@ -194,7 +167,6 @@ export default function EditTeamScreen() {
           </View>
         ) : null}
 
-        {/* ── Required fields ─────────────────── */}
         <Text style={styles.sectionTitle}>Team Details</Text>
 
         <Text style={styles.label}>Team Name *</Text>
@@ -208,120 +180,45 @@ export default function EditTeamScreen() {
         />
         {fieldError('name')}
 
-        <Text style={styles.label}>Season *</Text>
-        <TextInput
-          style={[styles.input, touched && fieldErrors.season ? styles.inputError : null]}
-          value={season}
-          onChangeText={setSeason}
-          placeholder="e.g. Spring 2026"
-          placeholderTextColor={Colors.textMuted}
-          maxLength={50}
+        <DropdownPicker
+          label="Sport *"
+          value={sport}
+          options={SPORTS}
+          onSelect={(v) => setSport(v as Sport)}
+          placeholder="Select a sport…"
+          hasError={touched && !!fieldErrors.sport}
         />
-        {fieldError('season')}
+        {fieldError('sport')}
 
-        <Text style={styles.label}>Age Group *</Text>
-        <View style={styles.chipRow}>
-          {AGE_GROUPS.map((ag) => (
-            <TouchableOpacity
-              key={ag}
-              style={[
-                styles.chip,
-                ageGroup === ag && styles.chipActive,
-                touched && fieldErrors.ageGroup && !ageGroup ? styles.chipError : null,
-              ]}
-              onPress={() => setAgeGroup(ag)}
-            >
-              <Text style={[styles.chipText, ageGroup === ag && styles.chipTextActive]}>{ag}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <DropdownPicker
+          label="Team Age *"
+          value={ageGroup}
+          options={AGE_GROUPS}
+          onSelect={(v) => setAgeGroup(v as AgeGroup)}
+          placeholder="Select age group…"
+          hasError={touched && !!fieldErrors.ageGroup}
+        />
         {fieldError('ageGroup')}
 
-        <Text style={styles.label}>Gender *</Text>
-        <View style={styles.chipRow}>
-          {GENDER_OPTIONS.map((g) => (
-            <TouchableOpacity
-              key={g.value}
-              style={[
-                styles.chip,
-                gender === g.value && styles.chipActive,
-                touched && fieldErrors.gender && !gender ? styles.chipError : null,
-              ]}
-              onPress={() => setGender(g.value)}
-            >
-              <Text style={[styles.chipText, gender === g.value && styles.chipTextActive]}>{g.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {fieldError('gender')}
-
-        {/* ── Optional fields ─────────────────── */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Additional Info</Text>
-
-        <Text style={styles.label}>Head Coach</Text>
-        <TextInput
-          style={styles.input}
-          value={headCoach}
-          onChangeText={setHeadCoach}
-          placeholder="e.g. Coach Williams"
-          placeholderTextColor={Colors.textMuted}
-          maxLength={80}
+        <DropdownPicker
+          label="Country *"
+          value={country}
+          options={COUNTRIES}
+          onSelect={(v) => setCountry(v as Country)}
+          placeholder="Select country…"
+          hasError={touched && !!fieldErrors.country}
         />
+        {fieldError('country')}
 
-        <Text style={styles.label}>Practice Facility</Text>
-        <TextInput
-          style={styles.input}
-          value={practiceFacility}
-          onChangeText={setPracticeFacility}
-          placeholder="e.g. Franklin Road Academy Gym"
-          placeholderTextColor={Colors.textMuted}
-          maxLength={100}
+        <DropdownPicker
+          label="Time Zone *"
+          value={timeZone}
+          options={TIME_ZONES.map((tz) => ({ label: tz.label, value: tz.value }))}
+          onSelect={(v) => setTimeZone(v as TimeZone)}
+          placeholder="Select time zone…"
+          hasError={touched && !!fieldErrors.timeZone}
         />
-
-        <Text style={styles.label}>Facility Address</Text>
-        <TextInput
-          style={styles.input}
-          value={facilityAddress}
-          onChangeText={setFacilityAddress}
-          placeholder="e.g. 114 Libertyville Rd, Franklin, TN"
-          placeholderTextColor={Colors.textMuted}
-          maxLength={200}
-        />
-
-        <Text style={styles.label}>League / Circuit</Text>
-        <TextInput
-          style={styles.input}
-          value={league}
-          onChangeText={setLeague}
-          placeholder="e.g. Nike EYBL, AAU District"
-          placeholderTextColor={Colors.textMuted}
-          maxLength={80}
-        />
-
-        <Text style={styles.label}>Max Roster Size</Text>
-        <TextInput
-          style={[styles.input, { width: 100 }, touched && fieldErrors.maxRosterSize ? styles.inputError : null]}
-          value={maxRosterSize}
-          onChangeText={(v) => setMaxRosterSize(v.replace(/[^0-9]/g, ''))}
-          placeholder="15"
-          placeholderTextColor={Colors.textMuted}
-          keyboardType="number-pad"
-          maxLength={2}
-        />
-        {fieldError('maxRosterSize')}
-
-        <Text style={styles.label}>Team Description</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Notes, bio, or anything relevant to this team..."
-          placeholderTextColor={Colors.textMuted}
-          multiline
-          numberOfLines={4}
-          maxLength={500}
-          textAlignVertical="top"
-        />
+        {fieldError('timeZone')}
 
         <TouchableOpacity
           style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -383,29 +280,6 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: Colors.danger,
   },
-  multiline: {
-    minHeight: 100,
-    paddingTop: 12,
-  },
-
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.gray,
-  },
-  chipActive: {
-    backgroundColor: Colors.saintsBlue,
-    borderColor: Colors.saintsBlue,
-  },
-  chipError: {
-    borderColor: Colors.danger,
-  },
-  chipText: { fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
-  chipTextActive: { color: Colors.white },
 
   saveBtn: {
     flexDirection: 'row',
