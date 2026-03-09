@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Platform,
+  Alert,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,6 +17,7 @@ import { useRosterStore, Player, computeAge } from '../../stores/rosterStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useTeamStore } from '../../stores/teamStore';
 import { usePermissions } from '../../hooks/usePermissions';
+import SwipeableRow from '../../components/SwipeableRow';
 
 type RoleFilter = 'all' | 'player' | 'coach' | 'parent';
 const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
@@ -26,7 +28,7 @@ const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
 ];
 
 export default function TeamScreen() {
-  const { players, loading, listen } = useRosterStore();
+  const { players, loading, listen, removePlayer } = useRosterStore();
   const profile = useAuthStore((s) => s.profile);
   const { activeTeamId, loading: teamsLoading } = useTeamStore();
   const { can } = usePermissions();
@@ -36,6 +38,8 @@ export default function TeamScreen() {
 
   const canAdd = can('roster.add');
   const canEditTeam = can('team.edit');
+  const canEditRoster = can('roster.edit');
+  const canRemove = can('roster.remove');
 
   // Listen to the active team's roster
   useEffect(() => {
@@ -61,14 +65,40 @@ export default function TeamScreen() {
     );
   });
 
+  const handleEditPlayer = useCallback((playerId: string) => {
+    if (!activeTeamId) return;
+    router.push({
+      pathname: '/player/form' as any,
+      params: { teamId: activeTeamId, playerId },
+    });
+  }, [activeTeamId, router]);
+
+  const handleDeletePlayer = useCallback((playerId: string, name: string) => {
+    if (!activeTeamId) return;
+    const doDelete = async () => {
+      try {
+        await removePlayer(activeTeamId, playerId);
+      } catch {}
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Remove ${name} from the roster?`)) doDelete();
+    } else {
+      Alert.alert('Remove Member', `Remove ${name} from the roster?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: doDelete },
+      ]);
+    }
+  }, [activeTeamId, removePlayer]);
+
   const renderPlayer = ({ item }: { item: Player }) => {
     const initials = `${item.firstName[0] ?? ''}${item.lastName[0] ?? ''}`.toUpperCase();
     const age = item.birthdate ? computeAge(item.birthdate) : null;
     const roleLabel = item.role
       ? item.role.charAt(0).toUpperCase() + item.role.slice(1)
       : 'Player';
+    const fullName = `${item.firstName} ${item.lastName}`;
 
-    return (
+    const card = (
       <TouchableOpacity
         style={styles.playerCard}
         activeOpacity={0.7}
@@ -84,9 +114,7 @@ export default function TeamScreen() {
         </View>
 
         <View style={styles.playerInfo}>
-          <Text style={styles.playerName}>
-            {item.firstName} {item.lastName}
-          </Text>
+          <Text style={styles.playerName}>{fullName}</Text>
           <Text style={styles.playerMeta}>
             {roleLabel}
             {item.position ? ` · ${item.position}` : ''}
@@ -100,7 +128,26 @@ export default function TeamScreen() {
             <Text style={styles.jerseyText}>#{item.jerseyNumber}</Text>
           </View>
         )}
+
+        {canEditRoster && (
+          <TouchableOpacity
+            style={styles.editIconBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => handleEditPlayer(item.id)}
+          >
+            <FontAwesome5 name="pencil-alt" size={12} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
+    );
+
+    return (
+      <SwipeableRow
+        onEdit={canEditRoster ? () => handleEditPlayer(item.id) : undefined}
+        onDelete={canRemove ? () => handleDeletePlayer(item.id, fullName) : undefined}
+      >
+        {card}
+      </SwipeableRow>
     );
   };
 
@@ -357,6 +404,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   jerseyText: { fontWeight: '800', fontSize: 14, color: Colors.saintsBlueDark },
+
+  editIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: Colors.textPrimary, marginTop: 16 },

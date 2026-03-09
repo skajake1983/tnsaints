@@ -75,8 +75,16 @@ export default function EventFormScreen() {
   // Form state
   const [type, setType] = useState<EventType>('practice');
   const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState(new Date());
-  const [endDate, setEndDate] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000)); // +2h
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setHours(9, 0, 0, 0);
+    return d;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date();
+    d.setHours(10, 0, 0, 0);
+    return d;
+  });
   const [location, setLocation] = useState('');
   const [locationUrl, setLocationUrl] = useState('');
   const [description, setDescription] = useState('');

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -16,17 +17,26 @@ import { useAvailabilityStore, summariseRsvps } from '../../stores/availabilityS
 import { useTeamStore } from '../../stores/teamStore';
 import { useAuthStore } from '../../stores/authStore';
 import { usePermissions } from '../../hooks/usePermissions';
+import SwipeableRow from '../../components/SwipeableRow';
 
 type TabFilter = 'upcoming' | 'past';
 
 export default function ScheduleScreen() {
-  const { events, loading, listen } = useEventStore();
+  const { events, loading, listen, removeEvent } = useEventStore();
   const { byEvent, listenTeam } = useAvailabilityStore();
   const { activeTeamId } = useTeamStore();
   const profile = useAuthStore((s) => s.profile);
   const { can } = usePermissions();
   const router = useRouter();
   const [tab, setTab] = useState<TabFilter>('upcoming');
+
+  // Bulk selection state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
+  const canEdit = can('event.edit');
+  const canDelete = can('event.delete');
 
   useEffect(() => {
     if (!activeTeamId) return;
@@ -48,23 +58,108 @@ export default function ScheduleScreen() {
     data: items,
   }));
 
+  // Reset selection when tab changes or leaving select mode
+  useEffect(() => {
+    setSelected(new Set());
+    setSelectMode(false);
+  }, [tab]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelected(new Set(filtered.map((e) => e.id)));
+  }, [filtered]);
+
+  const handleDeleteSingle = useCallback((eventId: string) => {
+    if (!activeTeamId) return;
+    const doDelete = async () => {
+      try {
+        await removeEvent(activeTeamId, eventId);
+      } catch {}
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this event?')) doDelete();
+    } else {
+      Alert.alert('Delete Event', 'Are you sure you want to delete this event?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: doDelete },
+      ]);
+    }
+  }, [activeTeamId, removeEvent]);
+
+  const handleBulkDelete = useCallback(() => {
+    if (!activeTeamId || selected.size === 0) return;
+    const doDelete = async () => {
+      setDeleting(true);
+      try {
+        for (const id of selected) {
+          await removeEvent(activeTeamId, id);
+        }
+      } catch {} finally {
+        setDeleting(false);
+        setSelected(new Set());
+        setSelectMode(false);
+      }
+    };
+    const count = selected.size;
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Delete ${count} event${count !== 1 ? 's' : ''}?`)) doDelete();
+    } else {
+      Alert.alert(
+        'Delete Events',
+        `Are you sure you want to delete ${count} event${count !== 1 ? 's' : ''}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: doDelete },
+        ],
+      );
+    }
+  }, [activeTeamId, selected, removeEvent]);
+
+  const handleEditEvent = useCallback((eventId: string) => {
+    if (!activeTeamId) return;
+    router.push({
+      pathname: '/event/form' as any,
+      params: { teamId: activeTeamId, eventId },
+    });
+  }, [activeTeamId, router]);
+
   const renderEvent = ({ item }: { item: TeamEvent }) => {
     const meta = getEventMeta(item.type);
     const rsvps = byEvent[item.id];
     const summary = rsvps ? summariseRsvps(rsvps) : null;
     const myRsvp = rsvps?.find((r) => r.uid === profile?.uid);
+    const isSelected = selected.has(item.id);
 
-    return (
+    const card = (
       <TouchableOpacity
         style={styles.eventCard}
         activeOpacity={0.7}
-        onPress={() =>
+        onPress={() => {
+          if (selectMode) {
+            toggleSelect(item.id);
+            return;
+          }
           router.push({
             pathname: '/event/[id]' as any,
             params: { id: item.id, teamId: activeTeamId ?? '' },
-          })
-        }
+          });
+        }}
       >
+        {selectMode && (
+          <View style={styles.checkboxCol}>
+            <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+              {isSelected && <FontAwesome5 name="check" size={10} color={Colors.white} />}
+            </View>
+          </View>
+        )}
         <View style={[styles.eventTypeStrip, { backgroundColor: meta.color }]} />
         <View style={styles.eventBody}>
           <View style={styles.eventHeader}>
@@ -74,6 +169,15 @@ export default function ScheduleScreen() {
               <View style={styles.homeAwayBadge}>
                 <Text style={styles.homeAwayText}>{item.homeAway.toUpperCase()}</Text>
               </View>
+            )}
+            {canEdit && !selectMode && (
+              <TouchableOpacity
+                style={styles.editIconBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => handleEditEvent(item.id)}
+              >
+                <FontAwesome5 name="pencil-alt" size={12} color={Colors.textMuted} />
+              </TouchableOpacity>
             )}
           </View>
 
@@ -132,6 +236,17 @@ export default function ScheduleScreen() {
         </View>
       </TouchableOpacity>
     );
+
+    if (selectMode) return card;
+
+    return (
+      <SwipeableRow
+        onEdit={canEdit ? () => handleEditEvent(item.id) : undefined}
+        onDelete={canDelete ? () => handleDeleteSingle(item.id) : undefined}
+      >
+        {card}
+      </SwipeableRow>
+    );
   };
 
   if (!activeTeamId) {
@@ -161,7 +276,7 @@ export default function ScheduleScreen() {
           <Text style={[styles.tabBtnText, tab === 'past' && styles.tabBtnTextActive]}>Past</Text>
         </TouchableOpacity>
 
-        {can('event.create') && (
+        {can('event.create') && !selectMode && (
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() =>
@@ -176,6 +291,48 @@ export default function ScheduleScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Bulk selection toolbar */}
+      {canDelete && sections.length > 0 && (
+        <View style={styles.bulkBar}>
+          {selectMode ? (
+            <>
+              <TouchableOpacity onPress={selectAll} style={styles.bulkLink}>
+                <Text style={styles.bulkLinkText}>Select All</Text>
+              </TouchableOpacity>
+              <Text style={styles.bulkCount}>{selected.size} selected</Text>
+              <TouchableOpacity
+                onPress={handleBulkDelete}
+                disabled={selected.size === 0 || deleting}
+                style={[styles.bulkDeleteBtn, (selected.size === 0 || deleting) && { opacity: 0.4 }]}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color={Colors.white} />
+                ) : (
+                  <>
+                    <FontAwesome5 name="trash-alt" size={11} color={Colors.white} />
+                    <Text style={styles.bulkDeleteText}>Delete</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setSelectMode(false); setSelected(new Set()); }}
+                style={styles.bulkLink}
+              >
+                <Text style={[styles.bulkLinkText, { color: Colors.textMuted }]}>Cancel</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setSelectMode(true)}
+              style={styles.bulkLink}
+            >
+              <FontAwesome5 name="check-square" size={12} color={Colors.saintsBlue} />
+              <Text style={styles.bulkLinkText}>Select</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.center}>
@@ -308,4 +465,68 @@ const styles = StyleSheet.create({
   myRsvpOut: { backgroundColor: '#fdecea' },
   myRsvpMaybe: { backgroundColor: '#fff8e1' },
   myRsvpText: { fontSize: 11, fontWeight: '700', color: Colors.textPrimary },
+
+  editIconBtn: {
+    marginLeft: 'auto',
+    padding: 4,
+  },
+
+  checkboxCol: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 4,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: Colors.gray,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: Colors.saintsBlue,
+    borderColor: Colors.saintsBlue,
+  },
+
+  bulkBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    gap: 10,
+  },
+  bulkLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+  },
+  bulkLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.saintsBlue,
+  },
+  bulkCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  bulkDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.danger,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  bulkDeleteText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
