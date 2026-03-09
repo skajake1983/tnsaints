@@ -14,7 +14,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
-import { useRosterStore, Player, computeAge } from '../../stores/rosterStore';
+import { useRosterStore, Player, computeAge, SiblingLink, fetchTeamPlayers } from '../../stores/rosterStore';
+import { useTeamStore } from '../../stores/teamStore';
 import { usePermissions } from '../../hooks/usePermissions';
 
 export default function PlayerDetailScreen() {
@@ -23,8 +24,13 @@ export default function PlayerDetailScreen() {
   const { can } = usePermissions();
   const removePlayer = useRosterStore((s) => s.removePlayer);
   const allMembers = useRosterStore((s) => s.players);
+  const allTeams = useTeamStore((s) => s.teams);
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
+  // Cross-team sibling info (fetched lazily)
+  const [crossTeamSiblings, setCrossTeamSiblings] = useState<
+    Map<string, { player: Player; teamName: string }>
+  >(new Map());
 
   const canEditRoster = can('roster.edit');
   const canRemove = can('roster.remove');
@@ -40,6 +46,37 @@ export default function PlayerDetailScreen() {
     });
     return unsub;
   }, [id, teamId]);
+
+  // Fetch cross-team sibling data lazily
+  useEffect(() => {
+    if (!player?.linkedSiblingIds?.length) return;
+    const crossTeam = player.linkedSiblingIds.filter((s) => s.teamId !== teamId);
+    if (crossTeam.length === 0) return;
+
+    // Group by teamId to do one fetch per team
+    const byTeam = new Map<string, string[]>();
+    for (const s of crossTeam) {
+      const arr = byTeam.get(s.teamId) ?? [];
+      arr.push(s.playerId);
+      byTeam.set(s.teamId, arr);
+    }
+
+    (async () => {
+      const result = new Map<string, { player: Player; teamName: string }>();
+      for (const [tid, pids] of byTeam) {
+        const teamName = allTeams.find((t) => t.id === tid)?.name ?? tid;
+        try {
+          const players = await fetchTeamPlayers(tid);
+          for (const p of players) {
+            if (pids.includes(p.id)) {
+              result.set(`${tid}/${p.id}`, { player: p, teamName });
+            }
+          }
+        } catch { /* skip unavailable teams */ }
+      }
+      setCrossTeamSiblings(result);
+    })();
+  }, [player?.linkedSiblingIds, teamId, allTeams]);
 
   const confirmDelete = () => {
     const doDelete = async () => {
@@ -222,6 +259,79 @@ export default function PlayerDetailScreen() {
           })}
         </View>
       )}
+
+      {/* Siblings */}
+      {player.role === 'player' && (player.linkedSiblingIds?.length ?? 0) > 0 && (() => {
+        const sameTeam = (player.linkedSiblingIds ?? []).filter((s) => s.teamId === teamId);
+        const crossTeam = (player.linkedSiblingIds ?? []).filter((s) => s.teamId !== teamId);
+        return (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Siblings</Text>
+            {sameTeam.map((s) => {
+              const member = allMembers.find((m) => m.id === s.playerId);
+              if (!member) return null;
+              return (
+                <TouchableOpacity
+                  key={s.playerId}
+                  style={styles.linkedMemberRow}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/player/[id]' as any,
+                      params: { id: s.playerId, teamId },
+                    })
+                  }
+                >
+                  <View style={styles.linkedAvatar}>
+                    <Text style={styles.linkedAvatarText}>
+                      {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                    <Text style={styles.linkedRole}>
+                      {member.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member.position ?? 'Player'}
+                    </Text>
+                  </View>
+                  <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })}
+            {crossTeam.map((s) => {
+              const info = crossTeamSiblings.get(`${s.teamId}/${s.playerId}`);
+              const name = info
+                ? `${info.player.firstName} ${info.player.lastName}`
+                : 'Loading…';
+              const teamLabel = info?.teamName ?? s.teamId;
+              const initials = info
+                ? (info.player.firstName[0] ?? '') + (info.player.lastName[0] ?? '')
+                : '??';
+              return (
+                <TouchableOpacity
+                  key={`${s.teamId}/${s.playerId}`}
+                  style={styles.linkedMemberRow}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/player/[id]' as any,
+                      params: { id: s.playerId, teamId: s.teamId },
+                    })
+                  }
+                >
+                  <View style={[styles.linkedAvatar, { backgroundColor: Colors.saintsGold }]}>
+                    <Text style={[styles.linkedAvatarText, { color: Colors.saintsBlueDark }]}>
+                      {initials}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.linkedName}>{name}</Text>
+                    <Text style={styles.linkedRole}>{teamLabel}</Text>
+                  </View>
+                  <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        );
+      })()}
 
       {/* Stats placeholder */}
       <View style={styles.section}>

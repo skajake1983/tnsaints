@@ -17,8 +17,9 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
-import { useRosterStore, Player, PlayerInput, MemberRole, Gender } from '../../stores/rosterStore';
+import { useRosterStore, Player, PlayerInput, MemberRole, Gender, SiblingLink, fetchTeamPlayers } from '../../stores/rosterStore';
 import { useTeamStore } from '../../stores/teamStore';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   sanitizeText,
   sanitizeAddress,
@@ -47,6 +48,8 @@ export default function PlayerFormScreen() {
   const { teamId, playerId } = useLocalSearchParams<{ teamId: string; playerId?: string }>();
   const router = useRouter();
   const { addPlayer, updatePlayer } = useRosterStore();
+  const { can } = usePermissions();
+  const isSuperAdmin = usePermissions().role === 'superadmin';
 
   const isEdit = !!playerId;
 
@@ -76,6 +79,11 @@ export default function PlayerFormScreen() {
   const [isParentOfPlayer, setIsParentOfPlayer] = useState(false);
   const [linkedPlayerIds, setLinkedPlayerIds] = useState<string[]>([]);
   const [linkedParentIds, setLinkedParentIds] = useState<string[]>([]);
+  const [linkedSiblingIds, setLinkedSiblingIds] = useState<SiblingLink[]>([]);
+  const [crossTeamMode, setCrossTeamMode] = useState(false);
+  const [crossTeamId, setCrossTeamId] = useState<string | null>(null);
+  const [crossTeamPlayers, setCrossTeamPlayers] = useState<Player[]>([]);
+  const [loadingCrossTeam, setLoadingCrossTeam] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingPlayer, setLoadingPlayer] = useState(isEdit);
   const [formError, setFormError] = useState('');
@@ -91,6 +99,15 @@ export default function PlayerFormScreen() {
   const rosterParents = useRosterStore((s) => s.players).filter(
     (p) => (p.role === 'parent' || p.role === 'coach') && (!playerId || p.id !== playerId),
   );
+
+  // Get players for sibling linking (exclude self)
+  const rosterSiblingCandidates = useRosterStore((s) => s.players).filter(
+    (p) => p.role === 'player' && (!playerId || p.id !== playerId),
+  );
+
+  // Teams for cross-team sibling selector (exclude current team)
+  const allTeams = useTeamStore((s) => s.teams);
+  const otherTeams = allTeams.filter((t) => t.id !== teamId);
 
   // Load existing player for edit mode
   useEffect(() => {
@@ -119,6 +136,10 @@ export default function PlayerFormScreen() {
         setSendInvite(p.sendInvite ?? false);
         setLinkedPlayerIds(p.linkedPlayerIds ?? []);
         setLinkedParentIds(p.linkedParentIds ?? []);
+        setLinkedSiblingIds(p.linkedSiblingIds ?? []);
+        if ((p.linkedSiblingIds ?? []).some((s: SiblingLink) => s.teamId !== teamId)) {
+          setCrossTeamMode(true);
+        }
         if (p.role === 'coach' && (p.linkedPlayerIds?.length ?? 0) > 0) {
           setIsParentOfPlayer(true);
         }
@@ -241,6 +262,8 @@ export default function PlayerFormScreen() {
             : undefined,
       linkedParentIds:
         role === 'player' ? linkedParentIds : undefined,
+      linkedSiblingIds:
+        role === 'player' ? linkedSiblingIds : undefined,
     };
 
     setSaving(true);
@@ -485,6 +508,189 @@ export default function PlayerFormScreen() {
                   })}
                 </View>
               </View>
+            )}
+
+            {/* Sibling links (same team) */}
+            {rosterSiblingCandidates.length > 0 && (
+              <View style={styles.linkedSection}>
+                <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Siblings on This Team</Text>
+                <Text style={styles.linkedHint}>Select any siblings of this player on the same team.</Text>
+                <View style={styles.linkedList}>
+                  {rosterSiblingCandidates.map((p) => {
+                    const selected = linkedSiblingIds.some(
+                      (s) => s.playerId === p.id && s.teamId === teamId,
+                    );
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        style={[styles.linkedChip, selected && styles.linkedChipActive]}
+                        onPress={() =>
+                          setLinkedSiblingIds((prev) =>
+                            selected
+                              ? prev.filter((s) => !(s.playerId === p.id && s.teamId === teamId))
+                              : [...prev, { playerId: p.id, teamId: teamId! }],
+                          )
+                        }
+                      >
+                        <FontAwesome5
+                          name={selected ? 'check-circle' : 'circle'}
+                          size={14}
+                          color={selected ? Colors.white : Colors.textMuted}
+                          solid={selected}
+                        />
+                        <Text style={[styles.linkedChipText, selected && styles.linkedChipTextActive]}>
+                          {p.firstName} {p.lastName}
+                          {p.jerseyNumber != null ? ` #${p.jerseyNumber}` : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Cross-team sibling linking (superadmin only) */}
+            {isSuperAdmin && otherTeams.length > 0 && (
+              <>
+                <View style={styles.toggleRow}>
+                  <View style={styles.toggleLabelGroup}>
+                    <Text style={styles.toggleLabel}>Sibling on Another Team</Text>
+                    <Text style={styles.toggleHint}>
+                      Link this player to a sibling on a different team.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={crossTeamMode}
+                    onValueChange={(v) => {
+                      setCrossTeamMode(v);
+                      if (!v) {
+                        setCrossTeamId(null);
+                        setCrossTeamPlayers([]);
+                      }
+                    }}
+                    trackColor={{ false: Colors.gray, true: Colors.saintsBlue }}
+                    thumbColor={crossTeamMode ? Colors.saintsGold : Colors.white}
+                  />
+                </View>
+                {crossTeamMode && (
+                  <View style={styles.linkedSection}>
+                    <Text style={styles.label}>Select Team</Text>
+                    <View style={styles.linkedList}>
+                      {otherTeams.map((t) => {
+                        const selected = crossTeamId === t.id;
+                        return (
+                          <TouchableOpacity
+                            key={t.id}
+                            style={[styles.linkedChip, selected && styles.linkedChipActive]}
+                            onPress={async () => {
+                              setCrossTeamId(t.id);
+                              setLoadingCrossTeam(true);
+                              try {
+                                const players = await fetchTeamPlayers(t.id);
+                                setCrossTeamPlayers(
+                                  players.filter((p) => p.role === 'player'),
+                                );
+                              } catch {
+                                setCrossTeamPlayers([]);
+                              }
+                              setLoadingCrossTeam(false);
+                            }}
+                          >
+                            <FontAwesome5
+                              name={selected ? 'check-circle' : 'circle'}
+                              size={14}
+                              color={selected ? Colors.white : Colors.textMuted}
+                              solid={selected}
+                            />
+                            <Text
+                              style={[
+                                styles.linkedChipText,
+                                selected && styles.linkedChipTextActive,
+                              ]}
+                            >
+                              {t.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {crossTeamId && (
+                      <>
+                        <Text style={[styles.label, { marginTop: 16 }]}>Select Sibling</Text>
+                        {loadingCrossTeam ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={Colors.saintsBlue}
+                            style={{ marginTop: 8 }}
+                          />
+                        ) : crossTeamPlayers.length === 0 ? (
+                          <Text style={styles.linkedEmpty}>
+                            No players on that team yet.
+                          </Text>
+                        ) : (
+                          <View style={styles.linkedList}>
+                            {crossTeamPlayers.map((p) => {
+                              const selected = linkedSiblingIds.some(
+                                (s) =>
+                                  s.playerId === p.id && s.teamId === crossTeamId,
+                              );
+                              return (
+                                <TouchableOpacity
+                                  key={p.id}
+                                  style={[
+                                    styles.linkedChip,
+                                    selected && styles.linkedChipActive,
+                                  ]}
+                                  onPress={() =>
+                                    setLinkedSiblingIds((prev) =>
+                                      selected
+                                        ? prev.filter(
+                                            (s) =>
+                                              !(
+                                                s.playerId === p.id &&
+                                                s.teamId === crossTeamId
+                                              ),
+                                          )
+                                        : [
+                                            ...prev,
+                                            {
+                                              playerId: p.id,
+                                              teamId: crossTeamId!,
+                                            },
+                                          ],
+                                    )
+                                  }
+                                >
+                                  <FontAwesome5
+                                    name={selected ? 'check-circle' : 'circle'}
+                                    size={14}
+                                    color={
+                                      selected ? Colors.white : Colors.textMuted
+                                    }
+                                    solid={selected}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.linkedChipText,
+                                      selected && styles.linkedChipTextActive,
+                                    ]}
+                                  >
+                                    {p.firstName} {p.lastName}
+                                    {p.jerseyNumber != null
+                                      ? ` #${p.jerseyNumber}`
+                                      : ''}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
+                )}
+              </>
             )}
           </>
         )}

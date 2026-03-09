@@ -7,6 +7,7 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  getDocs,
   Timestamp,
   arrayUnion,
   arrayRemove,
@@ -17,6 +18,12 @@ import { createInvite } from '../lib/invites';
 
 export type MemberRole = 'player' | 'parent' | 'coach';
 export type Gender = 'male' | 'female';
+
+/** A sibling link that may span teams */
+export interface SiblingLink {
+  playerId: string;
+  teamId: string;
+}
 
 export interface Player {
   id: string;
@@ -45,6 +52,8 @@ export interface Player {
   linkedPlayerIds?: string[];
   /** IDs of parent/coach docs linked to this player as guardians */
   linkedParentIds?: string[];
+  /** Sibling links — may span teams */
+  linkedSiblingIds?: SiblingLink[];
   createdAt: Timestamp;
 }
 
@@ -61,10 +70,18 @@ export function computeAge(birthdate: string): number {
 // Fields required when adding a new player
 export type PlayerInput = Omit<Player, 'id' | 'createdAt'>;
 
+/** One-shot fetch of all players on a team (for cross-team sibling picker). */
+export async function fetchTeamPlayers(teamId: string): Promise<Player[]> {
+  const ref = collection(db, 'teams', teamId, 'players');
+  const snap = await getDocs(ref);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Player));
+}
+
 /**
- * Sync bidirectional links between a member and related players/parents.
+ * Sync bidirectional links between a member and related players/parents/siblings.
  * - Parent/coach sets linkedPlayerIds → each linked player gets this member in linkedParentIds.
  * - Player sets linkedParentIds → each linked parent/coach gets this player in linkedPlayerIds.
+ * - Player sets linkedSiblingIds → each linked sibling gets a reverse SiblingLink.
  */
 async function syncLinks(
   teamId: string,
@@ -74,9 +91,12 @@ async function syncLinks(
   newLinkedParentIds?: string[],
   oldLinkedPlayerIds?: string[],
   oldLinkedParentIds?: string[],
+  newLinkedSiblingIds?: SiblingLink[],
+  oldLinkedSiblingIds?: SiblingLink[],
 ) {
   const playerDoc = (id: string) => doc(db, 'teams', teamId, 'players', id);
 
+  // ── Parent/Coach → Player links ──
   if (role === 'parent' || role === 'coach') {
     const newIds = new Set(newLinkedPlayerIds ?? []);
     const oldIds = new Set(oldLinkedPlayerIds ?? []);
@@ -92,6 +112,7 @@ async function syncLinks(
     }
   }
 
+  // ── Player → Parent/Coach links ──
   if (role === 'player') {
     const newIds = new Set(newLinkedParentIds ?? []);
     const oldIds = new Set(oldLinkedParentIds ?? []);
@@ -103,6 +124,29 @@ async function syncLinks(
     for (const pid of oldIds) {
       if (!newIds.has(pid)) {
         await updateDoc(playerDoc(pid), { linkedPlayerIds: arrayRemove(memberId) });
+      }
+    }
+  }
+
+  // ── Sibling links (may span teams) ──
+  if (role === 'player') {
+    const sibKey = (s: SiblingLink) => `${s.teamId}/${s.playerId}`;
+    const newSibs = new Map((newLinkedSiblingIds ?? []).map((s) => [sibKey(s), s]));
+    const oldSibs = new Map((oldLinkedSiblingIds ?? []).map((s) => [sibKey(s), s]));
+    const reverseLink: SiblingLink = { playerId: memberId, teamId };
+
+    // Add reverse link on newly-added siblings
+    for (const [key, sib] of newSibs) {
+      if (!oldSibs.has(key)) {
+        const sibDoc = doc(db, 'teams', sib.teamId, 'players', sib.playerId);
+        await updateDoc(sibDoc, { linkedSiblingIds: arrayUnion(reverseLink) });
+      }
+    }
+    // Remove reverse link from removed siblings
+    for (const [key, sib] of oldSibs) {
+      if (!newSibs.has(key)) {
+        const sibDoc = doc(db, 'teams', sib.teamId, 'players', sib.playerId);
+        await updateDoc(sibDoc, { linkedSiblingIds: arrayRemove(reverseLink) });
       }
     }
   }
@@ -153,7 +197,12 @@ export const useRosterStore = create<RosterState>((set) => ({
       const docRef = await addDoc(ref, { ...cleanData(data as Record<string, unknown>), createdAt: Timestamp.now() });
 
       // Sync bidirectional links
-      await syncLinks(teamId, docRef.id, data.role, data.linkedPlayerIds, data.linkedParentIds);
+      await syncLinks(
+        teamId, docRef.id, data.role,
+        data.linkedPlayerIds, data.linkedParentIds,
+        undefined, undefined,
+        data.linkedSiblingIds, undefined,
+      );
 
       // If invite requested and email provided, create a pending invite
       if (data.sendInvite && data.email) {
@@ -193,6 +242,8 @@ export const useRosterStore = create<RosterState>((set) => ({
         data.linkedParentIds ?? existing?.linkedParentIds,
         existing?.linkedPlayerIds,
         existing?.linkedParentIds,
+        data.linkedSiblingIds ?? existing?.linkedSiblingIds,
+        existing?.linkedSiblingIds,
       );
     } catch (e: any) {
       set({ error: e.message });
