@@ -21,7 +21,7 @@ describe('permissions – hasPermission', () => {
       'availability.markOwn', 'availability.viewTeam',
       'chat.send', 'chat.createChannel', 'chat.deleteAny',
       'file.upload', 'file.view', 'file.deleteOwn', 'file.deleteAny',
-      'stats.enter', 'stats.viewTeam', 'stats.viewOwn',
+      'stats.enter', 'stats.viewTeam', 'stats.viewOwn', 'stats.viewCoachRecord',
       'invoice.create', 'invoice.viewAll', 'invoice.viewOwn', 'invoice.pay',
       'alert.send', 'alert.receive',
       'user.changeRole', 'user.promoteAdmin', 'user.assignTeam', 'user.editOwnProfile',
@@ -79,6 +79,19 @@ describe('permissions – hasPermission', () => {
     expect(hasPermission('coach', 'invoice.pay')).toBe(false);
   });
 
+  it('coach cannot view own coach record', () => {
+    expect(hasPermission('coach', 'stats.viewCoachRecord')).toBe(false);
+    expect(hasPermission('coach', 'stats.viewOwn')).toBe(false);
+  });
+
+  it('only superadmin can view coach record', () => {
+    expect(hasPermission('superadmin', 'stats.viewCoachRecord')).toBe(true);
+    expect(hasPermission('admin', 'stats.viewCoachRecord')).toBe(false);
+    expect(hasPermission('coach', 'stats.viewCoachRecord')).toBe(false);
+    expect(hasPermission('parent', 'stats.viewCoachRecord')).toBe(false);
+    expect(hasPermission('player', 'stats.viewCoachRecord')).toBe(false);
+  });
+
   it('coach cannot delete any message', () => {
     expect(hasPermission('coach', 'chat.deleteAny')).toBe(false);
   });
@@ -125,10 +138,11 @@ describe('permissions – hasPermission', () => {
     expect(hasPermission('parent', 'invoice.viewAll')).toBe(false);
   });
 
-  it('parent can view own child stats only', () => {
-    expect(hasPermission('parent', 'stats.viewOwn')).toBe(true);
+  it('parent has no stats permissions', () => {
+    expect(hasPermission('parent', 'stats.viewOwn')).toBe(false);
     expect(hasPermission('parent', 'stats.viewTeam')).toBe(false);
     expect(hasPermission('parent', 'stats.enter')).toBe(false);
+    expect(hasPermission('parent', 'stats.viewCoachRecord')).toBe(false);
   });
 
   it('parent cannot upload files or send alerts', () => {

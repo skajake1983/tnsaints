@@ -375,14 +375,25 @@ export default function PlayerDetailScreen() {
         );
       })()}
 
-      {/* Stats placeholder */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Stats</Text>
-        <View style={styles.statsPlaceholder}>
-          <FontAwesome5 name="chart-bar" size={24} color={Colors.gray} />
-          <Text style={styles.statsText}>Player stats will be available in a future update.</Text>
+      {/* Stats — hidden for parents, coach record only visible to superadmin */}
+      {player.role === 'player' && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Stats</Text>
+          <View style={styles.statsPlaceholder}>
+            <FontAwesome5 name="chart-bar" size={24} color={Colors.gray} />
+            <Text style={styles.statsText}>Player stats will be available in a future update.</Text>
+          </View>
         </View>
-      </View>
+      )}
+      {player.role === 'coach' && can('stats.viewCoachRecord') && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Coach Record</Text>
+          <View style={styles.statsPlaceholder}>
+            <FontAwesome5 name="trophy" size={24} color={Colors.gray} />
+            <Text style={styles.statsText}>Coach win/loss record will be available in a future update.</Text>
+          </View>
+        </View>
+      )}
 
       {/* Admin actions */}
       {(canEditRoster || canRemove) && (

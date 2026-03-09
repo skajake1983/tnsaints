@@ -52,6 +52,7 @@ export type Permission =
   | 'stats.enter'
   | 'stats.viewTeam'
   | 'stats.viewOwn'
+  | 'stats.viewCoachRecord'  // view coach win/loss record (superadmin only)
 
   // Invoicing
   | 'invoice.create'
@@ -86,7 +87,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     // Files
     'file.upload', 'file.view', 'file.deleteOwn', 'file.deleteAny',
     // Stats
-    'stats.enter', 'stats.viewTeam', 'stats.viewOwn',
+    'stats.enter', 'stats.viewTeam', 'stats.viewOwn', 'stats.viewCoachRecord',
     // Invoicing
     'invoice.create', 'invoice.viewAll', 'invoice.viewOwn', 'invoice.pay',
     // Alerts
@@ -130,8 +131,8 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     'chat.send', 'chat.createChannel',
     // Files
     'file.upload', 'file.view', 'file.deleteOwn',
-    // Stats
-    'stats.enter', 'stats.viewTeam', 'stats.viewOwn',
+    // Stats (can enter player stats and view team stats, but NOT own coach record)
+    'stats.enter', 'stats.viewTeam',
     // Alerts
     'alert.send', 'alert.receive',
     // Profile
@@ -145,7 +146,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     'availability.markOwn',   // for their child
     'chat.send',
     'file.view',
-    'stats.viewOwn',          // own child's stats
+    // No stats permissions — parents don't have stats
     'invoice.viewOwn', 'invoice.pay',
     'alert.receive',
     'user.editOwnProfile',
