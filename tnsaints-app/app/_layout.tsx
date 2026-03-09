@@ -94,6 +94,10 @@ function RootLayoutNav() {
           name="team/create"
           options={{ headerShown: true, title: 'Create Team', headerBackTitle: 'Back', presentation: 'modal' }}
         />
+        <Stack.Screen
+          name="team/edit"
+          options={{ headerShown: true, title: 'Edit Team', headerBackTitle: 'Back', presentation: 'modal' }}
+        />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>

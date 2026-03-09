@@ -14,18 +14,19 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
-import { useAuthStore } from '../../stores/authStore';
 import { useRosterStore, Player, computeAge } from '../../stores/rosterStore';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function PlayerDetailScreen() {
   const { id, teamId } = useLocalSearchParams<{ id: string; teamId: string }>();
   const router = useRouter();
-  const profile = useAuthStore((s) => s.profile);
+  const { can } = usePermissions();
   const removePlayer = useRosterStore((s) => s.removePlayer);
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const canEdit = profile?.role === 'admin' || profile?.role === 'coach';
+  const canEditRoster = can('roster.edit');
+  const canRemove = can('roster.remove');
 
   useEffect(() => {
     if (!id || !teamId) return;
@@ -160,8 +161,9 @@ export default function PlayerDetailScreen() {
       </View>
 
       {/* Admin actions */}
-      {canEdit && (
+      {(canEditRoster || canRemove) && (
         <View style={styles.actions}>
+          {canEditRoster && (
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() =>
@@ -174,11 +176,14 @@ export default function PlayerDetailScreen() {
             <FontAwesome5 name="edit" size={14} color={Colors.white} />
             <Text style={styles.editBtnText}>Edit Player</Text>
           </TouchableOpacity>
+          )}
 
+          {canRemove && (
           <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete}>
             <FontAwesome5 name="trash-alt" size={14} color={Colors.danger} />
             <Text style={styles.deleteBtnText}>Remove</Text>
           </TouchableOpacity>
+          )}
         </View>
       )}
     </ScrollView>

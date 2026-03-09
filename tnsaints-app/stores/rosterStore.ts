@@ -39,6 +39,8 @@ export interface Player {
   sendInvite?: boolean;
   /** The UID of the linked Firebase Auth user (set when they accept invite) */
   linkedUserId?: string;
+  /** IDs of player docs this parent/coach is linked to as a guardian */
+  linkedPlayerIds?: string[];
   createdAt: Timestamp;
 }
 

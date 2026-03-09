@@ -17,6 +17,14 @@ import { useAuthStore } from '../../stores/authStore';
 import { useTeamStore } from '../../stores/teamStore';
 import { usePermissions } from '../../hooks/usePermissions';
 
+type RoleFilter = 'all' | 'player' | 'coach' | 'parent';
+const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'player', label: 'Players' },
+  { value: 'coach', label: 'Coaches' },
+  { value: 'parent', label: 'Parents' },
+];
+
 export default function TeamScreen() {
   const { players, loading, listen } = useRosterStore();
   const profile = useAuthStore((s) => s.profile);
@@ -24,8 +32,10 @@ export default function TeamScreen() {
   const { can } = usePermissions();
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
 
-  const canEdit = can('roster.add');
+  const canAdd = can('roster.add');
+  const canEditTeam = can('team.edit');
 
   // Listen to the active team's roster
   useEffect(() => {
@@ -35,6 +45,11 @@ export default function TeamScreen() {
   }, [activeTeamId]);
 
   const filtered = players.filter((p) => {
+    // Exclude superadmins from the list
+    if ((p.role as string) === 'superadmin') return false;
+    // Apply role filter
+    if (roleFilter !== 'all' && p.role !== roleFilter) return false;
+    // Apply text search
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     const name = `${p.firstName} ${p.lastName}`.toLowerCase();
@@ -97,7 +112,7 @@ export default function TeamScreen() {
           <FontAwesome5 name="users" size={40} color={Colors.gray} />
           <Text style={styles.emptyTitle}>No teams yet</Text>
           <Text style={styles.emptySub}>
-            {canEdit
+            {canAdd
               ? "You haven't been assigned to any teams yet. Ask an admin to add you."
               : "You'll see your team here once you're added."}
           </Text>
@@ -123,25 +138,56 @@ export default function TeamScreen() {
         )}
       </View>
 
-      {/* Player count + Add button */}
+      {/* Role filter chips */}
+      <View style={styles.filterRow}>
+        {ROLE_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.filterChip, roleFilter === f.value && styles.filterChipActive]}
+            onPress={() => setRoleFilter(f.value)}
+          >
+            <Text style={[styles.filterChipText, roleFilter === f.value && styles.filterChipTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Player count + action buttons */}
       <View style={styles.countRow}>
         <Text style={styles.countText}>
           {filtered.length} member{filtered.length !== 1 ? 's' : ''}
         </Text>
-        {canEdit && (
-          <TouchableOpacity
-            style={styles.addBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/player/form' as any,
-                params: { teamId: activeTeamId ?? '' },
-              })
-            }
-          >
-            <FontAwesome5 name="plus" size={12} color={Colors.white} />
-            <Text style={styles.addBtnText}>Add Member</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.actionBtns}>
+          {canEditTeam && (
+            <TouchableOpacity
+              style={styles.editTeamBtn}
+              onPress={() =>
+                router.push({
+                  pathname: '/team/edit' as any,
+                  params: { teamId: activeTeamId ?? '' },
+                })
+              }
+            >
+              <FontAwesome5 name="cog" size={12} color={Colors.saintsBlue} />
+              <Text style={styles.editTeamBtnText}>Edit Team</Text>
+            </TouchableOpacity>
+          )}
+          {canAdd && (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() =>
+                router.push({
+                  pathname: '/player/form' as any,
+                  params: { teamId: activeTeamId ?? '' },
+                })
+              }
+            >
+              <FontAwesome5 name="plus" size={12} color={Colors.white} />
+              <Text style={styles.addBtnText}>Add Member</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* List */}
@@ -157,7 +203,7 @@ export default function TeamScreen() {
           </Text>
           <Text style={styles.emptySub}>
             {players.length === 0
-              ? canEdit
+              ? canAdd
               ? 'Tap "Add Member" to build your roster.'
               : 'Members will appear here once added by a coach.'
               : 'Try a different search term.'}
@@ -206,8 +252,35 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 18,
-    marginTop: 14,
+    marginTop: 8,
     marginBottom: 8,
+  },
+
+  filterRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginTop: 10,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.gray,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.saintsBlue,
+    borderColor: Colors.saintsBlue,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  filterChipTextActive: {
+    color: Colors.white,
   },
   countText: {
     fontSize: 13,
@@ -227,6 +300,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   addBtnText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+
+  editTeamBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.saintsBlue,
+  },
+  editTeamBtnText: { color: Colors.saintsBlue, fontWeight: '700', fontSize: 13 },
+
+  actionBtns: {
+    flexDirection: 'row',
+    gap: 8,
+  },
 
   list: { paddingHorizontal: 16, paddingBottom: 30 },
 

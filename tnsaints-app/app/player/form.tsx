@@ -18,6 +18,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
 import { useRosterStore, Player, PlayerInput, MemberRole, Gender } from '../../stores/rosterStore';
+import { useTeamStore } from '../../stores/teamStore';
 import {
   sanitizeText,
   sanitizeAddress,
@@ -72,11 +73,18 @@ export default function PlayerFormScreen() {
 
   const [active, setActive] = useState(true);
   const [sendInvite, setSendInvite] = useState(false);
+  const [isParentOfPlayer, setIsParentOfPlayer] = useState(false);
+  const [linkedPlayerIds, setLinkedPlayerIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingPlayer, setLoadingPlayer] = useState(isEdit);
   const [formError, setFormError] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [birthdateObj, setBirthdateObj] = useState<Date | null>(null);
+
+  // Get the roster's players for the "Parent of Player" dropdown
+  const rosterPlayers = useRosterStore((s) => s.players).filter(
+    (p) => p.role === 'player' && (!playerId || p.id !== playerId),
+  );
 
   // Load existing player for edit mode
   useEffect(() => {
@@ -103,6 +111,10 @@ export default function PlayerFormScreen() {
         setParentPhone(p.parentPhone ?? '');
         setActive(p.active);
         setSendInvite(p.sendInvite ?? false);
+        setLinkedPlayerIds(p.linkedPlayerIds ?? []);
+        if (p.role === 'coach' && (p.linkedPlayerIds?.length ?? 0) > 0) {
+          setIsParentOfPlayer(true);
+        }
         if (p.birthdate) {
           setBirthdateObj(new Date(p.birthdate + 'T00:00:00'));
         }
@@ -214,6 +226,12 @@ export default function PlayerFormScreen() {
       parentPhone: role === 'player' ? (cleanParentPhone ? formatPhone(cleanParentPhone) : undefined) : undefined,
       active: role === 'player' ? active : true,
       sendInvite: sendInvite && !!cleanEmail,
+      linkedPlayerIds:
+        role === 'parent'
+          ? linkedPlayerIds
+          : role === 'coach' && isParentOfPlayer
+            ? linkedPlayerIds
+            : undefined,
     };
 
     setSaving(true);
@@ -440,6 +458,104 @@ export default function PlayerFormScreen() {
           </View>
         )}
 
+        {/* Coach: Parent of Player toggle */}
+        {role === 'coach' && (
+          <>
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLabelGroup}>
+                <Text style={styles.toggleLabel}>Parent of Player</Text>
+                <Text style={styles.toggleHint}>
+                  Is this coach also a parent of a player on this team?
+                </Text>
+              </View>
+              <Switch
+                value={isParentOfPlayer}
+                onValueChange={(v) => {
+                  setIsParentOfPlayer(v);
+                  if (!v) setLinkedPlayerIds([]);
+                }}
+                trackColor={{ false: Colors.gray, true: Colors.saintsBlue }}
+                thumbColor={isParentOfPlayer ? Colors.saintsGold : Colors.white}
+              />
+            </View>
+            {isParentOfPlayer && (
+              <View style={styles.linkedSection}>
+                <Text style={styles.label}>Select Child</Text>
+                {rosterPlayers.length === 0 ? (
+                  <Text style={styles.linkedEmpty}>No players on the roster yet.</Text>
+                ) : (
+                  <View style={styles.linkedList}>
+                    {rosterPlayers.map((p) => {
+                      const selected = linkedPlayerIds.includes(p.id);
+                      return (
+                        <TouchableOpacity
+                          key={p.id}
+                          style={[styles.linkedChip, selected && styles.linkedChipActive]}
+                          onPress={() =>
+                            setLinkedPlayerIds((prev) =>
+                              selected ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                            )
+                          }
+                        >
+                          <FontAwesome5
+                            name={selected ? 'check-circle' : 'circle'}
+                            size={14}
+                            color={selected ? Colors.white : Colors.textMuted}
+                            solid={selected}
+                          />
+                          <Text style={[styles.linkedChipText, selected && styles.linkedChipTextActive]}>
+                            {p.firstName} {p.lastName}
+                            {p.jerseyNumber != null ? ` #${p.jerseyNumber}` : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Parent: Linked Player (child) */}
+        {role === 'parent' && (
+          <View style={styles.linkedSection}>
+            <Text style={styles.sectionLabel}>Linked Player (Child)</Text>
+            <Text style={styles.linkedHint}>Select which player(s) this parent is a guardian of.</Text>
+            {rosterPlayers.length === 0 ? (
+              <Text style={styles.linkedEmpty}>No players on the roster yet. Add players first.</Text>
+            ) : (
+              <View style={styles.linkedList}>
+                {rosterPlayers.map((p) => {
+                  const selected = linkedPlayerIds.includes(p.id);
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.linkedChip, selected && styles.linkedChipActive]}
+                      onPress={() =>
+                        setLinkedPlayerIds((prev) =>
+                          selected ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                        )
+                      }
+                    >
+                      <FontAwesome5
+                        name={selected ? 'check-circle' : 'circle'}
+                        size={14}
+                        color={selected ? Colors.white : Colors.textMuted}
+                        solid={selected}
+                      />
+                      <Text style={[styles.linkedChipText, selected && styles.linkedChipTextActive]}>
+                        {p.firstName} {p.lastName}
+                        {p.jerseyNumber != null ? ` #${p.jerseyNumber}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Invite toggle — for players, parents, and coaches */}
         {(role === 'player' || role === 'parent' || role === 'coach') && (
           <View style={styles.toggleRow}>
@@ -620,6 +736,50 @@ const styles = StyleSheet.create({
   toggleLabel: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
   toggleLabelGroup: { flex: 1, marginRight: 12 },
   toggleHint: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+
+  linkedSection: {
+    marginTop: 8,
+  },
+  linkedHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 8,
+  },
+  linkedEmpty: {
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  linkedList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  linkedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.gray,
+  },
+  linkedChipActive: {
+    backgroundColor: Colors.saintsBlue,
+    borderColor: Colors.saintsBlue,
+  },
+  linkedChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  linkedChipTextActive: {
+    color: Colors.white,
+  },
 
   datePickerBtn: {
     flexDirection: 'row',
