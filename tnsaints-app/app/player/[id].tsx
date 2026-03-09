@@ -195,14 +195,19 @@ export default function PlayerDetailScreen() {
           <Text style={styles.sectionTitle}>Linked Guardians</Text>
           {player.linkedParentIds!.map((pid) => {
             const member = allMembers.find((m) => m.id === pid);
-            if (!member) return null;
-            const label = member.role === 'coach' ? 'Coach' : 'Parent';
+            const memberInitials = member
+              ? (member.firstName[0] ?? '') + (member.lastName[0] ?? '')
+              : '??';
+            const memberName = member
+              ? `${member.firstName} ${member.lastName}`
+              : 'Unknown member';
+            const label = member?.role === 'coach' ? 'Coach' : 'Parent';
             return (
               <TouchableOpacity
                 key={pid}
                 style={styles.linkedMemberRow}
                 onPress={() =>
-                  router.push({
+                  router.replace({
                     pathname: '/player/[id]' as any,
                     params: { id: pid, teamId },
                   })
@@ -210,11 +215,11 @@ export default function PlayerDetailScreen() {
               >
                 <View style={styles.linkedAvatar}>
                   <Text style={styles.linkedAvatarText}>
-                    {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                    {memberInitials}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                  <Text style={styles.linkedName}>{memberName}</Text>
                   <Text style={styles.linkedRole}>{label}</Text>
                 </View>
                 <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
@@ -230,13 +235,18 @@ export default function PlayerDetailScreen() {
           <Text style={styles.sectionTitle}>Linked Players</Text>
           {player.linkedPlayerIds!.map((pid) => {
             const member = allMembers.find((m) => m.id === pid);
-            if (!member) return null;
+            const memberInitials = member
+              ? (member.firstName[0] ?? '') + (member.lastName[0] ?? '')
+              : '??';
+            const memberName = member
+              ? `${member.firstName} ${member.lastName}`
+              : 'Unknown player';
             return (
               <TouchableOpacity
                 key={pid}
                 style={styles.linkedMemberRow}
                 onPress={() =>
-                  router.push({
+                  router.replace({
                     pathname: '/player/[id]' as any,
                     params: { id: pid, teamId },
                   })
@@ -244,13 +254,13 @@ export default function PlayerDetailScreen() {
               >
                 <View style={styles.linkedAvatar}>
                   <Text style={styles.linkedAvatarText}>
-                    {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                    {memberInitials}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                  <Text style={styles.linkedName}>{memberName}</Text>
                   <Text style={styles.linkedRole}>
-                    {member.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member.position ?? 'Player'}
+                    {member?.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member?.position ?? 'Player'}
                   </Text>
                 </View>
                 <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
@@ -269,13 +279,18 @@ export default function PlayerDetailScreen() {
             <Text style={styles.sectionTitle}>Siblings</Text>
             {sameTeam.map((s) => {
               const member = allMembers.find((m) => m.id === s.playerId);
-              if (!member) return null;
+              const memberInitials = member
+                ? (member.firstName[0] ?? '') + (member.lastName[0] ?? '')
+                : '??';
+              const memberName = member
+                ? `${member.firstName} ${member.lastName}`
+                : 'Unknown player';
               return (
                 <TouchableOpacity
                   key={s.playerId}
                   style={styles.linkedMemberRow}
                   onPress={() =>
-                    router.push({
+                    router.replace({
                       pathname: '/player/[id]' as any,
                       params: { id: s.playerId, teamId },
                     })
@@ -283,13 +298,13 @@ export default function PlayerDetailScreen() {
                 >
                   <View style={styles.linkedAvatar}>
                     <Text style={styles.linkedAvatarText}>
-                      {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                      {memberInitials}
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                    <Text style={styles.linkedName}>{memberName}</Text>
                     <Text style={styles.linkedRole}>
-                      {member.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member.position ?? 'Player'}
+                      {member?.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member?.position ?? 'Player'}
                     </Text>
                   </View>
                   <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
@@ -310,7 +325,7 @@ export default function PlayerDetailScreen() {
                   key={`${s.teamId}/${s.playerId}`}
                   style={styles.linkedMemberRow}
                   onPress={() =>
-                    router.push({
+                    router.replace({
                       pathname: '/player/[id]' as any,
                       params: { id: s.playerId, teamId: s.teamId },
                     })
