@@ -75,6 +75,7 @@ export default function PlayerFormScreen() {
   const [sendInvite, setSendInvite] = useState(false);
   const [isParentOfPlayer, setIsParentOfPlayer] = useState(false);
   const [linkedPlayerIds, setLinkedPlayerIds] = useState<string[]>([]);
+  const [linkedParentIds, setLinkedParentIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingPlayer, setLoadingPlayer] = useState(isEdit);
   const [formError, setFormError] = useState('');
@@ -84,6 +85,11 @@ export default function PlayerFormScreen() {
   // Get the roster's players for the "Parent of Player" dropdown
   const rosterPlayers = useRosterStore((s) => s.players).filter(
     (p) => p.role === 'player' && (!playerId || p.id !== playerId),
+  );
+
+  // Get parents/coaches for linking from a player
+  const rosterParents = useRosterStore((s) => s.players).filter(
+    (p) => (p.role === 'parent' || p.role === 'coach') && (!playerId || p.id !== playerId),
   );
 
   // Load existing player for edit mode
@@ -112,6 +118,7 @@ export default function PlayerFormScreen() {
         setActive(p.active);
         setSendInvite(p.sendInvite ?? false);
         setLinkedPlayerIds(p.linkedPlayerIds ?? []);
+        setLinkedParentIds(p.linkedParentIds ?? []);
         if (p.role === 'coach' && (p.linkedPlayerIds?.length ?? 0) > 0) {
           setIsParentOfPlayer(true);
         }
@@ -232,6 +239,8 @@ export default function PlayerFormScreen() {
           : role === 'coach' && isParentOfPlayer
             ? linkedPlayerIds
             : undefined,
+      linkedParentIds:
+        role === 'player' ? linkedParentIds : undefined,
     };
 
     setSaving(true);
@@ -442,6 +451,41 @@ export default function PlayerFormScreen() {
 
             <Text style={styles.label}>Parent Phone</Text>
             <TextInput style={styles.input} value={parentPhone} onChangeText={setParentPhone} placeholder="(615) 555-1234" placeholderTextColor={Colors.textMuted} keyboardType="phone-pad" />
+
+            {/* Link to existing parent/coach on roster */}
+            {rosterParents.length > 0 && (
+              <View style={styles.linkedSection}>
+                <Text style={[styles.sectionLabel, { marginTop: 24 }]}>Link to Parent / Guardian</Text>
+                <Text style={styles.linkedHint}>Select which parent or coach on the roster is this player's guardian.</Text>
+                <View style={styles.linkedList}>
+                  {rosterParents.map((p) => {
+                    const selected = linkedParentIds.includes(p.id);
+                    const roleTag = p.role === 'coach' ? ' (Coach)' : '';
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        style={[styles.linkedChip, selected && styles.linkedChipActive]}
+                        onPress={() =>
+                          setLinkedParentIds((prev) =>
+                            selected ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                          )
+                        }
+                      >
+                        <FontAwesome5
+                          name={selected ? 'check-circle' : 'circle'}
+                          size={14}
+                          color={selected ? Colors.white : Colors.textMuted}
+                          solid={selected}
+                        />
+                        <Text style={[styles.linkedChipText, selected && styles.linkedChipTextActive]}>
+                          {p.firstName} {p.lastName}{roleTag}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </>
         )}
 

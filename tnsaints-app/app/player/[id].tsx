@@ -22,6 +22,7 @@ export default function PlayerDetailScreen() {
   const router = useRouter();
   const { can } = usePermissions();
   const removePlayer = useRosterStore((s) => s.removePlayer);
+  const allMembers = useRosterStore((s) => s.players);
   const [player, setPlayer] = useState<Player | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -151,6 +152,77 @@ export default function PlayerDetailScreen() {
         </View>
       )}
 
+      {/* Linked Parents / Guardians from roster */}
+      {player.role === 'player' && (player.linkedParentIds?.length ?? 0) > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Linked Guardians</Text>
+          {player.linkedParentIds!.map((pid) => {
+            const member = allMembers.find((m) => m.id === pid);
+            if (!member) return null;
+            const label = member.role === 'coach' ? 'Coach' : 'Parent';
+            return (
+              <TouchableOpacity
+                key={pid}
+                style={styles.linkedMemberRow}
+                onPress={() =>
+                  router.push({
+                    pathname: '/player/[id]' as any,
+                    params: { id: pid, teamId },
+                  })
+                }
+              >
+                <View style={styles.linkedAvatar}>
+                  <Text style={styles.linkedAvatarText}>
+                    {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                  <Text style={styles.linkedRole}>{label}</Text>
+                </View>
+                <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
+      {/* Linked Players (for parents/coaches) */}
+      {(player.role === 'parent' || player.role === 'coach') && (player.linkedPlayerIds?.length ?? 0) > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Linked Players</Text>
+          {player.linkedPlayerIds!.map((pid) => {
+            const member = allMembers.find((m) => m.id === pid);
+            if (!member) return null;
+            return (
+              <TouchableOpacity
+                key={pid}
+                style={styles.linkedMemberRow}
+                onPress={() =>
+                  router.push({
+                    pathname: '/player/[id]' as any,
+                    params: { id: pid, teamId },
+                  })
+                }
+              >
+                <View style={styles.linkedAvatar}>
+                  <Text style={styles.linkedAvatarText}>
+                    {(member.firstName[0] ?? '') + (member.lastName[0] ?? '')}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkedName}>{member.firstName} {member.lastName}</Text>
+                  <Text style={styles.linkedRole}>
+                    {member.jerseyNumber != null ? `#${member.jerseyNumber} · ` : ''}{member.position ?? 'Player'}
+                  </Text>
+                </View>
+                <FontAwesome5 name="chevron-right" size={12} color={Colors.textMuted} />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+
       {/* Stats placeholder */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Stats</Text>
@@ -174,7 +246,7 @@ export default function PlayerDetailScreen() {
             }
           >
             <FontAwesome5 name="edit" size={14} color={Colors.white} />
-            <Text style={styles.editBtnText}>Edit Player</Text>
+            <Text style={styles.editBtnText}>Edit {roleLabel}</Text>
           </TouchableOpacity>
           )}
 
@@ -314,4 +386,24 @@ const styles = StyleSheet.create({
     borderColor: Colors.danger,
   },
   deleteBtnText: { color: Colors.danger, fontWeight: '700', fontSize: 15 },
+
+  linkedMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray,
+  },
+  linkedAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.saintsBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  linkedAvatarText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+  linkedName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  linkedRole: { fontSize: 12, color: Colors.textMuted, marginTop: 1 },
 });

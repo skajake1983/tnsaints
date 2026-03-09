@@ -32,15 +32,27 @@ export default function TeamSelectorBar() {
     router.push('/team/create' as any);
   };
 
+  const handleEdit = () => {
+    if (!activeTeamId) return;
+    router.push({ pathname: '/team/edit' as any, params: { teamId: activeTeamId } });
+  };
+
   return (
     <View style={styles.wrapper}>
-      <TouchableOpacity style={styles.bar} onPress={() => setOpen(!open)} activeOpacity={0.7}>
-        <FontAwesome5 name="shield-alt" size={14} color={Colors.saintsGold} />
-        <Text style={styles.teamName} numberOfLines={1}>
-          {activeTeam?.name ?? 'Select Team'}
-        </Text>
-        <FontAwesome5 name={open ? 'chevron-up' : 'chevron-down'} size={11} color={Colors.textMuted} />
-      </TouchableOpacity>
+      <View style={styles.barRow}>
+        <TouchableOpacity style={styles.bar} onPress={() => setOpen(!open)} activeOpacity={0.7}>
+          <FontAwesome5 name="shield-alt" size={14} color={Colors.saintsGold} />
+          <Text style={styles.teamName} numberOfLines={1}>
+            {activeTeam?.name ?? 'Select Team'}
+          </Text>
+          <FontAwesome5 name={open ? 'chevron-up' : 'chevron-down'} size={11} color={Colors.textMuted} />
+        </TouchableOpacity>
+        {activeTeamId && can('team.edit') && (
+          <TouchableOpacity style={styles.editIcon} onPress={handleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <FontAwesome5 name="pen" size={12} color={Colors.saintsGold} />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {open && (
         Platform.OS === 'web' ? (
@@ -122,17 +134,31 @@ export default function TeamSelectorBar() {
 
 const styles = StyleSheet.create({
   wrapper: { zIndex: 100, overflow: 'visible' as any, position: 'relative' as any },
-  bar: {
+  barRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginHorizontal: 16,
     marginTop: 8,
     marginBottom: 4,
+    gap: 6,
+  },
+  bar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: Colors.saintsBlueDark,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
+  },
+  editIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: Colors.saintsBlueDark,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   teamName: {
     flex: 1,
@@ -145,8 +171,8 @@ const styles = StyleSheet.create({
   dropdown: {
     position: 'absolute',
     top: '100%',
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
     backgroundColor: Colors.white,
     borderRadius: 10,
     borderWidth: 1,

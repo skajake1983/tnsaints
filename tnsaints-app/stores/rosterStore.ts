@@ -8,6 +8,8 @@ import {
   deleteDoc,
   getDoc,
   Timestamp,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { cleanData } from '../lib/firestoreHelpers';
@@ -41,6 +43,8 @@ export interface Player {
   linkedUserId?: string;
   /** IDs of player docs this parent/coach is linked to as a guardian */
   linkedPlayerIds?: string[];
+  /** IDs of parent/coach docs linked to this player as guardians */
+  linkedParentIds?: string[];
   createdAt: Timestamp;
 }
 
@@ -56,6 +60,53 @@ export function computeAge(birthdate: string): number {
 
 // Fields required when adding a new player
 export type PlayerInput = Omit<Player, 'id' | 'createdAt'>;
+
+/**
+ * Sync bidirectional links between a member and related players/parents.
+ * - Parent/coach sets linkedPlayerIds → each linked player gets this member in linkedParentIds.
+ * - Player sets linkedParentIds → each linked parent/coach gets this player in linkedPlayerIds.
+ */
+async function syncLinks(
+  teamId: string,
+  memberId: string,
+  role: MemberRole,
+  newLinkedPlayerIds?: string[],
+  newLinkedParentIds?: string[],
+  oldLinkedPlayerIds?: string[],
+  oldLinkedParentIds?: string[],
+) {
+  const playerDoc = (id: string) => doc(db, 'teams', teamId, 'players', id);
+
+  if (role === 'parent' || role === 'coach') {
+    const newIds = new Set(newLinkedPlayerIds ?? []);
+    const oldIds = new Set(oldLinkedPlayerIds ?? []);
+    for (const pid of newIds) {
+      if (!oldIds.has(pid)) {
+        await updateDoc(playerDoc(pid), { linkedParentIds: arrayUnion(memberId) });
+      }
+    }
+    for (const pid of oldIds) {
+      if (!newIds.has(pid)) {
+        await updateDoc(playerDoc(pid), { linkedParentIds: arrayRemove(memberId) });
+      }
+    }
+  }
+
+  if (role === 'player') {
+    const newIds = new Set(newLinkedParentIds ?? []);
+    const oldIds = new Set(oldLinkedParentIds ?? []);
+    for (const pid of newIds) {
+      if (!oldIds.has(pid)) {
+        await updateDoc(playerDoc(pid), { linkedPlayerIds: arrayUnion(memberId) });
+      }
+    }
+    for (const pid of oldIds) {
+      if (!newIds.has(pid)) {
+        await updateDoc(playerDoc(pid), { linkedPlayerIds: arrayRemove(memberId) });
+      }
+    }
+  }
+}
 
 interface RosterState {
   players: Player[];
@@ -101,6 +152,9 @@ export const useRosterStore = create<RosterState>((set) => ({
       const ref = collection(db, 'teams', teamId, 'players');
       const docRef = await addDoc(ref, { ...cleanData(data as Record<string, unknown>), createdAt: Timestamp.now() });
 
+      // Sync bidirectional links
+      await syncLinks(teamId, docRef.id, data.role, data.linkedPlayerIds, data.linkedParentIds);
+
       // If invite requested and email provided, create a pending invite
       if (data.sendInvite && data.email) {
         // Fetch team name for the invite record
@@ -122,8 +176,24 @@ export const useRosterStore = create<RosterState>((set) => ({
 
   updatePlayer: async (teamId, playerId, data) => {
     try {
+      // Get existing doc to diff links
+      const existingSnap = await getDoc(doc(db, 'teams', teamId, 'players', playerId));
+      const existing = existingSnap.exists() ? (existingSnap.data() as Player) : undefined;
+
       const ref = doc(db, 'teams', teamId, 'players', playerId);
       await updateDoc(ref, cleanData(data as Record<string, unknown>));
+
+      // Sync bidirectional links (diff-based)
+      const role = data.role ?? existing?.role ?? 'player';
+      await syncLinks(
+        teamId,
+        playerId,
+        role,
+        data.linkedPlayerIds ?? existing?.linkedPlayerIds,
+        data.linkedParentIds ?? existing?.linkedParentIds,
+        existing?.linkedPlayerIds,
+        existing?.linkedParentIds,
+      );
     } catch (e: any) {
       set({ error: e.message });
     }
