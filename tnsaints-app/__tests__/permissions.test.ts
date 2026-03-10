@@ -19,7 +19,7 @@ describe('permissions – hasPermission', () => {
       'roster.add', 'roster.edit', 'roster.remove', 'roster.view', 'roster.invite',
       'event.create', 'event.edit', 'event.delete', 'event.view',
       'availability.markOwn', 'availability.viewTeam',
-      'chat.send', 'chat.createChannel', 'chat.deleteAny',
+      'chat.send', 'chat.editOwn', 'chat.deleteOwn', 'chat.createChannel', 'chat.deleteAny',
       'file.upload', 'file.view', 'file.deleteOwn', 'file.deleteAny',
       'stats.enter', 'stats.viewTeam', 'stats.viewOwn', 'stats.viewCoachRecord',
       'invoice.create', 'invoice.viewAll', 'invoice.viewOwn', 'invoice.pay',
@@ -63,6 +63,11 @@ describe('permissions – hasPermission', () => {
     expect(hasPermission('admin', 'chat.deleteAny')).toBe(true);
   });
 
+  it('admin can edit and delete own messages', () => {
+    expect(hasPermission('admin', 'chat.editOwn')).toBe(true);
+    expect(hasPermission('admin', 'chat.deleteOwn')).toBe(true);
+  });
+
   // ── Coach ───────────────────────────────────────────────────────
   it('coach can manage roster and events', () => {
     expect(hasPermission('coach', 'roster.add')).toBe(true);
@@ -96,6 +101,11 @@ describe('permissions – hasPermission', () => {
     expect(hasPermission('coach', 'chat.deleteAny')).toBe(false);
   });
 
+  it('coach can edit and delete own messages', () => {
+    expect(hasPermission('coach', 'chat.editOwn')).toBe(true);
+    expect(hasPermission('coach', 'chat.deleteOwn')).toBe(true);
+  });
+
   it('coach cannot change roles or manage teams', () => {
     expect(hasPermission('coach', 'user.changeRole')).toBe(false);
     expect(hasPermission('coach', 'team.edit')).toBe(false);
@@ -125,6 +135,12 @@ describe('permissions – hasPermission', () => {
   it('parent can chat and mark availability', () => {
     expect(hasPermission('parent', 'chat.send')).toBe(true);
     expect(hasPermission('parent', 'availability.markOwn')).toBe(true);
+  });
+
+  it('parent can edit and delete own messages', () => {
+    expect(hasPermission('parent', 'chat.editOwn')).toBe(true);
+    expect(hasPermission('parent', 'chat.deleteOwn')).toBe(true);
+    expect(hasPermission('parent', 'chat.deleteAny')).toBe(false);
   });
 
   it('parent cannot see team availability summary', () => {
@@ -160,6 +176,12 @@ describe('permissions – hasPermission', () => {
   it('player can chat and mark availability', () => {
     expect(hasPermission('player', 'chat.send')).toBe(true);
     expect(hasPermission('player', 'availability.markOwn')).toBe(true);
+  });
+
+  it('player can edit and delete own messages', () => {
+    expect(hasPermission('player', 'chat.editOwn')).toBe(true);
+    expect(hasPermission('player', 'chat.deleteOwn')).toBe(true);
+    expect(hasPermission('player', 'chat.deleteAny')).toBe(false);
   });
 
   it('player cannot modify anything', () => {

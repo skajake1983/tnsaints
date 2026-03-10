@@ -94,9 +94,13 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isMemberOfTeam(teamId);
         allow create: if isMemberOfTeam(teamId);
-        // Only admin+ can delete messages
-        allow delete: if isAdminOrAbove() && isMemberOfTeam(teamId);
-        allow update: if false;
+        // Owner can edit their own message (text only); admins cannot edit others'
+        allow update: if isMemberOfTeam(teamId)
+          && resource.data.uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt']);
+        // Owner can delete own; admin+ can delete any
+        allow delete: if isMemberOfTeam(teamId)
+          && (resource.data.uid == request.auth.uid || isAdminOrAbove());
       }
 
       // ── Files ─────────────────────────────────────────────────────

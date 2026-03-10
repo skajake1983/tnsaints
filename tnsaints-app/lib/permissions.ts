@@ -39,6 +39,8 @@ export type Permission =
 
   // Chat
   | 'chat.send'
+  | 'chat.editOwn'
+  | 'chat.deleteOwn'
   | 'chat.createChannel'
   | 'chat.deleteAny'
 
@@ -83,7 +85,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     // Availability
     'availability.markOwn', 'availability.viewTeam',
     // Chat
-    'chat.send', 'chat.createChannel', 'chat.deleteAny',
+    'chat.send', 'chat.editOwn', 'chat.deleteOwn', 'chat.createChannel', 'chat.deleteAny',
     // Files
     'file.upload', 'file.view', 'file.deleteOwn', 'file.deleteAny',
     // Stats
@@ -106,7 +108,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     // Availability
     'availability.markOwn', 'availability.viewTeam',
     // Chat
-    'chat.send', 'chat.createChannel', 'chat.deleteAny',
+    'chat.send', 'chat.editOwn', 'chat.deleteOwn', 'chat.createChannel', 'chat.deleteAny',
     // Files
     'file.upload', 'file.view', 'file.deleteOwn', 'file.deleteAny',
     // Stats
@@ -128,7 +130,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     // Availability
     'availability.markOwn', 'availability.viewTeam',
     // Chat
-    'chat.send', 'chat.createChannel',
+    'chat.send', 'chat.editOwn', 'chat.deleteOwn', 'chat.createChannel',
     // Files
     'file.upload', 'file.view', 'file.deleteOwn',
     // Stats (can enter player stats and view team stats, but NOT own coach record)
@@ -144,7 +146,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     'roster.view',
     'event.view',
     'availability.markOwn',   // for their child
-    'chat.send',
+    'chat.send', 'chat.editOwn', 'chat.deleteOwn',
     'file.view',
     // No stats permissions — parents don't have stats
     'invoice.viewOwn', 'invoice.pay',
@@ -157,7 +159,7 @@ const PERMISSION_MATRIX: Record<UserRole, ReadonlySet<Permission>> = {
     'roster.view',
     'event.view',
     'availability.markOwn',
-    'chat.send',
+    'chat.send', 'chat.editOwn', 'chat.deleteOwn',
     'file.view',
     'stats.viewOwn',
     'alert.receive',
