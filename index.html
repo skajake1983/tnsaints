@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tennessee Saints | Youth Basketball</title>
-  <meta name="description" content="The Tennessee Saints are a competitive AAU youth basketball program in Middle Tennessee focused on faith, grit, and community. Developing disciplined athletes and confident leaders." />
+  <meta name="description" content="The Tennessee Saints are a competitive AAU youth basketball program in Middle Tennessee focused on team, character, and faith. Developing disciplined athletes and confident leaders." />
   <meta property="og:title" content="Tennessee Saints | Youth Basketball" />
-  <meta property="og:description" content="Competitive AAU youth basketball in Middle Tennessee. Faith. Grit. Community." />
+  <meta property="og:description" content="Competitive AAU youth basketball in Middle Tennessee. Team over self. Character over stats. Christ over everything." />
   <meta property="og:image" content="Saints Logo Updated v2_transparent.png" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="Saints Logo Updated v2_transparent.png" type="image/png" />
@@ -219,10 +219,7 @@
     .hero {
       position: relative;
       overflow: hidden;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(245, 207, 0, 0.32), transparent 24%),
-        radial-gradient(circle at 85% 10%, rgba(11, 58, 141, 0.12), transparent 24%),
-        linear-gradient(135deg, var(--saints-blue-dark) 0%, var(--saints-blue) 58%, #174cae 100%);
+      background: url("hero-bg.jpg") center center / cover no-repeat;
       color: var(--saints-white);
     }
 
@@ -231,11 +228,7 @@
       position: absolute;
       inset: 0;
       pointer-events: none;
-      opacity: 0.14;
-      background-image: url("data:image/svg+xml,%3Csvg width='400' height='400' viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cg stroke='%23ffffff' stroke-width='2' fill='none'%3E%3Ccircle cx='200' cy='200' r='60'/%3E%3Cline x1='0' y1='200' x2='400' y2='200'/%3E%3Crect x='120' y='0' width='160' height='400'/%3E%3C/g%3E%3C/svg%3E");
-      background-size: 520px 520px;
-      background-repeat: repeat;
-      mix-blend-mode: overlay;
+      background: linear-gradient(135deg, rgba(6, 37, 92, 0.75) 0%, rgba(11, 58, 141, 0.6) 50%, rgba(6, 37, 92, 0.8) 100%);
     }
 
     .hero::after {
@@ -307,10 +300,9 @@
 
     .hero-badges {
       display: grid;
-      grid-template-columns: repeat(3, minmax(140px, 1fr));
+      grid-template-columns: repeat(3, auto);
       gap: 0.9rem;
       margin-top: 1.2rem;
-      max-width: 520px;
     }
 
     .badge {
@@ -320,7 +312,8 @@
       text-align: center;
       font-weight: 700;
       font-size: 0.95rem;
-      padding: 0.75rem 0.9rem;
+      padding: 0.75rem 1.4rem;
+      white-space: nowrap;
       border-radius: 14px;
       background: rgba(255,255,255,0.08);
       border: 1px solid rgba(255,255,255,0.18);
@@ -961,6 +954,7 @@
         <nav class="nav-links" aria-label="Main navigation">
           <a href="#home">Home</a>
           <a href="#mission">Mission</a>
+          <a href="#values">Values</a>
           <a href="#team">Team</a>
           <a href="#leadership">Leadership</a>
           <a href="#contact">Contact</a>
@@ -974,11 +968,9 @@
       <div class="hero-glow" aria-hidden="true"></div>
       <div class="container hero-grid">
         <div class="hero-copy">
-          <h2>Where faith, grit, and community thrive.</h2>
+          <h2>Team over self. Character over stats. Christ over everything.</h2>
           <p>
-            The Tennessee Saints are a youth competitive basketball program focused on skill development,
-            character, teamwork, and competitive growth. We are here to build disciplined athletes,
-            confident leaders, and a culture families are proud to be part of.
+            The Tennessee Saints are a youth Travel basketball team in Middle TN. Passionate about helping kids build community, improve their basketball skills, compete, and grow in their faith. We are here to build disciplined athletes, confident leaders, and a culture families are proud to be part of.
           </p>
 
           <div class="hero-actions">
@@ -987,9 +979,9 @@
           </div>
 
           <div class="hero-badges">
-            <span class="badge"><i class="fas fa-cross" style="margin-right:6px;color:var(--saints-gold);"></i>Faith</span>
-            <span class="badge"><i class="fas fa-dumbbell" style="margin-right:6px;color:var(--saints-gold);"></i>Grit</span>
-            <span class="badge"><i class="fas fa-users" style="margin-right:6px;color:var(--saints-gold);"></i>Community</span>
+            <span class="badge"><i class="fas fa-users" style="margin-right:6px;color:var(--saints-gold);"></i>Team over self</span>
+            <span class="badge"><i class="fas fa-heart" style="margin-right:6px;color:var(--saints-gold);"></i>Character over stats</span>
+            <span class="badge"><i class="fas fa-cross" style="margin-right:6px;color:var(--saints-gold);"></i>Christ over everything</span>
           </div>
         </div>
 
@@ -1009,20 +1001,30 @@
           </p>
         </div>
 
+      </div>
+    </section>
+
+    <section id="values">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Values</div>
+          <h3>Our Core Values</h3>
+        </div>
+
         <div class="cards">
           <article class="card">
-            <h4>Faith</h4>
+            <h4>Team over self</h4>
+            <p>Basketball is a team game. We teach players to communicate, trust teammates, and compete together with discipline and effort.</p>
+          </article>
+
+          <article class="card">
+            <h4>Character over stats</h4>
             <p>We believe strong character starts with strong values. Our program emphasizes humility, gratitude, and respect both on and off the court.</p>
           </article>
 
           <article class="card">
-            <h4>Grit</h4>
-            <p>Every player should improve. We focus on skill development, basketball IQ, and confidence so athletes continue to grow year after year.</p>
-          </article>
-
-          <article class="card">
-            <h4>Community</h4>
-            <p>Basketball is a team game. We teach players to communicate, trust teammates, and compete together with discipline and effort.</p>
+            <h4>Christ over everything</h4>
+            <p>Every player should improve through faith. We develop the whole athlete — grounded in purpose, guided by Christ, and growing year after year.</p>
           </article>
         </div>
       </div>
@@ -1201,7 +1203,6 @@
         <div>
           <strong>The Tennessee Saints</strong><br />
           Faith. Grit. Community.<br />
-          Competitive Youth Basketball Program<br />
           info@tnsaints.com · Middle Tennessee
         </div>
       </div>
@@ -1209,6 +1210,7 @@
       <nav class="footer-nav" aria-label="Footer navigation">
         <a href="#home">Home</a>
         <a href="#mission">Mission</a>
+        <a href="#values">Values</a>
         <a href="#leadership">Leadership</a>
         <a href="#team">Team</a>
         <a href="#contact">Contact</a>
