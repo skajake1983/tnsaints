@@ -490,8 +490,14 @@
       transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .socials a:hover,
-    .socials a:focus {
+    .socials a:hover {
+      transform: translateY(-4px) scale(1.04);
+      background: var(--saints-blue);
+      color: var(--saints-white);
+      box-shadow: 0 18px 34px rgba(6, 37, 92, 0.24);
+    }
+
+    .socials a:focus-visible {
       transform: translateY(-4px) scale(1.04);
       background: var(--saints-blue);
       color: var(--saints-white);
