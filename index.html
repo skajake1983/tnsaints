@@ -342,6 +342,10 @@
       scroll-margin-top: 130px;
     }
 
+    #values {
+      padding-top: 0;
+    }
+
     .section-head {
       margin-bottom: 2rem;
       max-width: 760px;
@@ -732,8 +736,8 @@
     /* Leadership tile grid */
     .leader-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.5rem;
     }
 
     .leader-tile {
@@ -745,7 +749,7 @@
       cursor: pointer;
       transition: transform 0.2s ease, border-color 0.2s ease;
       text-align: center;
-      padding: 1rem 0.75rem;
+      padding: 1.5rem 1rem;
     }
 
     .leader-tile:hover {
@@ -759,8 +763,8 @@
     }
 
     .leader-tile img {
-      width: 90px;
-      height: 90px;
+      width: 160px;
+      height: 160px;
       border-radius: 50%;
       object-fit: cover;
       margin: 0 auto 0.6rem;
@@ -770,6 +774,25 @@
 
     .leader-tile.active img {
       border-color: var(--saints-blue);
+    }
+
+    .leader-social {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #0a66c2;
+      color: #fff;
+      font-size: 20px;
+      margin-top: 0.4rem;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .leader-social:hover {
+      transform: scale(1.15);
+      background: #004182;
     }
 
     .leader-tile h4 {
@@ -1077,12 +1100,14 @@
             <img src="jacob-adams.jpg" alt="Jacob Adams" loading="lazy" />
             <h4>Jacob Adams</h4>
             <p>Co-Founder</p>
+            <a href="https://www.linkedin.com/in/jacoblewisadams/" target="_blank" rel="noopener noreferrer" class="leader-social" aria-label="Jacob Adams LinkedIn" onclick="event.stopPropagation()"><i class="fab fa-linkedin"></i></a>
           </div>
 
           <div class="leader-tile" data-leader="mike">
             <img src="mike-posusney.jpg" alt="Mike Posusney" loading="lazy" />
             <h4>Mike Posusney</h4>
             <p>Co-Founder</p>
+            <a href="https://www.linkedin.com/in/michael-w-posusney-920a8711/" target="_blank" rel="noopener noreferrer" class="leader-social" aria-label="Mike Posusney LinkedIn" onclick="event.stopPropagation()"><i class="fab fa-linkedin"></i></a>
           </div>
 
           <div class="leader-tile" data-leader="josh">
@@ -1101,11 +1126,7 @@
               <div class="leader-detail-content">
                 <h4>Jacob Adams</h4>
                 <p class="role">Co-Founder</p>
-                <p class="summary">Bio placeholder. Add Jacob's coaching background, basketball experience, leadership philosophy, and vision for the Tennessee Saints program.</p>
-                <button class="bio-toggle" aria-expanded="false">Read Full Bio <i class="fas fa-chevron-down"></i></button>
-                <div class="leader-full-bio">
-                  <p>Full bio placeholder. Expand on Jacob's playing career, coaching certifications, what drove him to co-found the Tennessee Saints, and his long-term goals for the program.</p>
-                </div>
+                <p class="summary">Jacob Adams is a co-founder and head coach of TN Saints Youth Basketball, a father of two, and a dedicated youth coach with 5+ years of experience across basketball, soccer, and flag football. A 2024 YMCA Coach of the Year, he is passionate about developing young athletes on and off the court. By day, Jacob is a Principal Program Manager at Microsoft; by night, he invests in the next generation—building skill, confidence, and character through faith, discipline, and teamwork.</p>
               </div>
             </div>
           </div>
@@ -1119,11 +1140,7 @@
               <div class="leader-detail-content">
                 <h4>Mike Posusney</h4>
                 <p class="role">Co-Founder</p>
-                <p class="summary">Bio placeholder. Add Mike's basketball experience, coaching strengths, and the role he plays in developing the team.</p>
-                <button class="bio-toggle" aria-expanded="false">Read Full Bio <i class="fas fa-chevron-down"></i></button>
-                <div class="leader-full-bio">
-                  <p>Full bio placeholder. Expand on Mike's basketball background, coaching philosophy, community involvement, and contributions to the Saints program.</p>
-                </div>
+                <p class="summary">Mike Posusney is a lifelong athlete and dedicated coach focused on developing young athletes through discipline, teamwork, and faith. A multi-sport competitor at Lenape High School and Widener University, he later coached football in the South Jersey Youth Independent Football League and led basketball programs at St. Joan of Arc and Oakview. Mike is a devoted husband and father of four, and his faith continues to guide his leadership, mentorship, and commitment to building strong, high-character athletes.</p>
               </div>
             </div>
           </div>
@@ -1138,10 +1155,6 @@
                 <h4>Josh Souder</h4>
                 <p class="role">Co-Founder</p>
                 <p class="summary">Bio placeholder. Add Josh's basketball background, coaching style, and contributions to player development.</p>
-                <button class="bio-toggle" aria-expanded="false">Read Full Bio <i class="fas fa-chevron-down"></i></button>
-                <div class="leader-full-bio">
-                  <p>Full bio placeholder. Expand on Josh's playing experience, coaching approach, training philosophy, and role within the Tennessee Saints program.</p>
-                </div>
               </div>
             </div>
           </div>
@@ -1194,7 +1207,7 @@
   <footer>
     <div class="container footer-grid">
       <div style="display: flex; align-items: center; gap: 12px;">
-        <img src="Saints Logo Updated v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" style="width: 60px; height: 60px; object-fit: contain;" />
+        <a href="#home"><img src="Saints Logo Updated v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" style="width: 60px; height: 60px; object-fit: contain;" /></a>
         <div>
           <strong>The Tennessee Saints</strong><br />
           info@tnsaints.com · Middle Tennessee
@@ -1208,7 +1221,6 @@
         <a href="#leadership">Leadership</a>
         <a href="#team">Team</a>
         <a href="#contact">Contact</a>
-        <a href="terms-and-conditions.html" target="_blank" rel="noopener">Terms &amp; Conditions</a>
         <a href="privacy-policy.html" target="_blank" rel="noopener">Privacy Policy</a>
       </nav>
     </div>
