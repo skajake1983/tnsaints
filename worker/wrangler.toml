@@ -1,0 +1,21 @@
+name = "tnsaints-shop"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Attach the Worker to api.tnsaints.com once the zone is on Cloudflare.
+# Uncomment after adding tnsaints.com to Cloudflare:
+# routes = [
+#   { pattern = "api.tnsaints.com/*", zone_name = "tnsaints.com" }
+# ]
+
+[vars]
+# Comma-separated list of origins allowed to call this Worker.
+ALLOWED_ORIGINS = "https://tnsaints.com,https://www.tnsaints.com,http://localhost:8000"
+# How long to cache the Printful product catalog at the edge (seconds).
+CATALOG_TTL_SECONDS = "600"
+
+# Secrets (set via `wrangler secret put NAME`):
+#   STRIPE_SECRET_KEY
+#   STRIPE_WEBHOOK_SECRET
+#   PRINTFUL_API_KEY

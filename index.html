@@ -1000,6 +1000,407 @@
         min-width: 0;
       }
     }
+
+    /* ===== Shop section ===== */
+    .nav-cart {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+    }
+    .nav-cart:hover { background: var(--saints-gold-dark); }
+    .nav-cart-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      background: var(--saints-blue);
+      color: var(--saints-white);
+      font-size: 0.7rem;
+      font-weight: 700;
+      min-width: 18px;
+      height: 18px;
+      border-radius: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 5px;
+    }
+
+    #shop { padding: 3rem 0 4rem; }
+
+    .shop-carousel-wrap {
+      position: relative;
+      margin-top: 1.5rem;
+    }
+    .shop-carousel {
+      display: flex;
+      gap: 1.5rem;
+      padding: 1rem 0.5rem 1.5rem;
+      overflow: hidden;
+      transition: none;
+    }
+    .shop-card {
+      flex: 0 0 min(85%, 320px);
+      scroll-snap-align: center;
+      background: var(--saints-white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .shop-card .image-wrap {
+      background: var(--saints-light);
+      aspect-ratio: 1 / 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .shop-card .image-wrap img {
+      max-width: 75%;
+      max-height: 75%;
+      object-fit: contain;
+    }
+    .shop-card .info {
+      padding: 1.1rem 1.3rem 1.4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .shop-card h4 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: var(--saints-blue-dark);
+    }
+    .shop-card .price {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--saints-blue);
+      margin: 0.2rem 0 0.1rem;
+    }
+    .shop-card .field-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      margin-top: 0.3rem;
+    }
+    .variant-select {
+      width: 100%;
+      padding: 0.55rem 0.85rem;
+      border: 2px solid var(--saints-gray);
+      border-radius: 10px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: var(--saints-text);
+      background: var(--saints-white);
+      cursor: pointer;
+      appearance: auto;
+    }
+    .variant-select:focus {
+      border-color: var(--saints-blue);
+      outline: none;
+    }
+    .qty-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .qty-row button {
+      width: 30px;
+      height: 30px;
+      border: 1.5px solid var(--saints-gray);
+      background: var(--saints-white);
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--saints-blue-dark);
+    }
+    .qty-row button:hover { border-color: var(--saints-blue); }
+    .qty-row .qty-value {
+      font-weight: 700;
+      min-width: 1.5rem;
+      text-align: center;
+    }
+    .shop-card .add-btn {
+      margin-top: 0.6rem;
+      padding: 0.8rem 1rem;
+      border: 0;
+      border-radius: 999px;
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .shop-card .add-btn:hover { background: var(--saints-gold-dark); }
+    .shop-card .add-btn.added { background: var(--saints-blue); color: var(--saints-white); }
+
+    .carousel-btn {
+      position: absolute;
+      top: 40%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 2px solid var(--saints-gray);
+      background: var(--saints-white);
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      font-size: 1.2rem;
+      color: var(--saints-blue-dark);
+      z-index: 2;
+      transition: background 0.2s ease, transform 0.2s ease;
+    }
+    .carousel-btn:hover {
+      background: var(--saints-gold);
+      border-color: var(--saints-gold);
+      transform: translateY(-50%) scale(1.08);
+    }
+    .carousel-btn.prev { left: -16px; }
+    .carousel-btn.next { right: -16px; }
+    @media (max-width: 760px) {
+      .shop-card { flex-basis: 85%; }
+      .carousel-btn.prev { left: 4px; }
+      .carousel-btn.next { right: 4px; }
+      .carousel-btn { opacity: 0.9; width: 40px; height: 40px; }
+    }
+
+    .shop-loading, .shop-empty {
+      text-align: center;
+      padding: 2rem;
+      color: #666;
+    }
+
+    /* ===== Cart drawer ===== */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 37, 92, 0.55);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.25s ease, visibility 0.25s ease;
+      z-index: 2500;
+    }
+    .drawer-overlay.open {
+      opacity: 1;
+      visibility: visible;
+    }
+    .cart-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      width: min(100%, 460px);
+      background: var(--saints-white);
+      box-shadow: -20px 0 50px rgba(6, 37, 92, 0.25);
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      z-index: 2600;
+      display: flex;
+      flex-direction: column;
+    }
+    .cart-drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.2rem 1.4rem;
+      border-bottom: 1px solid var(--saints-gray);
+      background: var(--saints-blue-dark);
+      color: var(--saints-white);
+    }
+    .drawer-header h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: 0.02em;
+    }
+    .drawer-close {
+      background: transparent;
+      border: 0;
+      color: var(--saints-white);
+      font-size: 1.4rem;
+      cursor: pointer;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease;
+    }
+    .drawer-close:hover { background: rgba(255,255,255,0.12); }
+
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.2rem 1.4rem 2rem;
+    }
+
+    #cart-layout { display: block; }
+
+    .drawer-body .cart-item {
+      display: grid;
+      grid-template-columns: 72px 1fr auto;
+      gap: 0.9rem;
+      align-items: center;
+      padding: 0.9rem 0;
+      border-bottom: 1px solid var(--saints-gray);
+    }
+    .drawer-body .cart-item:last-of-type { border-bottom: 0; }
+    .drawer-body .cart-item .thumb {
+      width: 72px;
+      height: 72px;
+      background: var(--saints-light);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+    }
+    .drawer-body .cart-item .thumb img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .drawer-body .cart-item .details h4 {
+      margin: 0 0 0.2rem;
+      color: var(--saints-blue-dark);
+      font-size: 0.98rem;
+    }
+    .drawer-body .cart-item .variant-label {
+      font-size: 0.82rem;
+      color: #666;
+    }
+    .drawer-body .cart-item .qty {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-top: 0.35rem;
+    }
+    .drawer-body .cart-item .qty button {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--saints-gray);
+      background: var(--saints-white);
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .drawer-body .cart-item .line-total {
+      font-weight: 700;
+      color: var(--saints-blue);
+      white-space: nowrap;
+    }
+    .drawer-body .cart-item .remove {
+      background: transparent;
+      border: 0;
+      color: #a33;
+      cursor: pointer;
+      font-size: 0.8rem;
+      margin-top: 0.25rem;
+      padding: 0;
+    }
+
+    #cart-summary { margin-top: 1rem; }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+      font-size: 0.95rem;
+    }
+    .summary-row.total {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--saints-blue-dark);
+      border-top: 2px solid var(--saints-gray);
+      margin-top: 0.6rem;
+      padding-top: 0.8rem;
+    }
+
+    #checkout-box {
+      margin-top: 1.3rem;
+      padding-top: 1.3rem;
+      border-top: 1px solid var(--saints-gray);
+    }
+    #checkout-box h3 {
+      margin: 0 0 0.3rem;
+      color: var(--saints-blue-dark);
+      font-size: 1.05rem;
+    }
+
+    .drawer-body form.form-grid {
+      display: grid;
+      gap: 0.7rem;
+      margin-top: 0.8rem;
+    }
+    .drawer-body form.form-grid input,
+    .drawer-body form.form-grid select {
+      padding: 0.65rem 0.85rem;
+      border: 1px solid var(--saints-gray);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+    .drawer-body form.form-grid .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.7rem;
+    }
+    #payment-element { margin: 0.8rem 0 0.4rem; }
+    #checkout-error {
+      color: #a33;
+      margin: 0.4rem 0;
+      min-height: 1.1em;
+      font-size: 0.85rem;
+    }
+    .drawer-body form button.btn,
+    .drawer-body .btn-block {
+      display: block !important;
+      width: 100% !important;
+      margin: 0.2rem 0;
+      box-shadow: none;
+      transform: none !important;
+    }
+    .drawer-body form button.btn:hover {
+      box-shadow: none;
+      transform: none !important;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: #666;
+    }
+    .empty-state a,
+    .empty-state button {
+      color: var(--saints-blue);
+      font-weight: 700;
+      background: none;
+      border: 0;
+      cursor: pointer;
+      font-size: 1rem;
+      font-family: inherit;
+    }
+
+    .checkout-success {
+      text-align: center;
+      padding: 2.5rem 1rem;
+    }
+
+    @media (max-width: 520px) {
+      .cart-drawer { width: 100%; }
+    }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
@@ -1040,7 +1441,12 @@
           <a href="#values">Values</a>
           <a href="#team">Team</a>
           <a href="#leadership">Leadership</a>
+          <a href="#shop">Shop</a>
           <a href="#contact">Contact</a>
+          <a href="#" class="nav-cart" aria-label="View cart" data-drawer-open>
+            <i class="fas fa-shopping-cart"></i>
+            <span class="nav-cart-badge" data-cart-count style="display:none;">0</span>
+          </a>
         </nav>
       </div>
     </header>
@@ -1241,6 +1647,28 @@
             </div>
           </div>
         </template>
+      </div>
+    </section>
+
+    <section id="shop">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Shop</div>
+          <h3>Saints Merch</h3>
+          <p>Official Tennessee Saints gear. Every order is printed on demand and shipped directly to you.</p>
+        </div>
+
+        <div class="shop-carousel-wrap">
+          <button class="carousel-btn prev" aria-label="Previous product" type="button">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <div id="shop-carousel" class="shop-carousel">
+            <div class="shop-loading">Loading products…</div>
+          </div>
+          <button class="carousel-btn next" aria-label="Next product" type="button">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -1723,6 +2151,204 @@
 
       detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
+  </script>
+
+  <!-- Cart drawer -->
+  <div class="drawer-overlay" data-drawer-close></div>
+  <aside class="cart-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-header">
+      <h3 id="drawer-title"><i class="fas fa-shopping-cart" style="margin-right:8px;"></i>Your Cart</h3>
+      <button class="drawer-close" type="button" aria-label="Close cart" data-drawer-close>
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="drawer-body">
+      <div id="cart-layout">
+        <div id="cart-items-list"></div>
+        <div id="cart-summary"></div>
+
+        <div id="checkout-box" style="display:none;">
+          <h3>Shipping</h3>
+          <form id="checkout-form" class="form-grid">
+            <input id="ship-name" placeholder="Full name" required />
+            <input id="ship-email" type="email" placeholder="Email" required />
+            <input id="ship-address1" placeholder="Address" required />
+            <input id="ship-address2" placeholder="Apt, suite (optional)" />
+            <div class="row-2">
+              <input id="ship-city" placeholder="City" required />
+              <input id="ship-state" placeholder="State" required maxlength="2" />
+            </div>
+            <input id="ship-zip" placeholder="ZIP" required />
+
+            <button type="button" id="prepare-payment" class="btn btn-secondary btn-block">
+              Continue to payment
+            </button>
+
+            <div id="payment-element"></div>
+            <div id="checkout-error"></div>
+
+            <button type="submit" id="pay-btn" class="btn btn-primary btn-block" disabled>
+              Pay now
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <script src="https://js.stripe.com/v3/"></script>
+  <script src="cart.js"></script>
+  <script>
+    // Cart drawer open/close controller
+    (function () {
+      const overlay = document.querySelector('.drawer-overlay');
+      const drawer = document.querySelector('.cart-drawer');
+
+      function open() {
+        overlay.classList.add('open');
+        drawer.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+      function close() {
+        overlay.classList.remove('open');
+        drawer.classList.remove('open');
+        document.body.style.overflow = '';
+      }
+
+      document.addEventListener('click', (e) => {
+        const openTrigger = e.target.closest('[data-drawer-open]');
+        const closeTrigger = e.target.closest('[data-drawer-close]');
+        if (openTrigger) {
+          e.preventDefault();
+          open();
+        } else if (closeTrigger) {
+          e.preventDefault();
+          close();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && drawer.classList.contains('open')) close();
+      });
+
+      window.TNDrawer = { open, close };
+    })();
+  </script>
+  <script src="checkout.js"></script>
+  <script>
+    (async function () {
+      const carousel = document.getElementById('shop-carousel');
+      if (!carousel) return;
+
+      let catalog;
+      try {
+        catalog = await TNCart.loadCatalog();
+      } catch (err) {
+        carousel.innerHTML = '<div class="shop-empty">Failed to load products.</div>';
+        console.error(err);
+        return;
+      }
+
+      if (!catalog.products.length) {
+        carousel.innerHTML = '<div class="shop-empty">No products yet. Check back soon!</div>';
+        return;
+      }
+
+      const state = {};
+      catalog.products.forEach((p) => {
+        state[p.id] = { variantId: p.variants[0].id, quantity: 1 };
+      });
+
+      function render() {
+        carousel.innerHTML = catalog.products.map((p) => {
+          const s = state[p.id];
+          const variant = p.variants.find((v) => v.id === s.variantId);
+          return `
+            <article class="shop-card" data-product="${p.id}">
+              <div class="image-wrap">
+                <img src="${p.images[0]}" alt="${p.name}" loading="lazy" />
+              </div>
+              <div class="info">
+                <h4>${p.name}</h4>
+                <div class="price">${TNCart.formatMoney(variant.price_cents, catalog.currency)}</div>
+
+                <div class="field-label">Size / Color</div>
+                <select class="variant-select" data-variant-select>
+                  ${p.variants.map((v) => `
+                    <option value="${v.id}" ${v.id === s.variantId ? 'selected' : ''}>
+                      ${v.label} — ${TNCart.formatMoney(v.price_cents, catalog.currency)}
+                    </option>
+                  `).join('')}
+                </select>
+
+                <div class="field-label">Quantity</div>
+                <div class="qty-row">
+                  <button type="button" data-qty="dec" aria-label="Decrease quantity">−</button>
+                  <span class="qty-value">${s.quantity}</span>
+                  <button type="button" data-qty="inc" aria-label="Increase quantity">+</button>
+                </div>
+
+                <button type="button" class="add-btn">Add to cart</button>
+              </div>
+            </article>
+          `;
+        }).join('');
+
+        carousel.querySelectorAll('.shop-card').forEach((card) => {
+          const pid = card.dataset.product;
+          const s = state[pid];
+          const p = catalog.products.find((pr) => pr.id === pid);
+
+          const variantSelect = card.querySelector('[data-variant-select]');
+          if (variantSelect) {
+            variantSelect.addEventListener('change', () => {
+              s.variantId = variantSelect.value;
+              const variant = p.variants.find((v) => v.id === s.variantId);
+              const priceEl = card.querySelector('.price');
+              if (priceEl && variant) priceEl.textContent = TNCart.formatMoney(variant.price_cents, catalog.currency);
+            });
+          }
+
+          card.querySelectorAll('[data-qty]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              if (btn.dataset.qty === 'inc') s.quantity += 1;
+              else if (s.quantity > 1) s.quantity -= 1;
+              card.querySelector('.qty-value').textContent = s.quantity;
+            });
+          });
+
+          const addBtn = card.querySelector('.add-btn');
+          if (addBtn) {
+            addBtn.addEventListener('click', () => {
+              TNCart.add(pid, s.variantId, s.quantity);
+              addBtn.textContent = `Added! (${TNCart.totalCount()} in cart)`;
+              addBtn.classList.add('added');
+              setTimeout(() => { addBtn.textContent = 'Add to cart'; addBtn.classList.remove('added'); }, 1600);
+            });
+          }
+        });
+      }
+
+      render();
+
+      const prev = document.querySelector('.carousel-btn.prev');
+      const next = document.querySelector('.carousel-btn.next');
+
+      function rotateNext() {
+        const first = carousel.querySelector('.shop-card');
+        if (!first) return;
+        carousel.appendChild(first);
+      }
+
+      function rotatePrev() {
+        const last = carousel.querySelector('.shop-card:last-child');
+        if (!last) return;
+        carousel.insertBefore(last, carousel.firstChild);
+      }
+
+      prev.addEventListener('click', rotatePrev);
+      next.addEventListener('click', rotateNext);
+    })();
   </script>
 </body>
 </html>
