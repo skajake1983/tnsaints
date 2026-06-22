@@ -650,6 +650,48 @@
       color: rgba(255, 255, 255, 0.92);
     }
 
+    .footer-partner {
+      flex-basis: 100%;
+      width: 100%;
+      text-align: center;
+      order: 5;
+      margin-top: 1rem;
+    }
+
+    .footer-partner img {
+      display: block;
+      width: 100%;
+      max-width: 760px;
+      height: auto;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 640px) {
+      .footer-grid {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .footer-brand {
+        order: 1;
+        align-items: center;
+      }
+
+      .footer-partner {
+        order: 2;
+        margin-top: 0.25rem;
+      }
+
+      .footer-spotify {
+        order: 3;
+      }
+
+      .footer-privacy {
+        order: 4;
+      }
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -1288,17 +1330,21 @@
 
   <footer>
     <div class="container footer-grid">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <a href="#home"><img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" style="width: 60px; height: 60px; object-fit: contain;" /></a>
-        <div>
-          <strong>Tennessee Saints</strong><br />
-          info@tnsaints.com · Middle Tennessee
+      <div class="footer-brand" style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <a href="#home"><img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" style="width: 60px; height: 60px; object-fit: contain;" /></a>
+          <div>
+            <strong>Tennessee Saints</strong><br />
+            info@tnsaints.com · Middle Tennessee
+          </div>
         </div>
       </div>
 
-      <iframe style="border-radius:12px;min-width:300px;max-width:300px;" src="https://open.spotify.com/embed/track/40fsULNhBDf1HMPrlXexiu?utm_source=generator&theme=0" width="100%" height="80" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+      <iframe class="footer-spotify" style="border-radius:12px;min-width:300px;max-width:300px;" src="https://open.spotify.com/embed/track/40fsULNhBDf1HMPrlXexiu?utm_source=generator&theme=0" width="100%" height="80" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
 
-      <a href="privacy-policy.html" style="font-size:0.85rem;opacity:0.7;">Privacy Policy</a>
+      <a class="footer-privacy" href="privacy-policy.html" style="font-size:0.85rem;opacity:0.7;">Privacy Policy</a>
+
+      <a class="footer-partner" href="https://cy-ql04.na1.hubspotlinks.com/Ctc/RG+113/cy-ql04/VWlLJ22mNbGTN46cmgsmSvxxW35KrPN5PHv67MJvQnv3qn9qW7Y8-PT6lZ3ppVNj10v7zr5gQW6YYHqn1TJjLMW45XSXq5fJ_K5W2Ndd784g1cdBW1NKmfy6D2wTSW8bwFXd4544PQW2nY3mF7zwpltVF2qVK7lKDbbW1vwq8M8DBPLfW24-05V44MPlRVrqj_C1qSbxcW2rHgWg77_JkVW38Yx7m4W-Rr8W14f0LC3X9FdVW7-LjKv1pd6NnW7YG-CR2lyLMwW1v0s7-8vtHy6W4yrS3N8Tp39hVcdRW24g4tcbW5Pm4p166KwrZW232ns0990DtSW1mSMmY2TSW0rW1XY0v_4FSrr4Mjn8K2xVD5vW2PLPtJ4YW5g3W23db9K8JvkBRf4hRlzn04" target="_blank" rel="noopener noreferrer"><img src="PGCTrustedPartner.jpg" alt="PGC Trusted Partner" loading="lazy" /></a>
     </div>
   </footer>
 
