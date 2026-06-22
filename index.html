@@ -237,6 +237,24 @@
       transform: scaleX(1);
     }
 
+    .nav-store {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+    }
+    .nav-store:hover,
+    .nav-store:focus {
+      background: var(--saints-gold-dark);
+      color: var(--saints-blue-dark);
+    }
+    .nav-store::after { display: none; }
+    .nav-store-label { display: none; }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -797,6 +815,23 @@
         padding: 0.85rem 1rem;
         border-radius: 12px;
       }
+
+      .nav-links a.nav-store {
+        width: 100%;
+        height: auto;
+        justify-content: flex-start;
+        gap: 0.6rem;
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        background: transparent;
+        color: var(--saints-blue-dark);
+      }
+      .nav-links a.nav-store:hover,
+      .nav-links a.nav-store:focus {
+        background: var(--saints-blue);
+        color: var(--saints-white);
+      }
+      .nav-store-label { display: inline; }
     }
 
     @media (max-width: 640px) {
@@ -1083,6 +1118,10 @@
           <a href="#team">Team</a>
           <a href="#leadership">Leadership</a>
           <a href="#contact">Contact</a>
+          <a href="https://tnsaints.printful.me/" class="nav-store" aria-label="Visit our store" title="Store" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-store"></i>
+            <span class="nav-store-label">Store</span>
+          </a>
         </nav>
       </div>
     </header>
