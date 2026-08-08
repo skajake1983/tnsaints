@@ -2,6 +2,22 @@ name = "tnsaints"
 main = "src/index.js"
 compatibility_date = "2026-08-08"
 
+# Attach the API hostname declaratively rather than through the dashboard, so
+# the binding is version-controlled and survives the Worker being recreated.
+# custom_domain = true means the Worker IS the origin (a plain route would
+# expect a separate origin server behind it). Cloudflare creates the DNS record
+# and provisions the certificate on deploy, because it already runs this zone.
+routes = [
+  { pattern = "api.tnsaints.com", custom_domain = true }
+]
+
+# One canonical hostname. Declaring these explicitly rather than letting the
+# custom domain disable them implicitly, so nobody is surprised later.
+# workers.dev subdomains are also blocked on some school and corporate
+# networks, which is the last thing a parent registration form needs.
+workers_dev = false
+preview_urls = false
+
 # ---------------------------------------------------------------------------
 # Non-secret configuration. Everything that decides who gets a spot lives here
 # rather than in the browser, so a visitor cannot edit their way past a limit.
