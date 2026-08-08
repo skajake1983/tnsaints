@@ -13,7 +13,7 @@
  */
 
 import { corsHeaders, json, errorResponse, hashIp, clientIp } from './http.js';
-import { sendRegistrationEmails } from './email.js';
+import { sendRegistrationEmails, sendRosterDigest } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import {
@@ -61,7 +61,34 @@ export default {
       return errorResponse('Something went wrong on our end. Please try again.', 500, cors);
     }
   },
+
+  /**
+   * Cron handler — emails the final roster as a CSV attachment.
+   *
+   * The token-protected export endpoint still exists for on-demand pulls, but
+   * the roster that matters is the one on event weekend, and that should not
+   * depend on anyone remembering to run a command with a token on the right
+   * evening. This pushes it instead.
+   */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendRosterDigest(env, { reason: event.cron || 'scheduled' }));
+  },
 };
+
+/**
+ * Public session status.
+ *
+ * Deliberately returns open/full only, never taken/remaining/capacity. This
+ * endpoint is unauthenticated, so publishing exact counts would tell anyone
+ * how the campaign is performing — and early on, "0 of 50 taken" is exactly
+ * what you do not want visible. Exact numbers stay on the admin endpoint.
+ */
+function publicSessions(availability) {
+  return availability.sessions.map((s) => ({
+    session_time: s.session_time,
+    full: s.full,
+  }));
+}
 
 async function handleAvailability(env, cors) {
   const availability = await getAvailability(env);
@@ -72,7 +99,10 @@ async function handleAvailability(env, cors) {
       ok: true,
       registration_open: window.open,
       closes_at: window.closesAt ? window.closesAt.toISOString() : null,
-      ...availability,
+      event_id: availability.event_id,
+      event_label: availability.event_label,
+      sessions: publicSessions(availability),
+      all_full: availability.all_full,
     },
     { cors }
   );
@@ -172,7 +202,7 @@ async function handleRegister(request, env, ctx, cors) {
         position: result.position,
         message:
           'That session is full, so we have added your player to the waiting list. We will email you if a spot opens or when we schedule another evaluation date.',
-        sessions: availability.sessions,
+        sessions: publicSessions(availability),
       },
       { cors }
     );

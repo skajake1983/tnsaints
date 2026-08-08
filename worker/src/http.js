@@ -64,3 +64,28 @@ export async function hashIp(ip, salt) {
 export function clientIp(request) {
   return request.headers.get('CF-Connecting-IP') || '';
 }
+
+/**
+ * Rows to RFC 4180 CSV. Shared by the admin export endpoint and the scheduled
+ * roster email so both produce byte-identical files.
+ */
+export function toCsv(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const escape = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [
+    headers.join(','),
+    ...rows.map((r) => headers.map((h) => escape(r[h])).join(',')),
+  ].join('\r\n');
+}
+
+/** Base64 for Resend attachments. Handles non-ASCII without corrupting it. */
+export function toBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}

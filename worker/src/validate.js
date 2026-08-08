@@ -12,7 +12,20 @@ const PHONE_RE = /^(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const URL_RE = /^https?:\/\/.+/i;
 
-const GRADES = ['3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+const ALL_GRADES = ['3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
+
+/**
+ * Grades this event accepts. The form only offers these, but the form is
+ * client-side and therefore advisory — a POST can claim any grade, so the
+ * list is enforced here too.
+ */
+function allowedGrades(env) {
+  const configured = String(env.ALLOWED_GRADES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return configured.length ? configured : ALL_GRADES;
+}
 
 function str(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -36,8 +49,11 @@ export function validateRegistration(body, env) {
   const playerName = str(body.player_name);
   if (!NAME_RE.test(playerName)) errors.push('Please enter a valid player name.');
 
+  const grades = allowedGrades(env);
   const grade = str(body.grade);
-  if (!GRADES.includes(grade)) errors.push('Please select a valid grade.');
+  if (!grades.includes(grade)) {
+    errors.push(`This evaluation is open to grades ${grades.join(' and ')}.`);
+  }
 
   // Optional field, but reject nonsense rather than silently storing it.
   let yearsExperience = null;

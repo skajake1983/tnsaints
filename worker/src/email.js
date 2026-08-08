@@ -11,6 +11,8 @@
  * costs a notification, not a child's place in the session.
  */
 
+import { toCsv, toBase64 } from './http.js';
+
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 /**
@@ -83,7 +85,7 @@ async function reserveSend(env, { reserveFloor = 0 } = {}) {
   }
 }
 
-async function send(env, { to, subject, html, replyTo }) {
+async function send(env, { to, subject, html, replyTo, attachments }) {
   const payload = {
     from: env.NOTIFY_EMAIL_FROM,
     to: Array.isArray(to) ? to : [to],
@@ -91,6 +93,7 @@ async function send(env, { to, subject, html, replyTo }) {
     html,
   };
   if (replyTo) payload.reply_to = replyTo;
+  if (attachments) payload.attachments = attachments;
 
   const res = await fetch(RESEND_ENDPOINT, {
     method: 'POST',
@@ -184,6 +187,102 @@ function parentHtml(env, data, result) {
       </p>
     </div>
   </div>`;
+}
+
+/**
+ * Final roster, emailed on a schedule after registration closes.
+ *
+ * Exists so the roster never depends on someone remembering to run a command
+ * with a token on the right evening. The token endpoint stays for on-demand
+ * pulls; this is the one that matters on event weekend.
+ *
+ * Never throws — the cron handler passes it to ctx.waitUntil().
+ */
+export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
+  if (!emailConfigured(env)) {
+    console.error('Roster digest skipped: email is not configured.');
+    return;
+  }
+
+  let rows;
+  try {
+    const res = await env.DB.prepare(
+      `SELECT session_time, status, player_name, grade, years_experience,
+              parent_name, parent_email, phone, school,
+              emergency_contact_name, emergency_contact_phone, medical_notes,
+              photo_release, signature, highlight_link, player_notes, created_at
+         FROM registrations
+        WHERE event_id = ?1
+        ORDER BY session_time, status DESC, id`
+    )
+      .bind(env.EVENT_ID)
+      .all();
+    rows = res.results || [];
+  } catch (err) {
+    console.error('Roster digest query failed:', err?.message);
+    return;
+  }
+
+  const confirmed = rows.filter((r) => r.status === 'confirmed');
+  const waitlist = rows.filter((r) => r.status === 'waitlist');
+  const bySession = (time, status) =>
+    rows.filter((r) => r.session_time === time && r.status === status).length;
+
+  const times = String(env.SESSION_TIMES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const summaryRows = times
+    .map(
+      (t) => `<tr>
+        <td style="padding:6px 14px 6px 0;">${escapeHtml(t)}</td>
+        <td style="padding:6px 14px 6px 0;"><strong>${bySession(t, 'confirmed')}</strong> confirmed</td>
+        <td style="padding:6px 0;color:#b42318;">${bySession(t, 'waitlist')} waitlisted</td>
+      </tr>`
+    )
+    .join('');
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;">
+    <div style="background:#0b3a8d;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(44)}</td>
+        <td style="vertical-align:middle;">
+          <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">FINAL ROSTER</div>
+          <div style="font-size:20px;font-weight:800;margin-top:2px;">${escapeHtml(env.EVENT_LABEL || 'Evaluation')}</div>
+        </td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;color:#13233d;">
+      <p style="margin-top:0;">Registration has closed. Full roster attached as a spreadsheet.</p>
+      <table style="border-collapse:collapse;font-size:14px;">${summaryRows}</table>
+      <p style="margin-bottom:0;font-size:15px;">
+        <strong>${confirmed.length}</strong> confirmed &middot;
+        <strong>${waitlist.length}</strong> on the waiting list &middot;
+        <strong>${rows.length}</strong> total
+      </p>
+      <p style="color:#536277;font-size:13px;margin-bottom:0;">
+        Open roster.csv in Excel or Google Sheets. Print it before Saturday so you
+        have the list even without signal at the gym.
+      </p>
+    </div>
+  </div>`;
+
+  const csv = rows.length ? toCsv(rows) : 'no registrations';
+
+  try {
+    await send(env, {
+      to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+      subject: `Final roster — ${confirmed.length} confirmed, ${waitlist.length} waitlisted (${env.EVENT_ID})`,
+      html,
+      attachments: [
+        { filename: `roster-${env.EVENT_ID}.csv`, content: toBase64(csv) },
+      ],
+    });
+    console.log(JSON.stringify({ event: 'roster_digest_sent', reason, rows: rows.length }));
+  } catch (err) {
+    console.error('Roster digest send failed:', err?.message);
+  }
 }
 
 /**

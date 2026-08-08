@@ -1328,7 +1328,7 @@
         <div class="section-head">
           <div class="eyebrow">Program</div>
           <h3>Who We Train</h3>
-          <p>Right now our focus is 4th and 5th graders. Players train weekly year-round with regular scrimmages, and we form teams for optional tournament and league play throughout the season.</p>
+          <p>Our current group is 4th and 5th graders, training weekly year-round with regular scrimmages plus optional tournament and league play. We are actively exploring additional grade levels &mdash; so if your player falls outside that range, reach out anyway. Which groups we add next depends on the interest we hear from families, and we would much rather know you are out there than have you count yourself out.</p>
         </div>
 
         <div class="team-grid team-grid-2col">
@@ -1475,7 +1475,7 @@
                   <!-- Evaluation is first (and therefore the default) while
                        registration is open. initDefaultPurpose() falls back to
                        General Contact once the 8/22 deadline passes. -->
-                  <option value="evaluation">Free Player Evaluation Request</option>
+                  <option value="evaluation">Free Academy Evaluation Aug 2026</option>
                   <option value="general">General Contact</option>
                   <option value="player-interest">Academy Interest</option>
                   <option value="coaching-interest">Coaching Interest</option>
@@ -1701,19 +1701,19 @@
           </div>
           <div>
             <label for="evaluation-grade">Grade</label>
+            <!-- This evaluation is 4th and 5th grade only. The Worker enforces
+                 the same list server-side via ALLOWED_GRADES. The note below
+                 matters: without it, a parent of a 6th grader hits a dead end
+                 here and leaves, when we actually want to hear from them. -->
             <select id="evaluation-grade" name="grade" required>
               <option value="" selected disabled>Select grade</option>
-              <option value="3rd">3rd</option>
               <option value="4th">4th</option>
               <option value="5th">5th</option>
-              <option value="6th">6th</option>
-              <option value="7th">7th</option>
-              <option value="8th">8th</option>
-              <option value="9th">9th</option>
-              <option value="10th">10th</option>
-              <option value="11th">11th</option>
-              <option value="12th">12th</option>
             </select>
+            <p style="margin:6px 0 0; font-size:0.88rem; line-height:1.45; opacity:0.8;">
+              Another grade? Choose <strong>General Contact</strong> above and tell us &mdash;
+              we are exploring more grade levels and interest is what decides which comes next.
+            </p>
           </div>
         </div>
         <div>
@@ -1923,15 +1923,19 @@
     }
 
     /**
-     * Live remaining-spot counts. Only meaningful once REGISTRATION_API is set —
-     * a static page has no way to know how many spots are left.
+     * Per-session open/full status. Only meaningful once REGISTRATION_API is
+     * set — a static page has no way to know.
+     *
+     * Deliberately shows open vs full rather than a count. Early on, an exact
+     * number advertises that nobody has signed up yet; later it creates a
+     * scramble. Open or full is all a parent needs to choose a session.
      */
     async function renderAvailability() {
       if (!REGISTRATION_API) return;
 
       const host = document.createElement('p');
       host.className = 'availability-note';
-      host.textContent = 'Checking remaining spots…';
+      host.textContent = 'Checking session availability…';
       dynamicFields.prepend(host);
 
       try {
@@ -1948,10 +1952,16 @@
         host.innerHTML = data.sessions
           .map((s) => s.full
             ? `<span class="full">${s.session_time} — full (waiting list)</span>`
-            : `${s.session_time} — ${s.remaining} of ${s.capacity} spots left`)
+            : `${s.session_time} — open`)
           .join(' &nbsp;·&nbsp; ');
+
+        // Mirror the status beside each radio so the choice is obvious.
+        data.sessions.forEach((s) => {
+          const tag = document.querySelector(`.slot-remaining[data-slot="${s.session_time}"]`);
+          if (tag) tag.textContent = s.full ? '— full, joins waiting list' : '';
+        });
       } catch {
-        // Never block registration on the counter failing.
+        // Never block registration on the status check failing.
         host.remove();
       }
     }
@@ -2300,10 +2310,19 @@
      * deadline it quietly reverts to General Contact.
      */
     function initDefaultPurpose() {
-      if (new Date() > REGISTRATION_CLOSES_AT) {
+      if (new Date() <= REGISTRATION_CLOSES_AT) return;
+
+      // Past the deadline the August evaluation is over, so remove the option
+      // rather than leaving a dead entry that submits into a closed event.
+      // The Worker rejects late registrations regardless — this just stops a
+      // parent filling out a long form only to be told no at the end.
+      const stale = purposeSelect.querySelector('option[value="evaluation"]');
+      if (stale) stale.remove();
+
+      if (!formTemplates[purposeSelect.value] || purposeSelect.value === 'evaluation') {
         purposeSelect.value = 'general';
-        renderDynamicForm();
       }
+      renderDynamicForm();
     }
 
     // Banner CTA (and any future link) opens a specific form directly.

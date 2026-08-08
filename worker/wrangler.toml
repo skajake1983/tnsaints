@@ -30,6 +30,10 @@ EVENT_LABEL = "Free Academy Evaluation - Saturday, August 29, 2026"
 SLOT_CAPACITY = "25"
 SESSION_TIMES = "9:00 AM,10:00 AM"
 
+# This evaluation is 4th and 5th grade only. The form offers just these two,
+# but the form is client-side and advisory — this is the list that is enforced.
+ALLOWED_GRADES = "4th,5th"
+
 # Explicit -05:00 offset = Central Daylight Time. The cutoff is the same
 # instant for every visitor regardless of their device timezone or clock.
 REGISTRATION_CLOSES_AT = "2026-08-22T23:59:59-05:00"
@@ -67,6 +71,16 @@ binding = "DB"
 database_name = "tnsaints"
 # Filled in by `npm run db:create` — see README step 2.
 database_id = "8f449ac8-d165-4db1-b267-b10e6d55d9b0"
+
+# Scheduled roster emails. Cron is always UTC.
+#
+#   "0 13 23 8 *"  = 13:00 UTC on Aug 23 = 8:00 AM Central, the morning after
+#                    registration closes. This is the final roster.
+#   "0 13 * 8 *"   = 8:00 AM Central every day in August, so the roster is
+#                    never more than a day stale while the campaign runs and
+#                    there is a fresh copy in the inbox if anything breaks.
+[triggers]
+crons = ["0 13 * 8 *"]
 
 [observability]
 enabled = true
