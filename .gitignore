@@ -1,0 +1,8 @@
+# Local worker runtime artifacts
+worker/.wrangler/
+worker/node_modules/
+
+# Local secrets and environment overrides
+worker/.dev.vars
+worker/.env
+worker/.env.*
