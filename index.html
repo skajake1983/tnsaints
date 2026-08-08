@@ -11,13 +11,13 @@
   </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tennessee Saints | Youth Basketball</title>
-  <meta name="description" content="Tennessee Saints is a competitive youth basketball program in Middle Tennessee focused on team, character, and faith. Developing disciplined athletes and confident leaders." />
+  <title>Tennessee Saints | Youth Basketball Academy</title>
+  <meta name="description" content="Tennessee Saints is a year-round youth basketball academy in Middle Tennessee focused on player development through CLA and SSG, plus faith, character, and leadership." />
   <link rel="canonical" href="https://tnsaints.com/" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#0b3a8d" />
-  <meta property="og:title" content="Tennessee Saints | Youth Basketball" />
-  <meta property="og:description" content="Competitive youth basketball in Middle Tennessee. Team over self. Character over stats. Christ over everything." />
+  <meta property="og:title" content="Tennessee Saints | Youth Basketball Academy" />
+  <meta property="og:description" content="Year-round youth basketball academy in Middle Tennessee focused on player development, weekly training, and competitive opportunities." />
   <meta property="og:image" content="https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png" />
   <meta property="og:image:alt" content="Tennessee Saints logo" />
   <meta property="og:url" content="https://tnsaints.com/" />
@@ -25,8 +25,8 @@
   <meta property="og:locale" content="en_US" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Tennessee Saints | Youth Basketball" />
-  <meta name="twitter:description" content="Competitive youth basketball in Middle Tennessee. Team over self. Character over stats. Christ over everything." />
+  <meta name="twitter:title" content="Tennessee Saints | Youth Basketball Academy" />
+  <meta name="twitter:description" content="Year-round youth basketball academy in Middle Tennessee focused on player development, weekly training, and competitive opportunities." />
   <meta name="twitter:image" content="https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png" />
   <meta name="twitter:image:alt" content="Tennessee Saints logo" />
   <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
@@ -42,7 +42,7 @@
     "url": "https://tnsaints.com/",
     "logo": "https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png",
     "image": "https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png",
-    "description": "Tennessee Saints is a competitive youth basketball program in Middle Tennessee focused on team, character, and faith.",
+    "description": "Tennessee Saints is a year-round youth basketball academy in Middle Tennessee focused on player development, character, and faith.",
     "sport": "Basketball",
     "areaServed": {
       "@type": "Place",
@@ -583,11 +583,21 @@
       margin-top: 1rem;
     }
 
-    label {
+    label,
+    .field-group > legend {
       font-weight: 700;
       color: var(--saints-blue-dark);
       display: block;
       margin-bottom: 0.4rem;
+    }
+
+    /* Radio/checkbox groups need a fieldset+legend for screen readers, but the
+       browser default chrome would break the form's visual rhythm. */
+    .field-group {
+      border: 0;
+      padding: 0;
+      margin: 0;
+      min-width: 0;
     }
 
     select,
@@ -1077,10 +1087,91 @@
         min-width: 0;
       }
     }
+
+    /* --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. --- */
+    .event-banner {
+      display: none;
+      background: linear-gradient(90deg, var(--saints-gold) 0%, var(--saints-gold-dark) 100%);
+      color: var(--saints-blue-dark);
+      font-size: 0.95rem;
+    }
+
+    .event-banner.show { display: block; }
+
+    .event-banner-inner {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px 16px;
+      padding: 10px 46px 10px 16px;
+      text-align: center;
+    }
+
+    .event-banner-copy {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 2px 10px;
+    }
+
+    .event-banner-copy strong { font-weight: 800; }
+
+    .event-banner-cta {
+      background: var(--saints-blue);
+      color: var(--saints-white);
+      text-decoration: none;
+      font-weight: 700;
+      padding: 7px 16px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .event-banner-cta:hover,
+    .event-banner-cta:focus {
+      background: var(--saints-blue-dark);
+      color: var(--saints-white);
+    }
+
+    .event-banner-close {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 0;
+      color: var(--saints-blue-dark);
+      font-size: 1.6rem;
+      line-height: 1;
+      padding: 0 8px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 720px) {
+      .event-banner-inner {
+        padding: 10px 38px 10px 12px;
+        font-size: 0.86rem;
+      }
+    }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
 <body>
+  <!-- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. -->
+  <div class="event-banner" id="event-banner" role="region" aria-label="Free academy evaluation registration">
+    <div class="container event-banner-inner">
+      <div class="event-banner-copy">
+        <strong>FREE Academy Evaluation &mdash; Sat, Aug 29</strong>
+        <span>9&ndash;11 AM &middot; Grassland Heights Baptist Church, Franklin</span>
+        <span id="event-banner-countdown"></span>
+      </div>
+      <a class="event-banner-cta" href="#contact">Register Now</a>
+      <button class="event-banner-close" id="event-banner-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+
   <div class="site-header">
     <div class="topbar">
       <div class="container topbar-inner">
@@ -1115,7 +1206,7 @@
           <a href="#home">Home</a>
           <a href="#mission">Mission</a>
           <a href="#values">Values</a>
-          <a href="#team">Team</a>
+          <a href="#program">Program</a>
           <a href="#leadership">Leadership</a>
           <a href="#contact">Contact</a>
           <a href="https://tnsaints.printful.me/" class="nav-store" aria-label="Visit our store" title="Store" target="_blank" rel="noopener noreferrer">
@@ -1134,11 +1225,11 @@
         <div class="hero-copy">
           <h2>Team over self.<br/>Character over stats.<br/>Christ over everything.</h2>
           <p>
-            Tennessee Saints is a Christian youth competitive basketball club in Middle TN. Passionate about helping kids build community, improve their basketball skills, compete, and grow in their faith. We are here to build disciplined athletes, confident leaders, and a culture families are proud to be part of.
+            Tennessee Saints is a year-round Christian youth basketball academy in Middle Tennessee. Our player development model uses a Constraints-Led Approach (CLA) and Small-Sided Games (SSG) to help athletes make better decisions, build confident skills, and compete with purpose. Players train weekly for a minimum of three hours with regular scrimmages, plus optional tournament and league play.
           </p>
 
           <div class="hero-actions">
-            <a class="btn btn-primary" href="#team">View Teams</a>
+            <a class="btn btn-primary" href="#program">Who We Train</a>
             <a class="btn btn-secondary" href="#contact">Contact the Program</a>
           </div>
 
@@ -1161,7 +1252,7 @@
           <div class="eyebrow">Mission</div>
           <h3>Our Mission</h3>
           <p>
-            Tennessee Saints exists to develop young athletes through faith, discipline, teamwork, and a love for the game of basketball. Our goal is to help players grow not only as competitors, but as leaders, teammates, and young men of character.
+            Tennessee Saints exists to develop young athletes through faith, discipline, and evidence-informed training. Our mission is to grow complete players and people through intentional coaching, weekly competitive reps, and a culture that values character, leadership, and team-first basketball.
           </p>
         </div>
 
@@ -1194,28 +1285,29 @@
       </div>
     </section>
 
-    <section id="team">
+    <section id="program">
       <div class="container">
         <div class="section-head">
-          <div class="eyebrow">Team</div>
-          <h3>Current Team</h3>
-          <p>Tennessee Saints currently fields one competitive team made up of 5th grade players focused on strong fundamentals, team basketball, and player development.</p>
+          <div class="eyebrow">Program</div>
+          <h3>Who We Train</h3>
+          <p>Right now our focus is 4th and 5th graders. Players train weekly year-round with regular scrimmages, and we form teams for optional tournament and league play throughout the season.</p>
         </div>
 
         <div class="team-grid team-grid-2col">
           <article class="team-card">
             <div class="top">
-              <h4>5th Grade Team (Franklin-Nolensville)</h4>
-              <p>Competitive Development Team</p>
+              <h4>4th &amp; 5th Grade (Franklin&ndash;Nolensville)</h4>
+              <p>Year-Round Player Development</p>
             </div>
             <div class="body">
-              <strong>Program Focus</strong>
+              <strong>Development Focus</strong>
               <ul>
                 <li>Ball handling, passing, and shooting fundamentals</li>
                 <li>Defensive effort, positioning, and communication</li>
                 <li>Basketball IQ and decision making</li>
                 <li>Team-first mentality and leadership</li>
-                <li>Competitive tournament play</li>
+                <li>Weekly academy training (minimum 3 hours) plus regular scrimmages</li>
+                <li>Optional tournament and league play</li>
               </ul>
             </div>
           </article>
@@ -1228,7 +1320,7 @@
         <div class="section-head">
           <div class="eyebrow">Leadership</div>
           <h3>Our Coaches &amp; Leadership</h3>
-          <p>Tennessee Saints is led by coaches committed to developing great basketball players and even better young men.</p>
+          <p>Tennessee Saints is led by coaches committed to developing great basketball players and even better young men. We partner with PGC for camps, No Hesitation Basketball for active player development, and Transforming Basketball for coach education and training.</p>
         </div>
 
         <div class="leader-grid" id="leader-grid">
@@ -1255,7 +1347,7 @@
           <div class="leader-tile" data-leader="brandon">
             <img src="brandon-turner.png" alt="Brandon Turner" loading="lazy" />
             <h4>Brandon Turner</h4>
-            <p>No Hesi Hoops Owner / Player Development</p>
+            <p>No Hesitation Basketball / Player Development Partner</p>
             <a href="https://www.nohesihoops.com/" target="_blank" rel="noopener noreferrer" class="leader-social" aria-label="No Hesi Hoops" onclick="event.stopPropagation()" style="background:#fff;padding:0;overflow:hidden;"><img src="no-hesi-hoops.png" alt="No Hesi Hoops" style="width:40px;height:40px;object-fit:contain;" /></a>
           </div>
         </div>
@@ -1269,7 +1361,7 @@
               <div class="leader-detail-content">
                 <h4>Jacob Adams</h4>
                 <p class="role">Co-Founder / Head Coach</p>
-                <p class="summary">Jacob Adams is a co-founder and head coach of TN Saints Youth Basketball, a devoted husband and father of two, and a man grounded in his faith in Christ. He is passionate about developing young athletes not just as players, but as leaders of character.</p>
+                <p class="summary">Jacob Adams is a co-founder and head coach of TN Saints Basketball Academy, a devoted husband and father of two, and a man grounded in his faith in Christ. He is passionate about developing young athletes not just as players, but as leaders of character.</p>
                 <p class="summary">A lifelong competitor, Jacob played basketball and soccer growing up—competing in rec leagues, street ball, church leagues, and 3v3 tournaments alongside players who went on to NBA careers. He also ran track as a sprinter and long jumper and developed elite powerlifting strength in high school, influenced by his father, a former competitive powerlifter.</p>
                 <p class="summary">With over five years of coaching experience across basketball, soccer, and flag football—including being named YMCA Coach of the Year in 2024—Jacob brings intensity, discipline, and a team-first mindset to every practice. His mission is simple: build confident, resilient athletes who grow in skill, character, and faith.</p>
               </div>
@@ -1285,7 +1377,7 @@
               <div class="leader-detail-content">
                 <h4>Mike Posusney</h4>
                 <p class="role">Co-Founder / Director of Marketing</p>
-                <p class="summary">Mike Posusney is a co-founder and director of marketing for TN Saints Youth Basketball. He is a lifelong athlete and dedicated coach focused on developing young athletes through discipline, teamwork, and faith. A multi-sport competitor at Lenape High School and Widener University, he later coached football in the South Jersey Youth Independent Football League and led basketball programs at St. Joan of Arc and Oakview. Mike is a devoted husband and father of four, and his faith continues to guide his leadership, mentorship, and commitment to building strong, high-character athletes.</p>
+                <p class="summary">Mike Posusney is a co-founder and director of marketing for TN Saints Basketball Academy. He is a lifelong athlete and dedicated coach focused on developing young athletes through discipline, teamwork, and faith. A multi-sport competitor at Lenape High School and Widener University, he later coached football in the South Jersey Youth Independent Football League and led basketball programs at St. Joan of Arc and Oakview. Mike is a devoted husband and father of four, and his faith continues to guide his leadership, mentorship, and commitment to building strong, high-character athletes.</p>
               </div>
             </div>
           </div>
@@ -1314,8 +1406,8 @@
               <img class="leader-detail-photo" src="brandon-turner.png" alt="Brandon Turner" />
               <div class="leader-detail-content">
                 <h4>Brandon Turner</h4>
-                <p class="role">No Hesi Hoops Owner / Player Development</p>
-                <p class="summary">Brandon Turner is an experienced private player development coach/trainer and the founder of No Hesi Hoops. Brandon was a scout team player at Belmont University and has multiple years of experience developing players of every level. Brandon has worked under NBA mentorship on projects in player development, scouting, film, and analytics. He is a certified 94FEETOFGAME ambassador under Phil Handy, a top NBA player development coach. Most recently, Brandon worked with the Birmingham Squadron, the New Orleans Pelicans' G-League affiliate team, on a project centered around analytics and player development (2025-2026).</p>
+                <p class="role">No Hesitation Basketball / Player Development Partner</p>
+                <p class="summary">Brandon Turner is an experienced private player development coach/trainer and the founder of No Hesitation Basketball (No Hesi Hoops). Brandon was a scout team player at Belmont University and has multiple years of experience developing players of every level. Brandon has worked under NBA mentorship on projects in player development, scouting, film, and analytics. He is a certified 94FEETOFGAME ambassador under Phil Handy, a top NBA player development coach. Most recently, Brandon worked with the Birmingham Squadron, the New Orleans Pelicans' G-League affiliate team, on a project centered around analytics and player development (2025-2026).</p>
                 <p class="summary">Brandon utilizes an evidence-based approach to coaching and development based in modern skill acquisition research, using the Constraints-Led Approach (CLA) and Representative Learning Design (RLD). His focus is on creating a practice environment that supports how players actually learn and coordinate movements.</p>
                 <p class="summary">Brandon currently works with local players as a private development coach. Brandon is also preparing to begin working with the Japan National Women's Basketball Team introducing modern skill acquisition research and an evidence-based approach to the players and coaching staff.</p>
               </div>
@@ -1330,7 +1422,7 @@
         <div class="section-head">
           <div class="eyebrow">Contact</div>
           <h3>Ready to connect?</h3>
-          <p>This section works for parent questions, player interest, tryouts, sponsorships, coaching interest, or volunteer support.</p>
+          <p>Use this form for parent questions, academy interest, free player evaluations, coaching interest, sponsorships, or volunteer support.</p>
         </div>
 
         <div class="contact-grid">
@@ -1342,16 +1434,21 @@
                 <label for="form-purpose">Purpose</label>
                 <select id="form-purpose" name="purpose" required>
                   <option value="general">General Contact</option>
-                  <option value="player-interest">Player Interest</option>
+                  <option value="player-interest">Academy Interest</option>
                   <option value="coaching-interest">Coaching Interest</option>
-                  <option value="tryout">Tryout Registration</option>
-                  <option value="waiver">Waiver / Participation Agreement</option>
+                  <option value="evaluation">Free Player Evaluation Request</option>
+                  <!-- Temporarily hidden pending revisions. The 'academy-onboarding' template
+                       and its evaluation-gate logic below remain intact; re-enable by
+                       restoring this option:
+                  <option value="academy-onboarding">Academy Registration (After Evaluation)</option>
+                  -->
                 </select>
               </div>
 
               <div id="dynamic-form-fields"></div>
 
               <button class="btn btn-primary" type="submit">Submit Form</button>
+              <p id="form-error" role="alert" style="display:none; color:#b42318; font-weight:600; margin-top:12px;"></p>
             </form>
           </div>
         </div>
@@ -1398,6 +1495,8 @@
     const namePattern = "[A-Za-zÀ-ÿ' -]{2,60}";
     const schoolPattern = "[A-Za-z0-9À-ÿ'&., -]{2,80}";
     const locationPattern = "[A-Za-zÀ-ÿ0-9'., -]{2,80}";
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const evaluationGateMessage = 'Registration requires a completed free evaluation first. Please submit the "Free Player Evaluation Request" form and we will schedule your date.';
 
     const formTemplates = {
       general: `
@@ -1509,15 +1608,31 @@
           <textarea id="coach-experience" name="coach_experience" placeholder="Share your playing, coaching, training, or volunteer background." required minlength="20" maxlength="1000"></textarea>
         </div>
       `,
-      tryout: `
+      evaluation: `
+        <p style="margin:0 0 4px; font-size:0.95rem; line-height:1.5; opacity:0.85;">
+          <strong>Saturday, August 29 &middot; Grassland Heights Baptist Church</strong><br />
+          2316 Hillsboro Rd, Franklin, TN 37069. Choose a session below &mdash; spots are limited and we'll
+          confirm your player's time by email.
+        </p>
+        <fieldset class="field-group">
+          <legend>Preferred Session Time</legend>
+          <div class="checkbox-row">
+            <input id="evaluation-slot-9" name="session_time" type="radio" value="9:00 AM" required />
+            <label for="evaluation-slot-9">9:00 AM</label>
+          </div>
+          <div class="checkbox-row">
+            <input id="evaluation-slot-10" name="session_time" type="radio" value="10:00 AM" required />
+            <label for="evaluation-slot-10">10:00 AM</label>
+          </div>
+        </fieldset>
         <div class="form-grid">
           <div>
-            <label for="tryout-player-name">Player Name</label>
-            <input id="tryout-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
+            <label for="evaluation-player-name">Player Name</label>
+            <input id="evaluation-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
           </div>
           <div>
-            <label for="tryout-grade">Grade</label>
-            <select id="tryout-grade" name="grade" required>
+            <label for="evaluation-grade">Grade</label>
+            <select id="evaluation-grade" name="grade" required>
               <option value="" selected disabled>Select grade</option>
               <option value="3rd">3rd</option>
               <option value="4th">4th</option>
@@ -1533,51 +1648,73 @@
           </div>
         </div>
         <div>
-          <label for="tryout-parent-name">Parent / Guardian Name</label>
-          <input id="tryout-parent-name" name="parent_name" type="text" placeholder="Parent full name" required pattern="${namePattern}" title="Please enter a valid parent name using letters only." autocomplete="name" />
+          <label for="evaluation-parent-name">Parent / Guardian Name</label>
+          <input id="evaluation-parent-name" name="parent_name" type="text" placeholder="Parent full name" required pattern="${namePattern}" title="Please enter a valid parent name using letters only." autocomplete="name" />
         </div>
         <div>
-          <label for="tryout-parent-email">Parent Email</label>
-          <input id="tryout-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+          <label for="evaluation-parent-email">Parent Email</label>
+          <input id="evaluation-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
         </div>
         <div class="form-grid">
           <div>
-            <label for="tryout-phone">Parent Phone</label>
-            <input id="tryout-phone" name="phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+            <label for="evaluation-phone">Parent Phone</label>
+            <input id="evaluation-phone" name="phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
           </div>
           <div>
-            <label for="tryout-school">School</label>
-            <input id="tryout-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
+            <label for="evaluation-school">School</label>
+            <input id="evaluation-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
           </div>
         </div>
         <div class="form-grid">
           <div>
-            <label for="tryout-emergency-name">Emergency Contact Name</label>
-            <input id="tryout-emergency-name" name="emergency_contact_name" type="text" placeholder="Emergency contact full name" required pattern="${namePattern}" title="Please enter a valid emergency contact name using letters only." />
+            <label for="evaluation-emergency-name">Emergency Contact Name</label>
+            <input id="evaluation-emergency-name" name="emergency_contact_name" type="text" placeholder="Emergency contact full name" required pattern="${namePattern}" title="Please enter a valid emergency contact name using letters only." />
           </div>
           <div>
-            <label for="tryout-emergency-phone">Emergency Contact Phone</label>
-            <input id="tryout-emergency-phone" name="emergency_contact_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid emergency contact phone number." autocomplete="tel" />
+            <label for="evaluation-emergency-phone">Emergency Contact Phone</label>
+            <input id="evaluation-emergency-phone" name="emergency_contact_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid emergency contact phone number." autocomplete="tel" />
           </div>
         </div>
         <div>
-          <label for="tryout-highlight-link">Highlight Link</label>
-          <input id="tryout-highlight-link" name="highlight_link" type="url" placeholder="https://example.com/highlights" required pattern="https?://.+" title="Please enter a valid full URL starting with http:// or https://" inputmode="url" />
+          <label for="evaluation-highlight-link">Highlight Link (Optional)</label>
+          <input id="evaluation-highlight-link" name="highlight_link" type="url" placeholder="https://example.com/highlights" pattern="https?://.+" title="Please enter a valid full URL starting with http:// or https://" inputmode="url" />
         </div>
         <div>
-          <label for="tryout-medical">Medical Notes</label>
-          <textarea id="tryout-medical" name="medical_notes" placeholder="Allergies, asthma, injuries, medications, or anything coaches should know." required minlength="15" maxlength="1000"></textarea>
+          <label for="evaluation-experience">Years of Basketball Experience</label>
+          <input id="evaluation-experience" name="years_experience" type="number" min="0" max="15" step="1" placeholder="e.g. 3" required inputmode="numeric" title="Enter how many years the player has been playing basketball." />
+        </div>
+        <div>
+          <label for="evaluation-notes">Player Notes</label>
+          <textarea id="evaluation-notes" name="player_notes" placeholder="Share goals, strengths, and anything our coaches should know before evaluation." required minlength="15" maxlength="1000"></textarea>
         </div>
       `,
-      waiver: `
+      'academy-onboarding': `
+        <fieldset class="field-group">
+          <legend>Did you already complete an evaluation?</legend>
+          <div class="checkbox-row">
+            <input id="onboarding-eval-yes" name="evaluation_completed" type="radio" value="Yes" required />
+            <label for="onboarding-eval-yes">Yes</label>
+          </div>
+          <div class="checkbox-row">
+            <input id="onboarding-eval-no" name="evaluation_completed" type="radio" value="No" required />
+            <label for="onboarding-eval-no">No</label>
+          </div>
+        </fieldset>
+        <div id="onboarding-eval-date-wrap" style="display:none;">
+          <label for="onboarding-eval-date">If yes, which evaluation date?</label>
+          <input id="onboarding-eval-date" name="evaluation_date" type="date" max="${todayIso}" />
+        </div>
+        <div id="onboarding-eval-required-note" role="alert" style="display:none; color: #b42318; font-size: 0.95rem;">
+          ${evaluationGateMessage}
+        </div>
         <div class="form-grid">
           <div>
-            <label for="waiver-player-name">Player Name</label>
-            <input id="waiver-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
+            <label for="onboarding-player-name">Player Name</label>
+            <input id="onboarding-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
           </div>
           <div>
-            <label for="waiver-grade">Grade</label>
-            <select id="waiver-grade" name="grade" required>
+            <label for="onboarding-grade">Grade</label>
+            <select id="onboarding-grade" name="grade" required>
               <option value="" selected disabled>Select grade</option>
               <option value="3rd">3rd</option>
               <option value="4th">4th</option>
@@ -1594,41 +1731,82 @@
         </div>
         <div class="form-grid">
           <div>
-            <label for="waiver-dob">Date of Birth</label>
-            <input id="waiver-dob" name="dob" type="date" required />
+            <label for="onboarding-dob">Date of Birth</label>
+            <input id="onboarding-dob" name="dob" type="date" required max="${todayIso}" />
           </div>
           <div>
-            <label for="waiver-school">School</label>
-            <input id="waiver-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
+            <label for="onboarding-school">School</label>
+            <input id="onboarding-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
           </div>
         </div>
         <div>
-          <label for="waiver-parent-name">Parent / Guardian Name</label>
-          <input id="waiver-parent-name" name="parent_name" type="text" placeholder="Legal parent / guardian" required pattern="${namePattern}" title="Please enter a valid parent or guardian name using letters only." autocomplete="name" />
+          <label for="onboarding-parent-name">Parent / Guardian Name</label>
+          <input id="onboarding-parent-name" name="parent_name" type="text" placeholder="Legal parent / guardian" required pattern="${namePattern}" title="Please enter a valid parent or guardian name using letters only." autocomplete="name" />
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="onboarding-parent-email">Parent Email</label>
+            <input id="onboarding-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+          </div>
+          <div>
+            <label for="onboarding-parent-phone">Parent Phone</label>
+            <input id="onboarding-parent-phone" name="parent_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+          </div>
         </div>
         <div>
-          <label for="waiver-parent-email">Parent Email</label>
-          <input id="waiver-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
+          <label for="onboarding-address">Home Address</label>
+          <input id="onboarding-address" name="home_address" type="text" placeholder="Street, city, state, zip" required minlength="8" maxlength="160" />
+        </div>
+        <div class="form-grid">
+          <div>
+            <label for="onboarding-emergency-name">Emergency Contact Name</label>
+            <input id="onboarding-emergency-name" name="emergency_contact_name" type="text" placeholder="Emergency contact full name" required pattern="${namePattern}" title="Please enter a valid emergency contact name using letters only." />
+          </div>
+          <div>
+            <label for="onboarding-emergency-phone">Emergency Contact Phone</label>
+            <input id="onboarding-emergency-phone" name="emergency_contact_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid emergency contact phone number." autocomplete="tel" />
+          </div>
         </div>
         <div>
-          <label for="waiver-parent-phone">Parent Phone</label>
-          <input id="waiver-parent-phone" name="parent_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
-        </div>
-        <div class="checkbox-row">
-          <input id="waiver-risk" name="assumption_of_risk" type="checkbox" required />
-          <label for="waiver-risk">I acknowledge basketball activities involve inherent risk, including injury, and I accept those risks on behalf of my child.</label>
-        </div>
-        <div class="checkbox-row">
-          <input id="waiver-medical" name="medical_release" type="checkbox" required />
-          <label for="waiver-medical">I authorize emergency medical care if needed and confirm I will communicate any relevant health conditions.</label>
-        </div>
-        <div class="checkbox-row">
-          <input id="waiver-media" name="photo_video_release" type="checkbox" required />
-          <label for="waiver-media">I grant permission for Tennessee Saints to use photos or video of my child for team, website, and social media promotion.</label>
+          <label for="onboarding-medical">Medical Notes (Required)</label>
+          <textarea id="onboarding-medical" name="medical_notes" placeholder="List allergies, asthma, injuries, medications, and anything coaches should know." required minlength="15" maxlength="1000"></textarea>
         </div>
         <div>
-          <label for="waiver-signature">Parent / Guardian Signature</label>
-          <input id="waiver-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
+          <label for="onboarding-options">Seasonal Competition Interest</label>
+          <select id="onboarding-options" name="competition_interest" required>
+            <option value="" selected disabled>Select option</option>
+            <option value="Player Development only">Player Development only right now</option>
+            <option value="Player Development + Tournaments">Player Development + Tournaments</option>
+            <option value="Player Development + Leagues">Player Development + Leagues</option>
+            <option value="Player Development + Tournaments + Leagues">Player Development + Tournaments + Leagues</option>
+          </select>
+        </div>
+        <div class="checkbox-row">
+          <input id="onboarding-risk" name="assumption_of_risk" type="checkbox" required />
+          <label for="onboarding-risk">I acknowledge basketball activities involve inherent risk, including injury, and I accept those risks on behalf of my child.</label>
+        </div>
+        <div class="checkbox-row">
+          <input id="onboarding-medical-release" name="medical_release" type="checkbox" required />
+          <label for="onboarding-medical-release">I authorize emergency medical care if needed and confirm I have communicated relevant health conditions.</label>
+        </div>
+        <div class="checkbox-row">
+          <input id="onboarding-media" name="photo_video_release" type="checkbox" required />
+          <label for="onboarding-media">I grant permission for Tennessee Saints to use photos or video of my child for academy, website, and social media promotion.</label>
+        </div>
+        <div>
+          <label for="onboarding-payment">Payment Method</label>
+          <input id="onboarding-payment" name="payment_method" type="text" value="Venmo Business" readonly aria-readonly="true" aria-describedby="onboarding-payment-note" />
+          <p id="onboarding-payment-note" style="margin-top:8px; font-size:0.95rem; line-height:1.5; opacity:0.85;">
+            Tennessee Saints processes all academy payments through <strong>Venmo Business</strong>. After you submit this registration, we will email you the amount due and payment instructions.
+          </p>
+        </div>
+        <div class="checkbox-row">
+          <input id="onboarding-payment-ack" name="payment_acknowledgement" type="checkbox" required />
+          <label for="onboarding-payment-ack">I understand academy payments are made through Venmo Business, and my player's spot is confirmed once payment is received.</label>
+        </div>
+        <div>
+          <label for="onboarding-signature">Parent / Guardian Signature</label>
+          <input id="onboarding-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
         </div>
       `
     };
@@ -1636,12 +1814,96 @@
     function renderDynamicForm() {
       const selected = purposeSelect.value;
       dynamicFields.innerHTML = formTemplates[selected] || formTemplates.general;
+
+      if (selected === 'academy-onboarding') {
+        setupOnboardingEvaluationGate();
+      }
+    }
+
+    function setupOnboardingEvaluationGate() {
+      const yesRadio = document.getElementById('onboarding-eval-yes');
+      const noRadio = document.getElementById('onboarding-eval-no');
+      const evalDateWrap = document.getElementById('onboarding-eval-date-wrap');
+      const evalDateInput = document.getElementById('onboarding-eval-date');
+      const requiredNote = document.getElementById('onboarding-eval-required-note');
+
+      if (!yesRadio || !noRadio || !evalDateWrap || !evalDateInput || !requiredNote) {
+        return;
+      }
+
+      const syncGateState = () => {
+        if (yesRadio.checked) {
+          evalDateWrap.style.display = 'block';
+          requiredNote.style.display = 'none';
+          evalDateInput.required = true;
+          return;
+        }
+
+        evalDateWrap.style.display = 'none';
+        evalDateInput.required = false;
+        evalDateInput.value = '';
+
+        if (noRadio.checked) {
+          requiredNote.textContent = evaluationGateMessage;
+          requiredNote.style.display = 'block';
+        } else {
+          requiredNote.style.display = 'none';
+        }
+      };
+
+      yesRadio.addEventListener('change', syncGateState);
+      noRadio.addEventListener('change', syncGateState);
+      syncGateState();
     }
 
     purposeSelect.addEventListener('change', renderDynamicForm);
 
+    const formError = document.getElementById('form-error');
+
+    function showFormError(message) {
+      if (!formError) return;
+      formError.textContent = message ||
+        'Something went wrong sending your form. Please try again, or email us directly at info@tnsaints.com.';
+      formError.style.display = 'block';
+    }
+
+    function clearFormError() {
+      if (formError) formError.style.display = 'none';
+    }
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      clearFormError();
+
+      if (purposeSelect.value === 'academy-onboarding') {
+        const evalCompleted = form.querySelector('input[name="evaluation_completed"]:checked');
+        const evalDate = document.getElementById('onboarding-eval-date');
+        const requiredNote = document.getElementById('onboarding-eval-required-note');
+
+        // role="alert" on the note means assistive tech announces these without
+        // an alert() stealing focus from the form.
+        const showGateError = (message, focusTarget) => {
+          if (requiredNote) {
+            requiredNote.textContent = message;
+            requiredNote.style.display = 'block';
+          }
+          focusTarget?.focus();
+        };
+
+        if (!evalCompleted || evalCompleted.value !== 'Yes') {
+          showGateError(evaluationGateMessage, document.getElementById('onboarding-eval-yes'));
+          return;
+        }
+
+        if (!evalDate || !evalDate.value) {
+          showGateError('Please provide the completed evaluation date to continue registration.', evalDate);
+          return;
+        }
+
+        if (requiredNote) {
+          requiredNote.style.display = 'none';
+        }
+      }
 
       if (!form.checkValidity()) {
         form.reportValidity();
@@ -1667,10 +1929,10 @@
           form.reset();
           renderDynamicForm();
         } else {
-          alert('Something went wrong. Please try again or email us at info@tnsaints.com.');
+          showFormError();
         }
       } catch (err) {
-        alert('Something went wrong. Please try again or email us at info@tnsaints.com.');
+        showFormError();
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = originalText;
@@ -1808,6 +2070,36 @@
 
       detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
+
+    // --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. ---
+    (function initEventBanner() {
+      const banner = document.getElementById('event-banner');
+      const closeBtn = document.getElementById('event-banner-close');
+      const countdown = document.getElementById('event-banner-countdown');
+      if (!banner || !closeBtn || !countdown) return;
+
+      // 11:59:59 PM Central on 8/22/2026. Explicit offset so the cutoff is the
+      // same moment for every visitor regardless of their local timezone.
+      const deadline = new Date('2026-08-22T23:59:59-05:00');
+      const now = new Date();
+
+      if (now > deadline || sessionStorage.getItem('tns-eval-banner-dismissed') === '1') {
+        return;
+      }
+
+      const msLeft = deadline - now;
+      const daysLeft = Math.ceil(msLeft / 86400000);
+      countdown.textContent =
+        daysLeft > 1 ? `Register by Aug 22 — ${daysLeft} days left`
+                     : 'Registration closes tonight';
+
+      banner.classList.add('show');
+
+      closeBtn.addEventListener('click', () => {
+        banner.classList.remove('show');
+        sessionStorage.setItem('tns-eval-banner-dismissed', '1');
+      });
+    })();
   </script>
 </body>
 </html>
