@@ -13,6 +13,24 @@
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
+/**
+ * Logo is referenced by absolute URL rather than embedded.
+ *
+ * Data URIs are not an option — Gmail strips them from img src entirely. A
+ * hosted URL is the standard for transactional mail, with the tradeoff that
+ * clients which block remote images (Outlook desktop, mainly) show alt text
+ * instead. Both templates below are therefore built to read correctly with the
+ * image missing: the wordmark stays as live text, never baked into the image.
+ */
+const LOGO_URL = 'https://tnsaints.com/email-logo.png';
+
+function logoImg(size = 56) {
+  // Explicit width/height so blocking clients still reserve the right space,
+  // and border:0 to stop Outlook drawing a link border around it.
+  return `<img src="${LOGO_URL}" width="${size}" height="${size}" alt="Tennessee Saints"
+    style="display:block;border:0;outline:none;text-decoration:none;width:${size}px;height:${size}px;" />`;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -106,8 +124,13 @@ function alertHtml(env, data, result) {
 
   return `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;">
     <div style="background:${banner.bg};color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;">
-      <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">NEW EVALUATION REGISTRATION</div>
-      <div style="font-size:20px;font-weight:800;margin-top:2px;">${banner.text}</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(44)}</td>
+        <td style="vertical-align:middle;">
+          <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">NEW EVALUATION REGISTRATION</div>
+          <div style="font-size:20px;font-weight:800;margin-top:2px;">${banner.text}</div>
+        </td>
+      </tr></table>
     </div>
     <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;">
       <table style="border-collapse:collapse;font-size:14px;width:100%;">
@@ -144,7 +167,8 @@ function parentHtml(env, data, result) {
     : `<strong>${escapeHtml(data.player_name)} is registered</strong> for the ${escapeHtml(data.session_time)} session. We will follow up by email to confirm details before the date.`;
 
   return `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;">
-    <div style="background:#0b3a8d;color:#fff;padding:18px;border-radius:8px 8px 0 0;">
+    <div style="background:#0b3a8d;color:#fff;padding:18px;border-radius:8px 8px 0 0;text-align:center;">
+      <div style="margin:0 auto 10px;width:72px;">${logoImg(72)}</div>
       <div style="font-size:19px;font-weight:800;">Tennessee Saints Basketball Academy</div>
       <div style="opacity:.85;font-size:14px;margin-top:2px;">${escapeHtml(eventLabel)}</div>
     </div>
