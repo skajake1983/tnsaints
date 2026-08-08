@@ -12,7 +12,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tennessee Saints | Youth Basketball Academy</title>
-  <meta name="description" content="Tennessee Saints is a year-round youth basketball academy in Middle Tennessee focused on player development through CLA and SSG, plus faith, character, and leadership." />
+  <meta name="description" content="Tennessee Saints is a year-round youth basketball academy in Middle Tennessee. Game-like player development, weekly training, faith, character, and leadership." />
   <link rel="canonical" href="https://tnsaints.com/" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#0b3a8d" />
@@ -678,20 +678,29 @@
       color: rgba(255, 255, 255, 0.92);
     }
 
-    .footer-partner {
+    .footer-partners {
       flex-basis: 100%;
       width: 100%;
-      text-align: center;
       order: 5;
       margin-top: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem 2.25rem;
+      flex-wrap: wrap;
     }
 
+    .footer-partner {
+      display: block;
+      line-height: 0;
+    }
+
+    /* Partner marks are normalised by height, not width, so logos with very
+       different aspect ratios still read as one balanced row. */
     .footer-partner img {
       display: block;
-      width: 100%;
-      max-width: 760px;
-      height: auto;
-      margin: 0 auto;
+      height: 54px;
+      width: auto;
     }
 
     @media (max-width: 640px) {
@@ -706,9 +715,18 @@
         align-items: center;
       }
 
-      .footer-partner {
+      .footer-partners {
         order: 2;
         margin-top: 0.25rem;
+        gap: 1.25rem;
+      }
+
+      /* Narrow screens: stack and fit to width instead of forcing a fixed
+         height, which would squash the wider mark. */
+      .footer-partner img {
+        height: auto;
+        width: 100%;
+        max-width: 260px;
       }
 
       .footer-spotify {
@@ -1088,6 +1106,26 @@
       }
     }
 
+    /* Honeypot: off-screen rather than display:none, which some bots skip. */
+    .hp-field {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+
+    #turnstile-widget:not(:empty) { margin: 4px 0 16px; }
+
+    .availability-note {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--saints-blue-dark);
+      margin: 0 0 10px;
+    }
+
+    .availability-note .full { color: #b42318; }
+
     /* --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. --- */
     .event-banner {
       display: none;
@@ -1167,7 +1205,7 @@
         <span>9&ndash;11 AM &middot; Grassland Heights Baptist Church, Franklin</span>
         <span id="event-banner-countdown"></span>
       </div>
-      <a class="event-banner-cta" href="#contact">Register Now</a>
+      <a class="event-banner-cta" href="#contact" data-open-form="evaluation">Register Now</a>
       <button class="event-banner-close" id="event-banner-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
@@ -1225,7 +1263,7 @@
         <div class="hero-copy">
           <h2>Team over self.<br/>Character over stats.<br/>Christ over everything.</h2>
           <p>
-            Tennessee Saints is a year-round Christian youth basketball academy in Middle Tennessee. Our player development model uses a Constraints-Led Approach (CLA) and Small-Sided Games (SSG) to help athletes make better decisions, build confident skills, and compete with purpose. Players train weekly for a minimum of three hours with regular scrimmages, plus optional tournament and league play.
+            Tennessee Saints is a year-round Christian youth basketball academy in Middle Tennessee. We develop players in game-like situations instead of standing in lines running drills, so athletes learn to read the floor, make quick decisions, and play with confidence. Players train weekly for a minimum of three hours with regular scrimmages, plus optional tournament and league play.
           </p>
 
           <div class="hero-actions">
@@ -1348,7 +1386,8 @@
             <img src="brandon-turner.png" alt="Brandon Turner" loading="lazy" />
             <h4>Brandon Turner</h4>
             <p>No Hesitation Basketball / Player Development Partner</p>
-            <a href="https://www.nohesihoops.com/" target="_blank" rel="noopener noreferrer" class="leader-social" aria-label="No Hesi Hoops" onclick="event.stopPropagation()" style="background:#fff;padding:0;overflow:hidden;"><img src="no-hesi-hoops.png" alt="No Hesi Hoops" style="width:40px;height:40px;object-fit:contain;" /></a>
+            <!-- Dark badge: the NH mark uses a white "N", so it needs a dark ground to read. -->
+            <a href="https://www.nohesihoops.com/" target="_blank" rel="noopener noreferrer" class="leader-social" aria-label="No Hesitation Basketball" onclick="event.stopPropagation()" style="background:#111;padding:0;overflow:hidden;"><img src="no-hesitation-basketball.png" alt="No Hesitation Basketball" style="width:40px;height:40px;object-fit:contain;" /></a>
           </div>
         </div>
 
@@ -1433,10 +1472,13 @@
               <div>
                 <label for="form-purpose">Purpose</label>
                 <select id="form-purpose" name="purpose" required>
+                  <!-- Evaluation is first (and therefore the default) while
+                       registration is open. initDefaultPurpose() falls back to
+                       General Contact once the 8/22 deadline passes. -->
+                  <option value="evaluation">Free Player Evaluation Request</option>
                   <option value="general">General Contact</option>
                   <option value="player-interest">Academy Interest</option>
                   <option value="coaching-interest">Coaching Interest</option>
-                  <option value="evaluation">Free Player Evaluation Request</option>
                   <!-- Temporarily hidden pending revisions. The 'academy-onboarding' template
                        and its evaluation-gate logic below remain intact; re-enable by
                        restoring this option:
@@ -1446,6 +1488,16 @@
               </div>
 
               <div id="dynamic-form-fields"></div>
+
+              <!-- Honeypot. Positioned off-screen rather than display:none so
+                   naive bots still see a fillable field; any value means the
+                   submission was not typed by a person. -->
+              <div class="hp-field" aria-hidden="true">
+                <label for="hp-company">Company</label>
+                <input id="hp-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+              </div>
+
+              <div id="turnstile-widget"></div>
 
               <button class="btn btn-primary" type="submit">Submit Form</button>
               <p id="form-error" role="alert" style="display:none; color:#b42318; font-weight:600; margin-top:12px;"></p>
@@ -1459,7 +1511,7 @@
   <div class="modal-overlay" id="success-modal" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="success-modal-title">
       <h4 id="success-modal-title">Thanks for reaching out!</h4>
-      <p>Your message has been sent. We'll get back to you as soon as possible.</p>
+      <p id="success-modal-body">Your message has been sent. We'll get back to you as soon as possible.</p>
       <button class="btn btn-primary" type="button" id="close-success-modal">Close</button>
     </div>
   </div>
@@ -1480,7 +1532,10 @@
 
       <a class="footer-privacy" href="privacy-policy.html" style="font-size:0.85rem;opacity:0.7;">Privacy Policy</a>
 
-      <a class="footer-partner" href="https://cy-ql04.na1.hubspotlinks.com/Ctc/RG+113/cy-ql04/VWlLJ22mNbGTN46cmgsmSvxxW35KrPN5PHv67MJvQnv3qn9qW7Y8-PT6lZ3ppVNj10v7zr5gQW6YYHqn1TJjLMW45XSXq5fJ_K5W2Ndd784g1cdBW1NKmfy6D2wTSW8bwFXd4544PQW2nY3mF7zwpltVF2qVK7lKDbbW1vwq8M8DBPLfW24-05V44MPlRVrqj_C1qSbxcW2rHgWg77_JkVW38Yx7m4W-Rr8W14f0LC3X9FdVW7-LjKv1pd6NnW7YG-CR2lyLMwW1v0s7-8vtHy6W4yrS3N8Tp39hVcdRW24g4tcbW5Pm4p166KwrZW232ns0990DtSW1mSMmY2TSW0rW1XY0v_4FSrr4Mjn8K2xVD5vW2PLPtJ4YW5g3W23db9K8JvkBRf4hRlzn04" target="_blank" rel="noopener noreferrer"><img src="PGCTrustedPartner.jpg" alt="PGC Trusted Partner" loading="lazy" /></a>
+      <div class="footer-partners">
+        <a class="footer-partner" href="https://cy-ql04.na1.hubspotlinks.com/Ctc/RG+113/cy-ql04/VWlLJ22mNbGTN46cmgsmSvxxW35KrPN5PHv67MJvQnv3qn9qW7Y8-PT6lZ3ppVNj10v7zr5gQW6YYHqn1TJjLMW45XSXq5fJ_K5W2Ndd784g1cdBW1NKmfy6D2wTSW8bwFXd4544PQW2nY3mF7zwpltVF2qVK7lKDbbW1vwq8M8DBPLfW24-05V44MPlRVrqj_C1qSbxcW2rHgWg77_JkVW38Yx7m4W-Rr8W14f0LC3X9FdVW7-LjKv1pd6NnW7YG-CR2lyLMwW1v0s7-8vtHy6W4yrS3N8Tp39hVcdRW24g4tcbW5Pm4p166KwrZW232ns0990DtSW1mSMmY2TSW0rW1XY0v_4FSrr4Mjn8K2xVD5vW2PLPtJ4YW5g3W23db9K8JvkBRf4hRlzn04" target="_blank" rel="noopener noreferrer" aria-label="PGC Basketball Trusted Partner"><img src="PGCTrustedPartner.jpg" alt="PGC Trusted Partner" loading="lazy" /></a>
+        <a class="footer-partner" href="https://www.nohesihoops.com/" target="_blank" rel="noopener noreferrer" aria-label="No Hesitation Basketball"><img src="no-hesitation-basketball-full.png" alt="No Hesitation Basketball" loading="lazy" /></a>
+      </div>
     </div>
   </footer>
 
@@ -1495,6 +1550,16 @@
     const namePattern = "[A-Za-zÀ-ÿ' -]{2,60}";
     const schoolPattern = "[A-Za-z0-9À-ÿ'&., -]{2,80}";
     const locationPattern = "[A-Za-zÀ-ÿ0-9'., -]{2,80}";
+    // --- Registration API ----------------------------------------------------
+    // Empty string keeps evaluation requests on Formspree. Set both values at
+    // changeover time to move them onto the capacity-aware Worker endpoint:
+    //   REGISTRATION_API  = 'https://api.tnsaints.com'   (deployed Worker origin)
+    //   TURNSTILE_SITE_KEY = the Turnstile site key for tnsaints.com
+    // See worker/README.md.
+    const REGISTRATION_API = '';
+    const TURNSTILE_SITE_KEY = '';
+    const REGISTRATION_CLOSES_AT = new Date('2026-08-22T23:59:59-05:00');
+
     const todayIso = new Date().toISOString().slice(0, 10);
     const evaluationGateMessage = 'Registration requires a completed free evaluation first. Please submit the "Free Player Evaluation Request" form and we will schedule your date.';
 
@@ -1618,11 +1683,11 @@
           <legend>Preferred Session Time</legend>
           <div class="checkbox-row">
             <input id="evaluation-slot-9" name="session_time" type="radio" value="9:00 AM" required />
-            <label for="evaluation-slot-9">9:00 AM</label>
+            <label for="evaluation-slot-9">9:00 AM <span class="slot-remaining" data-slot="9:00 AM"></span></label>
           </div>
           <div class="checkbox-row">
             <input id="evaluation-slot-10" name="session_time" type="radio" value="10:00 AM" required />
-            <label for="evaluation-slot-10">10:00 AM</label>
+            <label for="evaluation-slot-10">10:00 AM <span class="slot-remaining" data-slot="10:00 AM"></span></label>
           </div>
         </fieldset>
         <div class="form-grid">
@@ -1686,6 +1751,29 @@
         <div>
           <label for="evaluation-notes">Player Notes</label>
           <textarea id="evaluation-notes" name="player_notes" placeholder="Share goals, strengths, and anything our coaches should know before evaluation." required minlength="15" maxlength="1000"></textarea>
+        </div>
+        <div>
+          <label for="evaluation-medical">Medical / Allergy Notes (Optional)</label>
+          <textarea id="evaluation-medical" name="medical_notes" placeholder="Allergies, asthma, injuries, or medications our coaches should know about on the day." maxlength="1000"></textarea>
+        </div>
+        <fieldset class="field-group">
+          <legend>Participation Acknowledgements</legend>
+          <div class="checkbox-row">
+            <input id="evaluation-risk" name="assumption_of_risk" type="checkbox" required />
+            <label for="evaluation-risk">I acknowledge that basketball activities involve inherent risk, including injury, and I accept those risks on behalf of my child.</label>
+          </div>
+          <div class="checkbox-row">
+            <input id="evaluation-medical-release" name="medical_release" type="checkbox" required />
+            <label for="evaluation-medical-release">I authorize Tennessee Saints to seek emergency medical care for my child if needed, and I confirm I have disclosed relevant health conditions above.</label>
+          </div>
+          <div class="checkbox-row">
+            <input id="evaluation-photo" name="photo_release" type="checkbox" />
+            <label for="evaluation-photo">Optional: I grant permission to use photos or video of my child for academy, website, and social media promotion.</label>
+          </div>
+        </fieldset>
+        <div>
+          <label for="evaluation-signature">Parent / Guardian Signature</label>
+          <input id="evaluation-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
         </div>
       `,
       'academy-onboarding': `
@@ -1811,12 +1899,56 @@
       `
     };
 
+    // Time the visitor spends on the form. A sub-3-second submission almost
+    // always means a script, not a parent filling in a child's details.
+    let formRenderedAt = Date.now();
+
     function renderDynamicForm() {
       const selected = purposeSelect.value;
       dynamicFields.innerHTML = formTemplates[selected] || formTemplates.general;
+      formRenderedAt = Date.now();
+      clearFormError();
 
       if (selected === 'academy-onboarding') {
         setupOnboardingEvaluationGate();
+      }
+
+      if (selected === 'evaluation') {
+        renderAvailability();
+      }
+    }
+
+    /**
+     * Live remaining-spot counts. Only meaningful once REGISTRATION_API is set —
+     * a static page has no way to know how many spots are left.
+     */
+    async function renderAvailability() {
+      if (!REGISTRATION_API) return;
+
+      const host = document.createElement('p');
+      host.className = 'availability-note';
+      host.textContent = 'Checking remaining spots…';
+      dynamicFields.prepend(host);
+
+      try {
+        const res = await fetch(`${REGISTRATION_API}/api/availability`);
+        const data = await res.json();
+        if (!data.ok) throw new Error('unavailable');
+
+        if (!data.registration_open) {
+          host.innerHTML = '<span class="full">Registration for August 29 has closed.</span> ' +
+            'Send us a note below and we will contact you about the next evaluation date.';
+          return;
+        }
+
+        host.innerHTML = data.sessions
+          .map((s) => s.full
+            ? `<span class="full">${s.session_time} — full (waiting list)</span>`
+            : `${s.session_time} — ${s.remaining} of ${s.capacity} spots left`)
+          .join(' &nbsp;·&nbsp; ');
+      } catch {
+        // Never block registration on the counter failing.
+        host.remove();
       }
     }
 
@@ -1916,20 +2048,13 @@
       submitBtn.textContent = 'Sending...';
 
       try {
-        const response = await fetch(form.action, {
-          method: 'POST',
-          body: new FormData(form),
-          headers: { 'Accept': 'application/json' }
-        });
+        const useApi = REGISTRATION_API && purposeSelect.value === 'evaluation';
+        const ok = useApi ? await submitToRegistrationApi() : await submitToFormspree();
 
-        if (response.ok) {
-          successModal.classList.add('show');
-          successModal.setAttribute('aria-hidden', 'false');
-          closeSuccessModalButton.focus();
+        if (ok) {
           form.reset();
           renderDynamicForm();
-        } else {
-          showFormError();
+          resetTurnstile();
         }
       } catch (err) {
         showFormError();
@@ -1938,6 +2063,100 @@
         submitBtn.textContent = originalText;
       }
     });
+
+    async function submitToFormspree() {
+      const response = await fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (!response.ok) {
+        showFormError();
+        return false;
+      }
+
+      openSuccessModal();
+      return true;
+    }
+
+    /**
+     * Capacity-aware path. The server decides confirmed vs. waitlist — this
+     * only reports the answer.
+     */
+    async function submitToRegistrationApi() {
+      const fd = new FormData(form);
+      const payload = {
+        session_time: fd.get('session_time') || '',
+        player_name: fd.get('player_name') || '',
+        grade: fd.get('grade') || '',
+        years_experience: fd.get('years_experience') || '',
+        parent_name: fd.get('parent_name') || '',
+        parent_email: fd.get('parent_email') || '',
+        phone: fd.get('phone') || '',
+        school: fd.get('school') || '',
+        emergency_contact_name: fd.get('emergency_contact_name') || '',
+        emergency_contact_phone: fd.get('emergency_contact_phone') || '',
+        highlight_link: fd.get('highlight_link') || '',
+        player_notes: fd.get('player_notes') || '',
+        medical_notes: fd.get('medical_notes') || '',
+        assumption_of_risk: fd.get('assumption_of_risk') === 'on',
+        medical_release: fd.get('medical_release') === 'on',
+        photo_release: fd.get('photo_release') === 'on',
+        signature: fd.get('signature') || '',
+        company: fd.get('company') || '',
+        elapsed_ms: Date.now() - formRenderedAt,
+        turnstile_token: currentTurnstileToken(),
+      };
+
+      const response = await fetch(`${REGISTRATION_API}/api/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        showFormError();
+        return false;
+      }
+
+      if (!response.ok || !data.ok) {
+        const detail = Array.isArray(data.errors) && data.errors.length
+          ? data.errors.join(' ')
+          : data.error;
+        showFormError(detail);
+        return false;
+      }
+
+      openSuccessModal(
+        data.status === 'waitlist' ? 'You are on the waiting list' : 'Your player is registered!',
+        data.message
+      );
+      return true;
+    }
+
+    function openSuccessModal(title, message) {
+      const titleEl = document.getElementById('success-modal-title');
+      const bodyEl = document.getElementById('success-modal-body');
+      if (title && titleEl) titleEl.textContent = title;
+      if (message && bodyEl) bodyEl.textContent = message;
+
+      successModal.classList.add('show');
+      successModal.setAttribute('aria-hidden', 'false');
+      closeSuccessModalButton.focus();
+    }
+
+    function currentTurnstileToken() {
+      const field = form.querySelector('[name="cf-turnstile-response"]');
+      return field ? field.value : '';
+    }
+
+    function resetTurnstile() {
+      if (window.turnstile && TURNSTILE_SITE_KEY) window.turnstile.reset();
+    }
 
     closeSuccessModalButton.addEventListener('click', () => {
       successModal.classList.remove('show');
@@ -2070,6 +2289,45 @@
 
       detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
+
+    /**
+     * Evaluation is the default choice while registration is open, so anyone
+     * arriving from the flyer lands on the form they came for. After the
+     * deadline it quietly reverts to General Contact.
+     */
+    function initDefaultPurpose() {
+      if (new Date() > REGISTRATION_CLOSES_AT) {
+        purposeSelect.value = 'general';
+        renderDynamicForm();
+      }
+    }
+
+    // Banner CTA (and any future link) opens a specific form directly.
+    document.querySelectorAll('[data-open-form]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const target = el.dataset.openForm;
+        if (formTemplates[target]) {
+          purposeSelect.value = target;
+          renderDynamicForm();
+        }
+      });
+    });
+
+    initDefaultPurpose();
+
+    // Turnstile only loads once a site key is configured, so the pre-changeover
+    // site makes no third-party request for it.
+    if (TURNSTILE_SITE_KEY) {
+      const widget = document.getElementById('turnstile-widget');
+      widget.className = 'cf-turnstile';
+      widget.dataset.sitekey = TURNSTILE_SITE_KEY;
+      widget.dataset.theme = 'light';
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      s.async = true;
+      s.defer = true;
+      document.head.appendChild(s);
+    }
 
     // --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. ---
     (function initEventBanner() {

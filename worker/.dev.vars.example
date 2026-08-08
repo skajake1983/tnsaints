@@ -1,0 +1,23 @@
+# Copy to .dev.vars (gitignored) for local development.
+# These are LOCAL-ONLY values. Production secrets are set with `wrangler secret put`.
+
+# Cloudflare Turnstile secret key. For local testing Cloudflare publishes
+# dummy keys that always pass:
+#   site key:   1x00000000000000000000AA
+#   secret key: 1x0000000000000000000000000000000AA
+# https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+
+# Bearer token protecting GET /api/admin/registrations.
+# Generate a real one for production: openssl rand -hex 32
+ADMIN_TOKEN=local-dev-admin-token
+
+# Salt for hashing visitor IPs before they touch the database.
+# Generate a real one for production: openssl rand -hex 32
+IP_HASH_SALT=local-dev-salt
+
+# Resend API key for registration emails (starts with re_).
+# Get it from https://resend.com/api-keys — "Sending access" is enough.
+# Leave this unset to test registration without sending mail; the Worker
+# logs loudly and still saves every registration.
+RESEND_API_KEY=re_replace_me
