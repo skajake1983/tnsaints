@@ -21,3 +21,11 @@ IP_HASH_SALT=local-dev-salt
 # Leave this unset to test registration without sending mail; the Worker
 # logs loudly and still saves every registration.
 RESEND_API_KEY=re_replace_me
+
+# Local send guard. There is no Resend test mode, so a real key here means
+# local runs send REAL email against the shared 100/day free-plan budget —
+# and the acceptance suite alone would fire ~78 of them.
+#
+# 0 disables sending entirely while leaving every other code path intact.
+# Raise it temporarily (e.g. 4) when you deliberately want to see a real email.
+EMAIL_DAILY_LIMIT=0
