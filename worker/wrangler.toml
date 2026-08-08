@@ -23,7 +23,12 @@ ALLOWED_ORIGINS = "https://tnsaints.com,https://www.tnsaints.com"
 # Email notifications (Resend). Sending happens after the spot is committed,
 # so an email outage never costs anyone their registration.
 NOTIFY_EMAIL_TO = "info@tnsaints.com"
-NOTIFY_EMAIL_FROM = "Tennessee Saints <noreply@tnsaints.com>"
+# Sends from a subdomain, not the root. Two reasons: it keeps automated
+# sending reputation away from the Microsoft 365 mail on tnsaints.com, and it
+# stops the academy alert from looking like same-domain spoofing to M365 (the
+# alert is addressed to info@tnsaints.com). Recipients see "Tennessee Saints"
+# as the sender name, and replies route to NOTIFY_EMAIL_TO.
+NOTIFY_EMAIL_FROM = "Tennessee Saints <noreply@mail.tnsaints.com>"
 SEND_PARENT_CONFIRMATION = "true"
 
 # Resend free plan sends at most 100 emails/day. Two per registration means a
