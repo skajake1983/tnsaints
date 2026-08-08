@@ -1551,13 +1551,17 @@
     const schoolPattern = "[A-Za-z0-9À-ÿ'&., -]{2,80}";
     const locationPattern = "[A-Za-zÀ-ÿ0-9'., -]{2,80}";
     // --- Registration API ----------------------------------------------------
-    // Empty string keeps evaluation requests on Formspree. Set both values at
-    // changeover time to move them onto the capacity-aware Worker endpoint:
-    //   REGISTRATION_API  = 'https://api.tnsaints.com'   (deployed Worker origin)
-    //   TURNSTILE_SITE_KEY = the Turnstile site key for tnsaints.com
-    // See worker/README.md.
-    const REGISTRATION_API = '';
-    const TURNSTILE_SITE_KEY = '';
+    // Evaluation requests go to the capacity-aware Worker; every other form
+    // purpose still uses Formspree.
+    //
+    // ROLLBACK: set REGISTRATION_API back to '' and push. The form falls
+    // straight back to Formspree — no DNS change, no data loss, live in about
+    // a minute. See worker/README.md.
+    //
+    // The Turnstile SITE key is public by design; it is meant to be readable
+    // here. The matching SECRET key lives only in the Worker.
+    const REGISTRATION_API = 'https://api.tnsaints.com';
+    const TURNSTILE_SITE_KEY = '0x4AAAAAAEKmJntXjTbt2yuF';
     const REGISTRATION_CLOSES_AT = new Date('2026-08-22T23:59:59-05:00');
 
     const todayIso = new Date().toISOString().slice(0, 10);
