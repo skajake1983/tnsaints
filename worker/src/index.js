@@ -23,6 +23,9 @@ import {
   isRateLimited,
 } from './registration.js';
 
+/** Generous ceiling for a registration payload, which runs about 2 KB. */
+const MAX_BODY_BYTES = 16 * 1024;
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -91,6 +94,14 @@ async function handleRegister(request, env, ctx, cors) {
       cors,
       { registration_open: false }
     );
+  }
+
+  // A real registration is ~2 KB. Refuse anything wildly larger before
+  // parsing it, so a junk payload cannot make the Worker buffer megabytes of
+  // JSON just to reject it.
+  const declaredLength = Number(request.headers.get('Content-Length') || 0);
+  if (declaredLength > MAX_BODY_BYTES) {
+    return errorResponse('That submission was too large.', 413, cors);
   }
 
   let body;
@@ -187,7 +198,7 @@ async function handleAdminExport(request, env, cors) {
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
-  if (!env.ADMIN_TOKEN || !timingSafeEqual(token, env.ADMIN_TOKEN)) {
+  if (!env.ADMIN_TOKEN || !(await verifyAdminToken(token, env.ADMIN_TOKEN))) {
     return errorResponse('Unauthorized', 401, cors);
   }
 
@@ -221,14 +232,20 @@ async function handleAdminExport(request, env, cors) {
 }
 
 /**
- * Constant-time-ish comparison so the admin token cannot be guessed by
- * measuring how quickly a mismatch is rejected.
+ * Constant-time admin token comparison.
+ *
+ * Both values are hashed to a fixed 32 bytes first. Comparing the raw strings
+ * would have to bail out early when the lengths differ, and that early return
+ * is itself measurable — it leaks the length of the real token. Hashing makes
+ * every comparison the same size, so timing reveals nothing.
  */
-function timingSafeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
+async function verifyAdminToken(provided, expected) {
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(provided)),
+    crypto.subtle.digest('SHA-256', enc.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 function toCsv(rows) {

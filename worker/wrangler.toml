@@ -1,6 +1,6 @@
 name = "tnsaints"
 main = "src/index.js"
-compatibility_date = "2026-08-07"
+compatibility_date = "2026-08-08"
 
 # ---------------------------------------------------------------------------
 # Non-secret configuration. Everything that decides who gets a spot lives here
@@ -50,10 +50,14 @@ RATE_LIMIT_WINDOW_MINUTES = "10"
 binding = "DB"
 database_name = "tnsaints"
 # Filled in by `npm run db:create` — see README step 2.
-database_id = "REPLACE_ME_AFTER_DB_CREATE"
+database_id = "8f449ac8-d165-4db1-b267-b10e6d55d9b0"
 
 [observability]
 enabled = true
+# Full sampling: this Worker handles a few hundred requests across the whole
+# campaign, so there is no volume worth trading away, and a missing trace on
+# the one failed registration is exactly the trace we would want.
+head_sampling_rate = 1
 
 # ---------------------------------------------------------------------------
 # Static site hosting. Left commented until the changeover so this Worker can
