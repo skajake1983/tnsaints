@@ -29,3 +29,27 @@ RESEND_API_KEY=re_replace_me
 # 0 disables sending entirely while leaving every other code path intact.
 # Raise it temporarily (e.g. 4) when you deliberately want to see a real email.
 EMAIL_DAILY_LIMIT=0
+
+# --- Staff admin surface (local only) --------------------------------------
+#
+# In production the admin dashboard is a separate hostname, admin.tnsaints.com,
+# gated by Cloudflare Access. Neither exists in front of `wrangler dev`, and
+# wrangler cannot simulate a second hostname either — it reports the first
+# entry in `routes` regardless of the Host header you send, and --host does not
+# change that in local mode.
+#
+# So locally the same dashboard is reachable under a /__admin path prefix:
+#   http://127.0.0.1:8787/__admin/         -> roster
+#   http://127.0.0.1:8787/__admin/whoami   -> role and what it can see
+#
+# Setting DEV_ADMIN_EMAIL is what opens that prefix and signs you in as that
+# person. The email must exist in the `staff` table or you are refused with
+# 403, exactly as in production — the authorization path is not bypassed, only
+# the authentication one.
+#
+# Two independent things keep this out of production:
+#   1. .dev.vars is gitignored and `wrangler deploy` does not upload it, so
+#      DEV_ADMIN_EMAIL simply is not set there.
+#   2. The bypass refuses outright whenever ACCESS_AUD is set, which it is in
+#      any real deployment.
+DEV_ADMIN_EMAIL=you@example.com

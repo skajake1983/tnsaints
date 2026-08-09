@@ -16,6 +16,8 @@ import { corsHeaders, json, errorResponse, hashIp, clientIp, toCsv } from './htt
 import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
+import { handleAdmin } from './admin/router.js';
+import { audit } from './auth/staff.js';
 import {
   getAvailability,
   registrationWindow,
@@ -31,6 +33,25 @@ const MAX_BODY_BYTES = 16 * 1024;
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Hostname dispatch happens before anything else, including CORS. The two
+    // surfaces have opposite defaults — the public API is open to allow-listed
+    // origins, the admin host is closed to everyone who is not staff — and
+    // mixing their routing is how a public path ends up on the private host or
+    // an admin path ends up unauthenticated. See admin/router.js.
+    const admin = adminRequest(url, env);
+    if (admin.admin) {
+      try {
+        return await handleAdmin(request, env, ctx, admin.path);
+      } catch (err) {
+        console.error('Unhandled admin error:', err?.stack || err?.message || err);
+        return new Response('Something went wrong. Try again, or text Jacob.', {
+          status: 500,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+        });
+      }
+    }
+
     const cors = corsHeaders(request, env);
 
     if (request.method === 'OPTIONS') {
@@ -85,6 +106,43 @@ export default {
     ctx.waitUntil(sendRosterDigest(env, { reason: event.cron || 'scheduled' }));
   },
 };
+
+/** Local-development-only prefix — see adminRequest(). */
+const DEV_ADMIN_PREFIX = '/__admin';
+
+/**
+ * Decide whether a request belongs to the staff surface, and what path it is
+ * asking for.
+ *
+ * In production this is purely a hostname test. ADMIN_HOSTNAME unset means the
+ * admin surface does not exist at all, which is the safe direction for a
+ * misconfiguration.
+ *
+ * Local development needs a second door, because `wrangler dev` does not
+ * simulate multiple hostnames: whatever Host header you send, the Worker sees
+ * the first entry in `routes` — verified, not assumed, and `--host` does not
+ * change it in local mode. Without a second door the admin surface could only
+ * ever be exercised for the first time in production, on a deadline, against
+ * real children's data.
+ *
+ * That door is a path prefix that only opens when DEV_ADMIN_EMAIL is set.
+ * DEV_ADMIN_EMAIL lives only in .dev.vars, which is gitignored and is not
+ * uploaded by `wrangler deploy` — so in production this branch is unreachable
+ * and /__admin is just another 404 from the public router.
+ */
+function adminRequest(url, env) {
+  const configured = String(env.ADMIN_HOSTNAME || '').trim().toLowerCase();
+
+  if (configured && url.hostname.toLowerCase() === configured) {
+    return { admin: true, path: url.pathname };
+  }
+
+  if (env.DEV_ADMIN_EMAIL && url.pathname.startsWith(DEV_ADMIN_PREFIX)) {
+    return { admin: true, path: url.pathname.slice(DEV_ADMIN_PREFIX.length) || '/' };
+  }
+
+  return { admin: false, path: url.pathname };
+}
 
 /**
  * Public session status.

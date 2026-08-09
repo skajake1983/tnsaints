@@ -13,9 +13,15 @@
     "db:init:remote": "wrangler d1 execute tnsaints --remote --file=./schema.sql",
     "db:dump:local": "wrangler d1 execute tnsaints --local --command=\"SELECT * FROM registrations ORDER BY id\"",
     "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM registrations; DELETE FROM email_budget;\"",
-    "test:local": "npm run db:reset:local && python tests/test_acceptance.py && npm run db:reset:local && python tests/test_cancellation.py && npm run db:reset:local && python tests/test_concurrency.py && npm run db:reset:local"
+    "staff:list": "wrangler d1 execute tnsaints --remote --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
+    "staff:list:local": "wrangler d1 execute tnsaints --local --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
+    "audit:tail": "wrangler d1 execute tnsaints --remote --command=\"SELECT at, actor, action, subject_type, subject_id FROM audit_log ORDER BY id DESC LIMIT 40\"",
+    "test:local": "npm run db:reset:local && python tests/test_acceptance.py && npm run db:reset:local && python tests/test_cancellation.py && npm run db:reset:local && python tests/test_concurrency.py && npm run db:reset:local && python tests/test_admin_auth.py && npm run db:reset:local"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "jose": "6.2.8"
   }
 }

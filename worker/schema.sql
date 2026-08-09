@@ -108,3 +108,58 @@ CREATE TABLE IF NOT EXISTS email_budget (
 -- Backs the per-IP rate limit lookup.
 CREATE INDEX IF NOT EXISTS idx_registrations_rate
   ON registrations (ip_hash, created_at);
+
+-- ---------------------------------------------------------------------------
+-- Staff and authorization (Phase A)
+--
+-- Cloudflare Access answers "may this human come through the door". This table
+-- answers "what may they do once inside". Keeping those separate matters for
+-- one concrete reason: Brandon Turner has no @tnsaints.com mailbox and arrives
+-- through One-time PIN, which carries no identity-provider group claims at
+-- all. Any design that leans on group claims for authorization breaks for
+-- exactly the person it needs to work for.
+--
+-- The second reason is containment. A signed-in email that is absent here, or
+-- has active = 0, gets 403 even though Access admitted it. That is the control
+-- that survives someone widening the Access policy to "anyone with an
+-- @tnsaints.com address" without thinking it through.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS staff (
+  -- Lowercased, trimmed. The JWT email claim is normalised the same way before
+  -- lookup, so casing in the identity provider cannot lock someone out.
+  email_norm   TEXT    PRIMARY KEY,
+  display_name TEXT    NOT NULL,
+  -- How this person is credited to parents: "Coach Turner". Stored rather than
+  -- derived, because "Coach " + surname is wrong often enough to matter and a
+  -- parent-facing label is not something to guess at.
+  author_label TEXT    NOT NULL,
+  role         TEXT    NOT NULL CHECK (role IN ('admin', 'coach', 'viewer')),
+  -- Soft revocation. Deleting the row would orphan authored notes; this keeps
+  -- attribution intact while ending access immediately.
+  active       INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at   TEXT    NOT NULL,
+  updated_at   TEXT    NOT NULL
+);
+
+-- ---------------------------------------------------------------------------
+-- Audit trail.
+--
+-- detail holds JSON of identifiers only — never the values being looked at. An
+-- audit log that records what a medical note said has copied the sensitive data
+-- into a second, less-guarded place, which defeats the point of logging the
+-- access in the first place.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  at           TEXT    NOT NULL,
+  -- The authenticated principal: an email, or 'token:automation' for the
+  -- ADMIN_TOKEN runbook path, which has no human identity behind it.
+  actor        TEXT    NOT NULL,
+  action       TEXT    NOT NULL,
+  subject_type TEXT,
+  subject_id   TEXT,
+  detail       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log (at);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log (actor, at);

@@ -7,8 +7,16 @@ compatibility_date = "2026-08-08"
 # custom_domain = true means the Worker IS the origin (a plain route would
 # expect a separate origin server behind it). Cloudflare creates the DNS record
 # and provisions the certificate on deploy, because it already runs this zone.
+#
+# admin.tnsaints.com is the same Worker on a second hostname, not a second
+# deployment. The split exists so that Cloudflare Access can gate the whole
+# hostname rather than a path list: a path-scoped policy on api.tnsaints.com
+# would have to keep /api/register public, and every admin path added later
+# would be public until someone remembered to extend the rule. It also means a
+# broken Access policy takes down the dashboard, never parent registration.
 routes = [
-  { pattern = "api.tnsaints.com", custom_domain = true }
+  { pattern = "api.tnsaints.com", custom_domain = true },
+  { pattern = "admin.tnsaints.com", custom_domain = true }
 ]
 
 # One canonical hostname. Declaring these explicitly rather than letting the
@@ -39,6 +47,24 @@ ALLOWED_GRADES = "4th,5th,6th"
 REGISTRATION_CLOSES_AT = "2026-08-22T23:59:59-05:00"
 
 ALLOWED_ORIGINS = "https://tnsaints.com,https://www.tnsaints.com"
+
+# ---------------------------------------------------------------------------
+# Staff admin surface.
+#
+# ADMIN_HOSTNAME decides which requests get the admin router. Locally it is
+# overridden to "localhost" in .dev.vars, so http://localhost:8787 is the
+# dashboard while http://127.0.0.1:8787 stays the public API — two hostnames on
+# one wrangler dev port, and the test suites (which use 127.0.0.1) are
+# unaffected.
+#
+# ACCESS_AUD is the Application Audience tag from the Cloudflare Access app.
+# It is not a secret, but it IS load-bearing: without it, a token minted for
+# any other Access application in this account would verify here, since they
+# all share the same team signing keys.
+# ---------------------------------------------------------------------------
+ADMIN_HOSTNAME = "admin.tnsaints.com"
+ACCESS_TEAM_DOMAIN = "tnsaints.cloudflareaccess.com"
+ACCESS_AUD = ""
 
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links
