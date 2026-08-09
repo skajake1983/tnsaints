@@ -16,19 +16,31 @@
   <link rel="canonical" href="https://tnsaints.com/" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#0b3a8d" />
-  <meta property="og:title" content="Tennessee Saints | Youth Basketball Academy" />
-  <meta property="og:description" content="Year-round youth basketball academy in Middle Tennessee focused on player development, weekly training, and competitive opportunities." />
-  <meta property="og:image" content="https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png" />
-  <meta property="og:image:alt" content="Tennessee Saints logo" />
+  <!-- CAMPAIGN VALUES — revert after 8/29/2026 to the evergreen versions:
+       og:title       Tennessee Saints | Youth Basketball Academy
+       og:description Year-round Christian youth basketball academy in Middle
+                      Tennessee. We develop the whole player - mentally,
+                      physically, and spiritually. -->
+  <meta property="og:title" content="Free Academy Evaluation — Sat, Aug 29 | Tennessee Saints" />
+  <meta property="og:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th &amp; 5th grade, spots are limited, register by 8/22. A year-round Christian academy developing the whole player — mentally, physically, and spiritually." />
+  <!-- 1200x630 as Facebook and LinkedIn expect. The old value was a 500x500
+       transparent PNG of the logo, which they letterbox and composite onto a
+       flat colour — so every shared link showed a boxed logo instead of the
+       event. This is the single highest-leverage thing for spreading the word,
+       because most sharing is people pasting a URL, not clicking a button. -->
+  <meta property="og:image" content="https://tnsaints.com/social-card.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 22 at tnsaints.com." />
   <meta property="og:url" content="https://tnsaints.com/" />
   <meta property="og:site_name" content="Tennessee Saints" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Tennessee Saints | Youth Basketball Academy" />
-  <meta name="twitter:description" content="Year-round youth basketball academy in Middle Tennessee focused on player development, weekly training, and competitive opportunities." />
-  <meta name="twitter:image" content="https://tnsaints.com/Saints%20Logo%20Updated%20v2_transparent.png" />
-  <meta name="twitter:image:alt" content="Tennessee Saints logo" />
+  <meta name="twitter:title" content="Free Academy Evaluation — Sat, Aug 29 | Tennessee Saints" />
+  <meta name="twitter:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th &amp; 5th grade, spots are limited, register by 8/22." />
+  <meta name="twitter:image" content="https://tnsaints.com/social-card.jpg" />
+  <meta name="twitter:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 22 at tnsaints.com." />
   <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
   <link rel="apple-touch-icon" href="Saints%20Logo%20Updated%20v2_transparent.png" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
@@ -830,6 +842,53 @@
         max-width: 260px;
       }
     }
+
+    .share-block {
+      margin: 1.1rem 0;
+      padding: 1rem;
+      background: var(--saints-light);
+      border-radius: 10px;
+      text-align: left;
+    }
+
+    .share-block strong {
+      display: block;
+      color: var(--saints-blue-dark);
+      margin-bottom: 2px;
+    }
+
+    .share-block p {
+      margin: 0 0 0.8rem;
+      font-size: 0.9rem;
+      color: #536277;
+    }
+
+    .share-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .share-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .share-fb { background: #1877f2; color: #fff; }
+    .share-copy { background: var(--saints-blue); color: #fff; }
+    .share-dl { background: var(--saints-gold); color: var(--saints-blue-dark); }
+    .share-btn:hover { filter: brightness(1.08); }
+    .share-fb:hover, .share-copy:hover { color: #fff; }
 
     .modal-overlay {
       position: fixed;
@@ -1770,6 +1829,27 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="success-modal-title">
       <h4 id="success-modal-title">Thanks for reaching out!</h4>
       <p id="success-modal-body">Your message has been sent. We'll get back to you as soon as possible.</p>
+
+      <!-- Shown only after an evaluation registration. This is the moment a
+           family is most willing to tell someone else — asking here converts
+           far better than a share button parked in the header, which people
+           scroll past without ever being prompted. -->
+      <div class="share-block" id="share-block" hidden>
+        <strong>Know another family who'd love this?</strong>
+        <p>Spots are limited, so the fastest way to help is to pass it along.</p>
+        <div class="share-actions">
+          <a class="share-btn share-fb" id="share-facebook" href="#" target="_blank" rel="noopener noreferrer">
+            <i class="fab fa-facebook-f" aria-hidden="true"></i> Share on Facebook
+          </a>
+          <button class="share-btn share-copy" type="button" id="share-copy">
+            <i class="fas fa-link" aria-hidden="true"></i> <span id="share-copy-label">Copy link</span>
+          </button>
+          <a class="share-btn share-dl" href="tnsaints-evaluation-flyer.jpg" download>
+            <i class="fas fa-download" aria-hidden="true"></i> Download flyer
+          </a>
+        </div>
+      </div>
+
       <button class="btn btn-primary" type="button" id="close-success-modal">Close</button>
     </div>
   </div>
@@ -2466,21 +2546,59 @@
 
       openSuccessModal(
         data.status === 'waitlist' ? 'You are on the waiting list' : 'Your player is registered!',
-        data.message
+        data.message,
+        { share: true }
       );
       return true;
     }
 
-    function openSuccessModal(title, message) {
+    function openSuccessModal(title, message, { share = false } = {}) {
       const titleEl = document.getElementById('success-modal-title');
       const bodyEl = document.getElementById('success-modal-body');
       if (title && titleEl) titleEl.textContent = title;
       if (message && bodyEl) bodyEl.textContent = message;
 
+      // Only ask an evaluation registrant to share. Prompting after a general
+      // contact message would be asking a favour of someone still waiting on
+      // an answer to their question.
+      const shareBlock = document.getElementById('share-block');
+      if (shareBlock) shareBlock.hidden = !share;
+
       successModal.classList.add('show');
       successModal.setAttribute('aria-hidden', 'false');
       closeSuccessModalButton.focus();
     }
+
+    // --- Sharing -------------------------------------------------------------
+    // Facebook's sharer takes a URL, never an image: what appears is whatever
+    // the og: tags on that URL declare. That is why the og:image is a purpose-
+    // built 1200x630 card rather than the logo. The flyer download is here for
+    // people posting to Instagram or a group chat, where an image is the point.
+    (function initShare() {
+      const SHARE_URL = 'https://tnsaints.com/';
+      const fb = document.getElementById('share-facebook');
+      const copyBtn = document.getElementById('share-copy');
+      const copyLabel = document.getElementById('share-copy-label');
+
+      if (fb) {
+        fb.href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(SHARE_URL);
+      }
+
+      if (copyBtn && copyLabel) {
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(SHARE_URL);
+            copyLabel.textContent = 'Link copied';
+          } catch {
+            // Clipboard API needs a secure context and permission; fall back to
+            // selecting the text so the visitor can copy it by hand.
+            window.prompt('Copy this link:', SHARE_URL);
+            return;
+          }
+          setTimeout(() => { copyLabel.textContent = 'Copy link'; }, 2200);
+        });
+      }
+    })();
 
     function currentTurnstileToken() {
       const field = form.querySelector('[name="cf-turnstile-response"]');

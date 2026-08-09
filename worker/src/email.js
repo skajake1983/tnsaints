@@ -181,6 +181,24 @@ function parentHtml(env, data, result) {
         ${row('Session', data.session_time)}
         ${row('Location', 'Grassland Heights Baptist Church, 2316 Hillsboro Rd, Franklin, TN 37069')}
       </table>
+
+      <!-- Asked here because a family that just registered is the most likely
+           person in the world to tell another family. Links rather than an
+           attachment: attachments trip spam filters and nobody forwards them. -->
+      <div style="background:#f3f5f9;border-radius:10px;padding:14px 16px;margin:18px 0;">
+        <strong style="color:#06255c;">Know another family who'd love this?</strong>
+        <p style="margin:4px 0 12px;font-size:14px;color:#536277;">
+          Spots are limited, so the fastest way to help is to pass it along.
+        </p>
+        <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Ftnsaints.com%2F"
+           style="display:inline-block;background:#1877f2;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Share on Facebook</a>
+        <a href="https://tnsaints.com/tnsaints-evaluation-flyer.jpg"
+           style="display:inline-block;background:#f5cf00;color:#06255c;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Download the flyer</a>
+        <p style="margin:8px 0 0;font-size:13px;color:#536277;">
+          Or just send them this link: <a href="https://tnsaints.com/" style="color:#0b3a8d;">tnsaints.com</a>
+        </p>
+      </div>
+
       <p style="color:#536277;font-size:13px;margin-bottom:0;">
         Questions? Just reply to this email or reach us at info@tnsaints.com.<br />
         Team over self. Character over stats. Christ over everything.
