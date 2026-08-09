@@ -119,6 +119,26 @@ function row(label, value) {
   </tr>`;
 }
 
+/**
+ * Same as row() but the value is trusted markup rather than escaped text.
+ * Only for values built in this file — never for anything a visitor supplied.
+ */
+function rowHtml(label, html) {
+  return `<tr>
+    <td style="padding:6px 12px 6px 0;color:#536277;vertical-align:top;white-space:nowrap;">${escapeHtml(label)}</td>
+    <td style="padding:6px 0;color:#13233d;">${html}</td>
+  </tr>`;
+}
+
+const VENUE = 'Grassland Heights Baptist Church, 2316 Hillsboro Rd, Franklin, TN 37069';
+
+// Google's documented Maps URL scheme: opens the native app on a phone and the
+// web map on a desktop. This is the link a parent taps on Saturday morning, so
+// it needs to hand off straight to turn-by-turn rather than to a search page.
+const VENUE_MAP_URL =
+  'https://www.google.com/maps/search/?api=1&query=' +
+  encodeURIComponent(VENUE);
+
 function alertHtml(env, data, result) {
   const isWaitlist = result.status === 'waitlist';
   const banner = isWaitlist
@@ -180,7 +200,9 @@ function parentHtml(env, data, result) {
       <table style="border-collapse:collapse;font-size:14px;margin:14px 0;">
         ${row('Session', data.session_time)}
         ${row('Grade', `${data.grade} (this evaluation is open to 4th–6th grade)`)}
-        ${row('Location', 'Grassland Heights Baptist Church, 2316 Hillsboro Rd, Franklin, TN 37069')}
+        ${rowHtml('Location', `<strong>Grassland Heights Baptist Church</strong><br />
+          <a href="${VENUE_MAP_URL}" style="color:#0b3a8d;">2316 Hillsboro Rd, Franklin, TN 37069</a>
+          <span style="color:#536277;">&mdash; tap for directions</span>`)}
       </table>
 
       <!-- Asked here because a family that just registered is the most likely
