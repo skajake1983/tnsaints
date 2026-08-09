@@ -20,6 +20,8 @@ Everything below is decided on the server. The browser is untrusted input.
 | Required acknowledgements | `CHECK (assumption_of_risk = 1)` in the schema |
 | Abuse throttling | 3 registrations per IP hash per 10 minutes |
 | Email alert on every signup | `sendRegistrationEmails()` via Resend |
+| Self-service cancellation | 32-byte token per registration, `cancel.html` |
+| Waitlist promoted in signup order | `promoteFirstWaitlisted()` on cancel |
 
 Capacity is **never** a stored counter. It is always `COUNT(*)` of confirmed
 rows, so deleting a bogus registration reopens that spot automatically.
@@ -29,9 +31,17 @@ rows, so deleting a bogus registration reopens that spot automatically.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | liveness |
-| GET | `/api/availability` | remaining spots per session |
+| GET | `/api/availability` | open/full per session — never exact counts |
 | POST | `/api/register` | claim a spot or join the waitlist |
+| GET | `/api/cancel/lookup?t=` | read-only; what a cancel link resolves to |
+| POST | `/api/cancel` | release a spot, promote the next in line |
 | GET | `/api/admin/registrations` | roster JSON (`?format=csv` for CSV), Bearer token |
+
+**The GET/POST split on cancellation is load-bearing.** Mail scanners such as
+Outlook Safe Links fetch every URL in an inbound message. If a click were what
+cancelled a registration, those scanners would silently cancel families the
+moment the email arrived. Lookup is read-only; the mutation is a POST the
+visitor triggers from the page.
 
 ## Local development
 
@@ -152,24 +162,39 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   "https://api.tnsaints.com/api/admin/registrations?format=csv" -o roster.csv
 ```
 
-**Someone cancels — reopen their spot:**
+**Someone cancels.** Normally you do nothing — every confirmation email links to
+`cancel.html`, and the family releases the spot themselves. That path also
+promotes the longest-waiting family in that session and emails them.
+
+If you have to do it on their behalf, **use the API, not SQL**:
 
 ```bash
-npx wrangler d1 execute tnsaints --remote \
-  --command "DELETE FROM registrations WHERE id = 42"
+# token comes from the cancel_token column in the roster export
+curl -X POST https://api.tnsaints.com/api/cancel \
+  -H "Content-Type: application/json" \
+  -H "Origin: https://tnsaints.com" \
+  -d '{"token":"<cancel_token>","reason":"Cancelled by phone"}'
 ```
 
-The session immediately shows a spot available. Promote a waitlisted family by
-emailing them, then updating their row:
+> **Do not cancel with `DELETE`.** Deleting the row frees the seat but bypasses
+> promotion entirely, so the waitlisted family is never moved up and never
+> emailed — the spot silently goes to nobody. `DELETE` is only for scrubbing a
+> bogus or test registration that should never have existed.
+
+**Take one extra kid beyond the cap** — a deliberate override, since the capacity
+check only guards `INSERT`:
 
 ```bash
 npx wrangler d1 execute tnsaints --remote \
   --command "UPDATE registrations SET status='confirmed' WHERE id = 57"
 ```
 
-> The capacity check only guards `INSERT`. A manual `UPDATE` can push a session
-> past 25 on purpose — which is what you want when you have decided to take one
-> more kid, but it means promotions are a deliberate act, not an automatic one.
+**Read the cancellations and why people dropped:**
+
+```bash
+npx wrangler d1 execute tnsaints --remote \
+  --command "SELECT player_name, session_time, cancelled_at, cancel_reason FROM registrations WHERE status='cancelled' ORDER BY cancelled_at"
+```
 
 **Add a second evaluation date:** change `EVENT_ID` and `EVENT_LABEL` in
 `wrangler.toml`, update `REGISTRATION_CLOSES_AT`, and redeploy. Old rows stay
@@ -179,9 +204,13 @@ is still exportable.
 ## Email
 
 Two messages per registration: an alert to the academy (reply-to is set to the
-parent, so replying reaches them directly) and a receipt to the parent. Both are
-sent through `ctx.waitUntil()` **after** the spot is committed to D1, so a
-provider outage costs a notification, never a registration.
+parent, so replying reaches them directly) and a receipt to the parent carrying
+their cancel link. Both are sent through `ctx.waitUntil()` **after** the spot is
+committed to D1, so a provider outage costs a notification, never a registration.
+
+A cancellation sends up to two more: "you're in" to whoever is promoted off the
+waiting list, and an alert to the academy naming them. A daily roster digest
+goes out on the cron.
 
 ### Resend domain setup
 
@@ -225,9 +254,11 @@ against a real API key.
 
 ### Deliverability check before launch
 
-The alert is `noreply@tnsaints.com` → `info@tnsaints.com`: same domain, arriving
-from outside the tenant. `info@` is on **Microsoft 365**, whose spoof
-intelligence treats that as a phishing signal even when SPF and DKIM pass.
+The alert is `noreply@mail.tnsaints.com` → `info@tnsaints.com`. `info@` is on
+**Microsoft 365**, whose spoof intelligence scrutinises mail arriving from
+outside the tenant that claims the org's own domain family, even when SPF and
+DKIM pass. Sending from the `mail.` subdomain rather than the root is partly
+why this passes — see the domain setup above.
 
 **Send one real test registration and confirm the alert reaches the inbox, not
 Quarantine or Junk.** If it is filtered, add a Tenant Allow/Block List spoof
