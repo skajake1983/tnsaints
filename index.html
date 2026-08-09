@@ -863,6 +863,18 @@
       color: #536277;
     }
 
+    .share-copy-text {
+      background: #fff;
+      border: 1px solid var(--saints-gray);
+      border-left: 3px solid var(--saints-gold);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin: 0 0 0.8rem !important;
+      font-size: 0.86rem !important;
+      line-height: 1.5;
+      color: var(--saints-text) !important;
+    }
+
     .share-actions {
       display: flex;
       flex-wrap: wrap;
@@ -1837,12 +1849,15 @@
       <div class="share-block" id="share-block" hidden>
         <strong>Know another family who'd love this?</strong>
         <p>Spots are limited, so the fastest way to help is to pass it along.</p>
+        <!-- Hand them the wording. Not knowing what to say is what actually
+             stops people sharing, far more often than not finding a button. -->
+        <p class="share-copy-text" id="share-text">Tennessee Saints is hosting a FREE basketball evaluation for 4th &amp; 5th graders &mdash; Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration closes 8/22. https://tnsaints.com</p>
         <div class="share-actions">
           <a class="share-btn share-fb" id="share-facebook" href="#" target="_blank" rel="noopener noreferrer">
             <i class="fab fa-facebook-f" aria-hidden="true"></i> Share on Facebook
           </a>
           <button class="share-btn share-copy" type="button" id="share-copy">
-            <i class="fas fa-link" aria-hidden="true"></i> <span id="share-copy-label">Copy link</span>
+            <i class="fas fa-link" aria-hidden="true"></i> <span id="share-copy-label">Copy message</span>
           </button>
           <a class="share-btn share-dl" href="tnsaints-evaluation-flyer.jpg" download>
             <i class="fas fa-download" aria-hidden="true"></i> Download flyer
@@ -2586,16 +2601,22 @@
 
       if (copyBtn && copyLabel) {
         copyBtn.addEventListener('click', async () => {
+          // Copy the whole message, not just the URL — a bare link in a group
+          // chat needs the sender to explain it, which is the friction we are
+          // trying to remove.
+          const textEl = document.getElementById('share-text');
+          const payload = textEl ? textEl.textContent.trim() : SHARE_URL;
+
           try {
-            await navigator.clipboard.writeText(SHARE_URL);
-            copyLabel.textContent = 'Link copied';
+            await navigator.clipboard.writeText(payload);
+            copyLabel.textContent = 'Copied!';
           } catch {
             // Clipboard API needs a secure context and permission; fall back to
-            // selecting the text so the visitor can copy it by hand.
-            window.prompt('Copy this link:', SHARE_URL);
+            // a prompt so the visitor can copy it by hand.
+            window.prompt('Copy this message:', payload);
             return;
           }
-          setTimeout(() => { copyLabel.textContent = 'Copy link'; }, 2200);
+          setTimeout(() => { copyLabel.textContent = 'Copy message'; }, 2200);
         });
       }
     })();

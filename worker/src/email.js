@@ -190,13 +190,19 @@ function parentHtml(env, data, result) {
         <p style="margin:4px 0 12px;font-size:14px;color:#536277;">
           Spots are limited, so the fastest way to help is to pass it along.
         </p>
+        <!-- Ready-to-paste wording. The real barrier to sharing is not finding
+             a button, it is a parent thinking "what do I even say?" and closing
+             the email. Handing them the sentence removes that entirely. -->
+        <p style="margin:0 0 6px;font-size:13px;color:#536277;">Copy and paste this anywhere:</p>
+        <div style="background:#fff;border:1px solid #dfe3ea;border-left:3px solid #f5cf00;border-radius:6px;padding:12px 14px;margin:0 0 14px;font-size:14px;line-height:1.55;color:#13233d;">
+          Tennessee Saints is hosting a FREE basketball evaluation for 4th &amp; 5th graders &mdash;
+          Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration
+          closes 8/22. https://tnsaints.com
+        </div>
         <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Ftnsaints.com%2F"
            style="display:inline-block;background:#1877f2;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Share on Facebook</a>
         <a href="https://tnsaints.com/tnsaints-evaluation-flyer.jpg"
            style="display:inline-block;background:#f5cf00;color:#06255c;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Download the flyer</a>
-        <p style="margin:8px 0 0;font-size:13px;color:#536277;">
-          Or just send them this link: <a href="https://tnsaints.com/" style="color:#0b3a8d;">tnsaints.com</a>
-        </p>
       </div>
 
       <p style="color:#536277;font-size:13px;margin-bottom:0;">
@@ -251,14 +257,31 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  // The cron runs daily through August, so most of these land while
+  // registration is still open. Only the one after the deadline is final.
+  const closesAt = env.REGISTRATION_CLOSES_AT ? new Date(env.REGISTRATION_CLOSES_AT) : null;
+  const windowOpen = Boolean(closesAt && !Number.isNaN(closesAt.getTime()) && new Date() <= closesAt);
+
+  const capacity = parseInt(env.SLOT_CAPACITY, 10) || 25;
+  const totalCapacity = capacity * times.length;
+  const spotsLeft = Math.max(0, totalCapacity - confirmed.length);
+
+  const cell = 'padding:7px 14px 7px 0;';
   const summaryRows = times
-    .map(
-      (t) => `<tr>
-        <td style="padding:6px 14px 6px 0;">${escapeHtml(t)}</td>
-        <td style="padding:6px 14px 6px 0;"><strong>${bySession(t, 'confirmed')}</strong> confirmed</td>
-        <td style="padding:6px 0;color:#b42318;">${bySession(t, 'waitlist')} waitlisted</td>
-      </tr>`
-    )
+    .map((t) => {
+      const taken = bySession(t, 'confirmed');
+      const left = Math.max(0, capacity - taken);
+      const waiting = bySession(t, 'waitlist');
+      const leftCell = left === 0
+        ? '<span style="color:#b42318;font-weight:800;">FULL</span>'
+        : `<strong style="color:#0b3a8d;">${left} left</strong>`;
+      return `<tr style="border-top:1px solid #eef1f6;">
+        <td style="${cell}"><strong>${escapeHtml(t)}</strong></td>
+        <td style="${cell}">${taken} of ${capacity} registered</td>
+        <td style="${cell}">${leftCell}</td>
+        <td style="padding:7px 0;color:${waiting ? '#b42318' : '#8a94a6'};">${waiting} waiting</td>
+      </tr>`;
+    })
     .join('');
 
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;">
@@ -266,18 +289,23 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
       <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
         <td style="padding-right:12px;vertical-align:middle;">${logoImg(44)}</td>
         <td style="vertical-align:middle;">
-          <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">FINAL ROSTER</div>
+          <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">${windowOpen ? 'REGISTRATION UPDATE' : 'FINAL ROSTER'}</div>
           <div style="font-size:20px;font-weight:800;margin-top:2px;">${escapeHtml(env.EVENT_LABEL || 'Evaluation')}</div>
         </td>
       </tr></table>
     </div>
     <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;color:#13233d;">
-      <p style="margin-top:0;">Registration has closed. Full roster attached as a spreadsheet.</p>
-      <table style="border-collapse:collapse;font-size:14px;">${summaryRows}</table>
-      <p style="margin-bottom:0;font-size:15px;">
-        <strong>${confirmed.length}</strong> confirmed &middot;
-        <strong>${waitlist.length}</strong> on the waiting list &middot;
-        <strong>${rows.length}</strong> total
+      <p style="margin-top:0;">${
+        windowOpen
+          ? 'Here is where registration stands today. Full roster attached as a spreadsheet.'
+          : 'Registration has closed. Final roster attached as a spreadsheet.'
+      }</p>
+      <table style="border-collapse:collapse;font-size:14px;width:100%;">${summaryRows}</table>
+      <p style="margin:14px 0 0;font-size:15px;">
+        <strong>${confirmed.length} of ${totalCapacity}</strong> spots filled &middot;
+        <strong style="color:${spotsLeft ? '#0b3a8d' : '#b42318'};">${spotsLeft ? `${spotsLeft} still open` : 'all sessions full'}</strong>${
+          waitlist.length ? ` &middot; <strong style="color:#b42318;">${waitlist.length} waiting</strong>` : ''
+        }
       </p>
       <p style="color:#536277;font-size:13px;margin-bottom:0;">
         Open roster.csv in Excel or Google Sheets. Print it before Saturday so you
@@ -291,7 +319,9 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
   try {
     await send(env, {
       to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
-      subject: `Final roster — ${confirmed.length} confirmed, ${waitlist.length} waitlisted (${env.EVENT_ID})`,
+      subject: windowOpen
+        ? `Evaluation roster — ${confirmed.length}/${totalCapacity} filled, ${spotsLeft} spots left`
+        : `FINAL roster — ${confirmed.length} confirmed, ${waitlist.length} waitlisted`,
       html,
       attachments: [
         { filename: `roster-${env.EVENT_ID}.csv`, content: toBase64(csv) },
