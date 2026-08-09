@@ -641,7 +641,18 @@
       border-radius: 14px;
       padding: 0.95rem 1rem;
       font: inherit;
+      line-height: 1.5;
       background: #fbfcfe;
+    }
+
+    /* A <select> derives its closed height from the browser's own control
+       metrics and ignores line-height, so at identical padding it renders a
+       few pixels shorter than a text input beside it. Pinning both to the same
+       computed height is the only reliable fix; the calc mirrors the rule
+       above, so changing the padding or font size keeps them matched. */
+    select,
+    input:not([type='checkbox']):not([type='radio']) {
+      height: calc(1.5em + 1.9rem + 2px);
     }
 
     select:focus,
@@ -1295,6 +1306,19 @@
     }
 
     .availability-note .full { color: #b42318; }
+
+    /* Status sits on the option it describes. A separate summary line above
+       repeated both times and made a parent match them up by eye. */
+    .slot-remaining {
+      margin-left: 7px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .slot-remaining.is-open { color: #14663a; }
+    .slot-remaining.is-full { color: #b42318; }
 
     /* Sets expectations before a parent commits to a long form: what the
        coaches actually look at, and when feedback arrives. */
@@ -2348,42 +2372,36 @@
     async function renderAvailability() {
       if (!REGISTRATION_API) return;
 
-      // Rendered inside the session fieldset, under its legend. Prepending it
-      // to the whole form put the status line above the event details, which
-      // read as an orphaned fragment before the reader knew what event it was.
       const slot = document.getElementById('availability-slot');
-      if (!slot) return;
-
-      const host = document.createElement('p');
-      host.className = 'availability-note';
-      host.textContent = 'Checking session availability…';
-      slot.appendChild(host);
 
       try {
         const res = await fetch(`${REGISTRATION_API}/api/availability`);
         const data = await res.json();
         if (!data.ok) throw new Error('unavailable');
 
-        if (!data.registration_open) {
+        // Registration being closed is a statement about the whole event, so
+        // it stays a single line rather than a tag on each option.
+        if (!data.registration_open && slot) {
+          const host = document.createElement('p');
+          host.className = 'availability-note';
           host.innerHTML = '<span class="full">Registration for August 29 has closed.</span> ' +
             'Send us a note below and we will contact you about the next evaluation date.';
+          slot.appendChild(host);
           return;
         }
 
-        host.innerHTML = data.sessions
-          .map((s) => s.full
-            ? `<span class="full">${s.session_time} — full (waiting list)</span>`
-            : `${s.session_time} — open`)
-          .join(' &nbsp;·&nbsp; ');
-
-        // Mirror the status beside each radio so the choice is obvious.
+        // Status goes on the option it describes. A summary line above the
+        // radios listed the same two times over again and left the reader to
+        // match them up by eye.
         data.sessions.forEach((s) => {
           const tag = document.querySelector(`.slot-remaining[data-slot="${s.session_time}"]`);
-          if (tag) tag.textContent = s.full ? '— full, joins waiting list' : '';
+          if (!tag) return;
+          tag.textContent = s.full ? '— Full, joins waiting list' : '— Open';
+          tag.className = 'slot-remaining ' + (s.full ? 'is-full' : 'is-open');
         });
       } catch {
-        // Never block registration on the status check failing.
-        host.remove();
+        // Never block registration on the status check failing — the radios
+        // still work, they just carry no status.
       }
     }
 
