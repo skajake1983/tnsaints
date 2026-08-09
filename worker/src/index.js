@@ -12,7 +12,7 @@
  * runs here. The browser is treated as untrusted input throughout.
  */
 
-import { corsHeaders, json, errorResponse, hashIp, clientIp } from './http.js';
+import { corsHeaders, json, errorResponse, hashIp, clientIp, toCsv } from './http.js';
 import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
@@ -301,6 +301,15 @@ async function handleAdminExport(request, env, cors) {
     return errorResponse('Unauthorized', 401, cors);
   }
 
+  const url = new URL(request.url);
+
+  // A cancel token is a capability, not data: holding one cancels that
+  // family's place with no other credential. Once this export is shared with
+  // coaches, including it by default hands out one capability per family.
+  // Opt in explicitly when a token is genuinely needed.
+  const includeTokens = url.searchParams.get('include') === 'cancel_token';
+  const tokenColumn = includeTokens ? 'cancel_token,' : '';
+
   const { results } = await env.DB.prepare(
     `SELECT id, session_time, status, player_name, grade, years_experience,
             parent_name, parent_email, phone, school,
@@ -308,15 +317,13 @@ async function handleAdminExport(request, env, cors) {
             assumption_of_risk, medical_release, photo_release,
             signature, signed_at,
             highlight_link, player_notes, created_at,
-            cancel_token, cancelled_at, cancel_reason
+            ${tokenColumn} cancelled_at, cancel_reason
        FROM registrations
       WHERE event_id = ?1
       ORDER BY session_time, status DESC, id`
   )
     .bind(env.EVENT_ID)
     .all();
-
-  const url = new URL(request.url);
   if (url.searchParams.get('format') === 'csv') {
     return new Response(toCsv(results || []), {
       headers: {
@@ -348,15 +355,3 @@ async function verifyAdminToken(provided, expected) {
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
-function toCsv(rows) {
-  if (!rows.length) return '';
-  const headers = Object.keys(rows[0]);
-  const escape = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return [
-    headers.join(','),
-    ...rows.map((r) => headers.map((h) => escape(r[h])).join(',')),
-  ].join('\r\n');
-}

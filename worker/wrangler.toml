@@ -40,6 +40,11 @@ REGISTRATION_CLOSES_AT = "2026-08-22T23:59:59-05:00"
 
 ALLOWED_ORIGINS = "https://tnsaints.com,https://www.tnsaints.com"
 
+# Base for links inside emails (cancel, enrol). Read by email.js, which
+# previously fell back to the hardcoded production URL — so cancel links
+# generated during local development pointed at the live site.
+SITE_URL = "https://tnsaints.com"
+
 # Email notifications (Resend). Sending happens after the spot is committed,
 # so an email outage never costs anyone their registration.
 NOTIFY_EMAIL_TO = "info@tnsaints.com"
@@ -72,15 +77,14 @@ database_name = "tnsaints"
 # Filled in by `npm run db:create` — see README step 2.
 database_id = "8f449ac8-d165-4db1-b267-b10e6d55d9b0"
 
-# Scheduled roster emails. Cron is always UTC.
+# Scheduled roster emails. Cron is always UTC; 13:00 UTC = 8:00 AM Central.
 #
-#   "0 13 23 8 *"  = 13:00 UTC on Aug 23 = 8:00 AM Central, the morning after
-#                    registration closes. This is the final roster.
-#   "0 13 * 8 *"   = 8:00 AM Central every day in August, so the roster is
-#                    never more than a day stale while the campaign runs and
-#                    there is a fresh copy in the inbox if anything breaks.
+# Year-round on purpose. The previous "0 13 * 8 *" only fired during August,
+# so it would have silently stopped on Sept 1 — taking the roster digest with
+# it, and leaving no scheduled vehicle for anything that runs after the event.
+# The handler decides whether there is work; an empty event sends nothing.
 [triggers]
-crons = ["0 13 * 8 *"]
+crons = ["0 13 * * *"]
 
 [observability]
 enabled = true

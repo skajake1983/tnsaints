@@ -12,7 +12,8 @@
     "db:init:local": "wrangler d1 execute tnsaints --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute tnsaints --remote --file=./schema.sql",
     "db:dump:local": "wrangler d1 execute tnsaints --local --command=\"SELECT * FROM registrations ORDER BY id\"",
-    "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM registrations\""
+    "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM registrations; DELETE FROM email_budget;\"",
+    "test:local": "npm run db:reset:local && python tests/test_acceptance.py && npm run db:reset:local && python tests/test_cancellation.py && npm run db:reset:local && python tests/test_concurrency.py && npm run db:reset:local"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

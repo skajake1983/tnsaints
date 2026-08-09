@@ -258,11 +258,6 @@ function parentHtml(env, data, result) {
  * Never throws — the cron handler passes it to ctx.waitUntil().
  */
 export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
-  if (!emailConfigured(env)) {
-    console.error('Roster digest skipped: email is not configured.');
-    return;
-  }
-
   let rows;
   try {
     const res = await env.DB.prepare(
@@ -279,6 +274,26 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
     rows = res.results || [];
   } catch (err) {
     console.error('Roster digest query failed:', err?.message);
+    return;
+  }
+
+  // The cron runs daily all year now, so the handler decides whether there is
+  // anything worth sending. No registrations for the active event means either
+  // no campaign is running or a new event has just been rolled in — either way,
+  // a daily "0 of 50" email is noise that trains the owner to ignore it.
+  if (rows.length === 0) {
+    console.log(JSON.stringify({ event: 'roster_digest_skipped', reason: 'no registrations' }));
+    return;
+  }
+
+  // Checked after the work check, not before: otherwise an unconfigured Worker
+  // logs an error every single day forever, including the eleven months of the
+  // year when there is no event running and nothing to send. An alarm that
+  // fires constantly is one nobody reads.
+  if (!emailConfigured(env)) {
+    console.error(
+      `Roster digest NOT SENT: ${rows.length} registrations exist but email is not configured.`
+    );
     return;
   }
 
@@ -352,6 +367,15 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
   const csv = rows.length ? toCsv(rows) : 'no registrations';
 
   try {
+    // Counted against the daily budget like everything else — it was exempt
+    // before, which quietly made the budget figure wrong. Given no reserve
+    // floor, so it can spend the last credit: this email is the owner's daily
+    // visibility and is the wrong thing to starve.
+    if (!(await reserveSend(env))) {
+      console.error('Roster digest skipped: daily email budget exhausted.');
+      return;
+    }
+
     await send(env, {
       to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
       subject: windowOpen
@@ -431,9 +455,11 @@ async function sendPromotionEmail(env, promoted) {
  * a phone call worth making today, and a freed seat with nobody waiting is
  * just information.
  *
- * Promotion stays manual on purpose. Auto-promoting a family who has mentally
- * moved on produces a no-show, which is the problem this whole feature exists
- * to avoid.
+ * Promotion is automatic — cancelByToken() moves the longest-waiting family in
+ * that session into the freed seat and emails them. What makes that safe
+ * rather than reckless is that the promoted family receives their own cancel
+ * link, so one who has already made other plans releases the seat in a tap and
+ * the next person moves up.
  */
 export async function sendCancellationAlert(env, result) {
   if (!emailConfigured(env)) {

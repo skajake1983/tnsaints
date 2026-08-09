@@ -6,3 +6,7 @@ worker/node_modules/
 worker/.dev.vars
 worker/.env
 worker/.env.*
+
+# Python bytecode from the local test suites
+__pycache__/
+*.pyc

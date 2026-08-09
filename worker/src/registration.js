@@ -317,12 +317,20 @@ export async function claimSpot(env, data, ipHash) {
       .bind(...bindValues(env, data, 'waitlist', createdAt, ipHash, cancelToken))
       .run();
 
+    // Scoped to the session, because promotion is per-session. Counting the
+    // whole event told a family first in line for 10:00 AM that they were
+    // "position 4" when three people were queued for 9:00 AM — the opposite of
+    // the truth, and discouraging enough that someone might stop watching for
+    // the email.
     const row = await env.DB.prepare(
       `SELECT COUNT(*) AS position
          FROM registrations
-        WHERE event_id = ?1 AND status = 'waitlist' AND created_at <= ?2`
+        WHERE event_id = ?1
+          AND session_time = ?2
+          AND status = 'waitlist'
+          AND created_at <= ?3`
     )
-      .bind(env.EVENT_ID, createdAt)
+      .bind(env.EVENT_ID, data.session_time, createdAt)
       .first();
 
     return { status: 'waitlist', position: Number(row?.position || 1), cancelToken };
