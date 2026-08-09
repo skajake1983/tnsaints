@@ -179,6 +179,7 @@ function parentHtml(env, data, result) {
       <p style="margin-top:0;">${lead}</p>
       <table style="border-collapse:collapse;font-size:14px;margin:14px 0;">
         ${row('Session', data.session_time)}
+        ${row('Grade', `${data.grade} (this evaluation is open to 4th–6th grade)`)}
         ${row('Location', 'Grassland Heights Baptist Church, 2316 Hillsboro Rd, Franklin, TN 37069')}
       </table>
 
@@ -195,7 +196,7 @@ function parentHtml(env, data, result) {
              the email. Handing them the sentence removes that entirely. -->
         <p style="margin:0 0 6px;font-size:13px;color:#536277;">Copy and paste this anywhere:</p>
         <div style="background:#fff;border:1px solid #dfe3ea;border-left:3px solid #f5cf00;border-radius:6px;padding:12px 14px;margin:0 0 14px;font-size:14px;line-height:1.55;color:#13233d;">
-          Tennessee Saints is hosting a FREE basketball evaluation for 4th &amp; 5th graders &mdash;
+          Tennessee Saints is hosting a FREE basketball evaluation for 4th&ndash;6th graders &mdash;
           Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration
           closes 8/22. https://tnsaints.com
         </div>
