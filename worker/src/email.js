@@ -184,6 +184,8 @@ function alertHtml(env, data, result) {
 function parentHtml(env, data, result) {
   const isWaitlist = result.status === 'waitlist';
   const eventLabel = env.EVENT_LABEL || 'our upcoming evaluation';
+  const siteUrl = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
+  const cancelUrl = `${siteUrl}/cancel.html?t=${encodeURIComponent(result.cancelToken || '')}`;
 
   const lead = isWaitlist
     ? `The ${escapeHtml(data.session_time)} session filled up, so <strong>${escapeHtml(data.player_name)} is on the waiting list</strong>. We will email you if a spot opens, or when we schedule another evaluation date.`
@@ -227,6 +229,16 @@ function parentHtml(env, data, result) {
         <a href="https://tnsaints.com/tnsaints-evaluation-flyer.jpg"
            style="display:inline-block;background:#f5cf00;color:#06255c;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Download the flyer</a>
       </div>
+
+      <!-- Self-service cancellation. Without an obvious way out, a family whose
+           plans change simply does not show, and the spot stays occupied while
+           a waitlisted player sits at home. Naming the beneficiary - another
+           family - is what makes people actually bother. -->
+      <p style="margin:0 0 14px;font-size:14px;color:#13233d;">
+        <strong>Plans change.</strong> If your player can't make it,
+        <a href="${cancelUrl}" style="color:#0b3a8d;font-weight:700;">release your spot here</a>
+        and we'll open it for another family. You can also just reply to this email.
+      </p>
 
       <p style="color:#536277;font-size:13px;margin-bottom:0;">
         Questions? Just reply to this email or reach us at info@tnsaints.com.<br />
@@ -353,6 +365,134 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
     console.log(JSON.stringify({ event: 'roster_digest_sent', reason, rows: rows.length }));
   } catch (err) {
     console.error('Roster digest send failed:', err?.message);
+  }
+}
+
+/**
+ * "You're off the waiting list" — sent the moment a seat frees.
+ *
+ * Carries the same cancel link as a normal confirmation, which is what makes
+ * automatic promotion safe: a family who has already made other plans releases
+ * the seat in one tap and the next person moves up. Without that, auto-promotion
+ * just converts a waitlisted family into a no-show.
+ */
+async function sendPromotionEmail(env, promoted) {
+  const siteUrl = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
+  const cancelUrl = `${siteUrl}/cancel.html?t=${encodeURIComponent(promoted.cancel_token || '')}`;
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;">
+    <div style="background:#14663a;color:#fff;padding:18px;border-radius:8px 8px 0 0;text-align:center;">
+      <div style="margin:0 auto 10px;width:72px;">${logoImg(72)}</div>
+      <div style="font-size:19px;font-weight:800;">A spot just opened &mdash; your player is in</div>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;color:#13233d;font-size:15px;line-height:1.55;">
+      <p style="margin-top:0;">
+        Good news &mdash; a place came free for the ${escapeHtml(promoted.session_time)} session, and
+        <strong>${escapeHtml(promoted.player_name)}</strong> was next on the waiting list.
+        You are now confirmed.
+      </p>
+      <table style="border-collapse:collapse;font-size:14px;margin:14px 0;">
+        ${row('Session', promoted.session_time)}
+        ${rowHtml('Location', `<strong>Grassland Heights Baptist Church</strong><br />
+          <a href="${VENUE_MAP_URL}" style="color:#0b3a8d;">2316 Hillsboro Rd, Franklin, TN 37069</a>
+          <span style="color:#536277;">&mdash; tap for directions</span>`)}
+      </table>
+      <p style="margin:0 0 14px;font-size:14px;">
+        <strong>If plans have already changed</strong>, please
+        <a href="${cancelUrl}" style="color:#0b3a8d;font-weight:700;">release the spot here</a>
+        so the next family on the list can take it.
+      </p>
+      <p style="color:#536277;font-size:13px;margin-bottom:0;">
+        Questions? Just reply to this email or reach us at info@tnsaints.com.<br />
+        Team over self. Character over stats. Christ over everything.
+      </p>
+    </div>
+  </div>`;
+
+  try {
+    if (await reserveSend(env)) {
+      await send(env, {
+        to: promoted.parent_email,
+        subject: `You're in — ${promoted.player_name}, ${promoted.session_time} evaluation`,
+        html,
+        replyTo: env.NOTIFY_EMAIL_TO.split(',')[0].trim(),
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send promotion email:', err?.message);
+  }
+}
+
+/**
+ * Told when a family releases a spot.
+ *
+ * Carries the waitlist depth for that specific session, because that is the
+ * decision the message exists to prompt: a freed seat with someone waiting is
+ * a phone call worth making today, and a freed seat with nobody waiting is
+ * just information.
+ *
+ * Promotion stays manual on purpose. Auto-promoting a family who has mentally
+ * moved on produces a no-show, which is the problem this whole feature exists
+ * to avoid.
+ */
+export async function sendCancellationAlert(env, result) {
+  if (!emailConfigured(env)) {
+    console.error('Cancellation alert skipped: email is not configured.');
+    return;
+  }
+
+  const r = result.registration;
+  const waiting = result.waitlistForSession;
+
+  // Tell the promoted family first. They are the ones with a decision to make,
+  // and their seat is already committed in the database either way.
+  if (result.promoted) {
+    await sendPromotionEmail(env, result.promoted);
+  }
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;">
+    <div style="background:#b42318;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;">
+      <div style="font-size:13px;letter-spacing:.08em;opacity:.85;">SPOT RELEASED</div>
+      <div style="font-size:20px;font-weight:800;margin-top:2px;">${escapeHtml(r.session_time)} is open again</div>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;">
+      <table style="border-collapse:collapse;font-size:14px;">
+        ${row('Player', r.player_name)}
+        ${row('Grade', r.grade)}
+        ${row('Parent', r.parent_name)}
+        ${row('Session', r.session_time)}
+      </table>
+      ${
+        result.reason
+          ? `<div style="margin-top:14px;padding:12px 14px;background:#f3f5f9;border-left:3px solid #b42318;border-radius:6px;font-size:14px;color:#13233d;">
+               <strong style="display:block;color:#536277;font-size:12px;letter-spacing:.06em;">REASON GIVEN</strong>
+               ${escapeHtml(result.reason)}
+             </div>`
+          : '<p style="margin-top:14px;color:#8a94a6;font-size:13px;">No reason given.</p>'
+      }
+      <p style="margin:16px 0 0;font-size:15px;">
+        ${
+          result.promoted
+            ? `<strong style="color:#14663a;">${escapeHtml(result.promoted.player_name)} was moved up from the waiting list into that spot</strong> and has been emailed.
+               ${waiting > 0 ? `${waiting} still waiting for ${escapeHtml(r.session_time)}.` : 'Nobody else is waiting for that session.'}`
+            : waiting > 0
+              ? `<strong style="color:#b42318;">${waiting} ${waiting === 1 ? 'family is' : 'families are'} waiting for ${escapeHtml(r.session_time)}</strong>, but nobody was promoted &mdash; worth a look.`
+              : 'Nobody is on the waiting list for that session, so the spot is simply open again.'
+        }
+      </p>
+    </div>
+  </div>`;
+
+  try {
+    if (await reserveSend(env)) {
+      await send(env, {
+        to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+        subject: `Spot released: ${r.player_name} — ${r.session_time}${waiting ? ` (${waiting} waiting)` : ''}`,
+        html,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to send cancellation alert:', err?.message);
   }
 }
 

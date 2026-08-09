@@ -12,11 +12,21 @@ const INSERT_COLUMNS = `
   parent_name, parent_email, parent_email_norm, phone, school,
   emergency_contact_name, emergency_contact_phone, medical_notes,
   assumption_of_risk, medical_release, photo_release, signature, signed_at,
-  highlight_link, player_notes, created_at, ip_hash
+  highlight_link, player_notes, created_at, ip_hash, cancel_token
 `;
 
 const INSERT_PLACEHOLDERS =
-  '?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24';
+  '?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25';
+
+/**
+ * The only credential in a cancel link, so it has to be unguessable rather
+ * than merely unique — 32 bytes from the platform CSPRNG, never Math.random.
+ */
+export function newCancelToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export function sessionTimes(env) {
   return String(env.SESSION_TIMES || '')
@@ -110,7 +120,7 @@ export async function isRateLimited(env, ipHash) {
   return Number(row?.recent || 0) >= max;
 }
 
-function bindValues(env, data, status, createdAt, ipHash) {
+function bindValues(env, data, status, createdAt, ipHash, cancelToken) {
   return [
     env.EVENT_ID,
     data.session_time,
@@ -136,7 +146,128 @@ function bindValues(env, data, status, createdAt, ipHash) {
     data.player_notes,
     createdAt,
     ipHash,
+    cancelToken,
   ];
+}
+
+/**
+ * Read-only lookup behind a cancel link.
+ *
+ * Deliberately separate from the cancel itself, and deliberately GET-safe.
+ * Corporate mail scanners (Outlook Safe Links, for one) fetch every URL in an
+ * inbound message. If clicking a link were what cancelled a registration, those
+ * scanners would silently cancel families the moment the email arrived. The
+ * mutation is a POST the visitor has to trigger from the page.
+ */
+export async function lookupByCancelToken(env, token) {
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
+
+  return await env.DB.prepare(
+    `SELECT player_name, session_time, status, grade, parent_name, cancelled_at
+       FROM registrations
+      WHERE cancel_token = ?1 AND event_id = ?2`
+  )
+    .bind(token, env.EVENT_ID)
+    .first();
+}
+
+/**
+ * Cancel by token. Sets status rather than deleting, so the record and the
+ * family's reason survive; capacity counts only 'confirmed', so the spot frees
+ * itself the moment this lands.
+ *
+ * The UPDATE is guarded on the current status, so a double submit — or a
+ * second tab — cannot cancel twice or resurrect a row.
+ */
+export async function cancelByToken(env, token, reason) {
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) {
+    return { ok: false, code: 'invalid' };
+  }
+
+  const existing = await lookupByCancelToken(env, token);
+  if (!existing) return { ok: false, code: 'not-found' };
+  if (existing.status === 'cancelled') {
+    return { ok: false, code: 'already-cancelled', registration: existing };
+  }
+
+  const trimmed = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
+
+  const res = await env.DB.prepare(
+    `UPDATE registrations
+        SET status = 'cancelled', cancelled_at = ?2, cancel_reason = ?3
+      WHERE cancel_token = ?1 AND status != 'cancelled'`
+  )
+    .bind(token, new Date().toISOString(), trimmed || null)
+    .run();
+
+  if (res.meta.changes === 0) {
+    return { ok: false, code: 'already-cancelled', registration: existing };
+  }
+
+  // Only a confirmed seat frees capacity. Someone leaving the waiting list
+  // changes nothing about who is in the session.
+  const promoted =
+    existing.status === 'confirmed'
+      ? await promoteFirstWaitlisted(env, existing.session_time)
+      : null;
+
+  const waiting = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM registrations
+      WHERE event_id = ?1 AND session_time = ?2 AND status = 'waitlist'`
+  )
+    .bind(env.EVENT_ID, existing.session_time)
+    .first();
+
+  return {
+    ok: true,
+    registration: existing,
+    reason: trimmed,
+    promoted,
+    waitlistForSession: Number(waiting?.n || 0),
+  };
+}
+
+/**
+ * Move the longest-waiting family in a session into the freed seat.
+ *
+ * Ordered by created_at then id, so it is strictly the order people signed up
+ * — id breaks ties when two land in the same millisecond.
+ *
+ * The UPDATE re-checks capacity and re-checks that the row is still on the
+ * waiting list, so two cancellations landing at once cannot promote the same
+ * family twice or push a session past its cap.
+ *
+ * @returns {Promise<object|null>} the promoted registration, or null
+ */
+export async function promoteFirstWaitlisted(env, sessionTime) {
+  const capacity = slotCapacity(env);
+
+  const next = await env.DB.prepare(
+    `SELECT id, player_name, grade, parent_name, parent_email, session_time, cancel_token
+       FROM registrations
+      WHERE event_id = ?1 AND session_time = ?2 AND status = 'waitlist'
+      ORDER BY created_at, id
+      LIMIT 1`
+  )
+    .bind(env.EVENT_ID, sessionTime)
+    .first();
+
+  if (!next) return null;
+
+  const res = await env.DB.prepare(
+    `UPDATE registrations
+        SET status = 'confirmed'
+      WHERE id = ?1
+        AND status = 'waitlist'
+        AND (
+          SELECT COUNT(*) FROM registrations
+           WHERE event_id = ?2 AND session_time = ?3 AND status = 'confirmed'
+        ) < ?4`
+  )
+    .bind(next.id, env.EVENT_ID, sessionTime, capacity)
+    .run();
+
+  return res.meta.changes > 0 ? next : null;
 }
 
 function isUniqueViolation(err) {
@@ -162,26 +293,28 @@ export async function claimSpot(env, data, ipHash) {
   const capacity = slotCapacity(env);
 
   try {
+    const cancelToken = newCancelToken();
+
     const confirmed = await env.DB.prepare(
       `INSERT INTO registrations (${INSERT_COLUMNS})
        SELECT ${INSERT_PLACEHOLDERS}
         WHERE (
           SELECT COUNT(*) FROM registrations
            WHERE event_id = ?1 AND session_time = ?2 AND status = 'confirmed'
-        ) < ?25`
+        ) < ?26`
     )
-      .bind(...bindValues(env, data, 'confirmed', createdAt, ipHash), capacity)
+      .bind(...bindValues(env, data, 'confirmed', createdAt, ipHash, cancelToken), capacity)
       .run();
 
     if (confirmed.meta.changes > 0) {
-      return { status: 'confirmed' };
+      return { status: 'confirmed', cancelToken };
     }
 
     // Session filled — record as waitlist instead of rejecting outright.
     await env.DB.prepare(
       `INSERT INTO registrations (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`
     )
-      .bind(...bindValues(env, data, 'waitlist', createdAt, ipHash))
+      .bind(...bindValues(env, data, 'waitlist', createdAt, ipHash, cancelToken))
       .run();
 
     const row = await env.DB.prepare(
@@ -192,7 +325,7 @@ export async function claimSpot(env, data, ipHash) {
       .bind(env.EVENT_ID, createdAt)
       .first();
 
-    return { status: 'waitlist', position: Number(row?.position || 1) };
+    return { status: 'waitlist', position: Number(row?.position || 1), cancelToken };
   } catch (err) {
     if (isUniqueViolation(err)) {
       return { status: 'duplicate' };

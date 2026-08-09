@@ -9,7 +9,16 @@ CREATE TABLE IF NOT EXISTS registrations (
 
   event_id                TEXT    NOT NULL,
   session_time            TEXT    NOT NULL,
-  status                  TEXT    NOT NULL CHECK (status IN ('confirmed', 'waitlist')),
+  -- Cancelling sets status rather than deleting the row. Capacity counts only
+  -- 'confirmed', so a cancellation frees the spot immediately while the record
+  -- and the family's reason are preserved.
+  status                  TEXT    NOT NULL CHECK (status IN ('confirmed', 'waitlist', 'cancelled')),
+
+  -- Unguessable per-registration token, the only credential in the cancel
+  -- link. 32 random bytes, so it cannot be enumerated.
+  cancel_token            TEXT    NOT NULL,
+  cancelled_at            TEXT,
+  cancel_reason           TEXT,
 
   player_name             TEXT    NOT NULL,
   player_name_norm        TEXT    NOT NULL,
@@ -52,8 +61,16 @@ CREATE TABLE IF NOT EXISTS registrations (
 -- One registration per player per event. This is the single strongest bot
 -- control: even a request that defeats Turnstile cannot claim a second spot
 -- under the same parent email + player name.
+-- Partial index: cancelled rows are excluded so a family who cancels can
+-- register again later. Without the WHERE clause their own cancelled row would
+-- block them, which is the opposite of helpful.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_registrations_unique
-  ON registrations (event_id, parent_email_norm, player_name_norm);
+  ON registrations (event_id, parent_email_norm, player_name_norm)
+  WHERE status != 'cancelled';
+
+-- Cancel-link lookups hit this on every click.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_registrations_cancel_token
+  ON registrations (cancel_token);
 
 -- Backs the capacity COUNT(*) inside the atomic insert, which filters on
 -- (event_id, session_time, status) — all three columns are in the WHERE.

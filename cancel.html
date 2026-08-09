@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Release Your Spot | Tennessee Saints</title>
+  <meta name="description" content="Release your Tennessee Saints evaluation spot so another family can take it." />
+  <!-- Never index a page that only makes sense with a private token attached. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
+  <style>
+    :root {
+      --saints-blue: #0b3a8d;
+      --saints-blue-dark: #06255c;
+      --saints-gold: #f5cf00;
+      --saints-light: #f3f5f9;
+      --saints-gray: #dfe3ea;
+      --saints-text: #13233d;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(160deg, #002448 0%, var(--saints-blue) 100%);
+      color: var(--saints-text);
+      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+      max-width: 520px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .card-head {
+      background: var(--saints-blue-dark);
+      border-bottom: 4px solid var(--saints-gold);
+      padding: 20px 26px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .card-head img { width: 48px; height: 48px; object-fit: contain; }
+    .card-head strong { color: #fff; font-size: 1.05rem; display: block; }
+    .card-head span { color: rgba(255, 255, 255, 0.75); font-size: 0.85rem; }
+
+    .card-body { padding: 26px; }
+
+    h1 { margin: 0 0 6px; font-size: 1.4rem; color: var(--saints-blue-dark); }
+    p { margin: 0 0 14px; }
+
+    .detail {
+      background: var(--saints-light);
+      border-left: 4px solid var(--saints-gold);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 0 0 18px;
+    }
+
+    .detail div { font-size: 0.95rem; }
+    .detail strong { color: var(--saints-blue-dark); }
+
+    label { display: block; font-weight: 700; color: var(--saints-blue-dark); margin-bottom: 6px; }
+
+    textarea {
+      width: 100%;
+      min-height: 92px;
+      padding: 11px 13px;
+      border: 1px solid var(--saints-gray);
+      border-radius: 8px;
+      font: inherit;
+      resize: vertical;
+    }
+
+    textarea:focus { outline: 2px solid var(--saints-blue); outline-offset: 1px; }
+
+    .hint { font-size: 0.85rem; color: #536277; margin: 6px 0 18px; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    .btn {
+      flex: 1 1 auto;
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 999px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .btn-danger { background: #b42318; color: #fff; }
+    .btn-danger:hover { background: #96200f; }
+    .btn-quiet { background: var(--saints-light); color: var(--saints-blue-dark); }
+    .btn-quiet:hover { background: var(--saints-gray); }
+    .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+
+    .state-msg { font-size: 0.95rem; }
+    .state-msg.error { color: #b42318; font-weight: 600; }
+    .ok { color: #14663a; font-weight: 700; }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-head">
+      <img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="" />
+      <div>
+        <strong>Tennessee Saints</strong>
+        <span>Free Academy Evaluation &middot; Saturday, August 29</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <!-- Loading -->
+      <div id="view-loading">
+        <p class="state-msg">Checking your registration&hellip;</p>
+      </div>
+
+      <!-- Invalid or missing token -->
+      <div id="view-error" hidden>
+        <h1>We couldn't find that spot</h1>
+        <p class="state-msg error" id="error-text">That cancellation link is not valid.</p>
+        <p>If your player is registered and you need to cancel, just email
+          <a href="mailto:info@tnsaints.com">info@tnsaints.com</a> and we'll take care of it.</p>
+        <div class="actions">
+          <a class="btn btn-quiet" href="/">Back to tnsaints.com</a>
+        </div>
+      </div>
+
+      <!-- Confirm step -->
+      <div id="view-confirm" hidden>
+        <h1>Release this spot?</h1>
+        <div class="detail">
+          <div><strong id="d-player"></strong></div>
+          <div id="d-session"></div>
+        </div>
+        <p>Releasing it opens the spot for another family right away. This can't be undone,
+          but you're welcome to register again if plans change back.</p>
+
+        <label for="reason">Anything you'd like us to know? (optional)</label>
+        <textarea id="reason" maxlength="500" placeholder="A scheduling conflict, a different time slot would work better, etc."></textarea>
+        <p class="hint">This just helps us plan future evaluation dates.</p>
+
+        <div class="actions">
+          <button class="btn btn-danger" type="button" id="confirm-btn">Yes, release my spot</button>
+          <a class="btn btn-quiet" href="/">Never mind</a>
+        </div>
+        <p class="state-msg error" id="confirm-error" hidden></p>
+      </div>
+
+      <!-- Done -->
+      <div id="view-done" hidden>
+        <h1>Your spot has been released</h1>
+        <p class="ok" id="done-text"></p>
+        <p>Thank you for letting us know &mdash; that seat can now go to another family.
+          We'd love to see your player at a future evaluation.</p>
+        <div class="actions">
+          <a class="btn btn-quiet" href="/">Back to tnsaints.com</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Same host-aware switch the main site uses, so a local preview talks to a
+    // local Worker instead of production.
+    const IS_LOCAL = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+    const API = IS_LOCAL ? 'http://127.0.0.1:8787' : 'https://api.tnsaints.com';
+
+    const token = new URLSearchParams(location.search).get('t') || '';
+
+    const show = (id) => {
+      ['view-loading', 'view-error', 'view-confirm', 'view-done'].forEach((v) => {
+        document.getElementById(v).hidden = v !== id;
+      });
+    };
+
+    const fail = (msg) => {
+      document.getElementById('error-text').textContent = msg;
+      show('view-error');
+    };
+
+    async function init() {
+      if (!token) return fail('This link is missing its cancellation code.');
+
+      try {
+        // Read-only. Cancelling happens on the POST below, never on page load,
+        // so a mail scanner that fetches this URL cannot cancel anyone.
+        const res = await fetch(`${API}/api/cancel/lookup?t=${encodeURIComponent(token)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) return fail('That cancellation link is not valid.');
+
+        if (data.already_cancelled) {
+          document.getElementById('done-text').textContent =
+            `${data.player_name}'s spot was already released.`;
+          return show('view-done');
+        }
+
+        document.getElementById('d-player').textContent = data.player_name;
+        document.getElementById('d-session').textContent =
+          `${data.session_time} session${data.grade ? ' · ' + data.grade + ' grade' : ''}` +
+          (data.status === 'waitlist' ? ' · currently on the waiting list' : '');
+        show('view-confirm');
+      } catch {
+        fail('We could not reach the registration system. Please try again, or email info@tnsaints.com.');
+      }
+    }
+
+    document.getElementById('confirm-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const err = document.getElementById('confirm-error');
+      err.hidden = true;
+      btn.disabled = true;
+      btn.textContent = 'Releasing…';
+
+      try {
+        const res = await fetch(`${API}/api/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, reason: document.getElementById('reason').value }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.ok) throw new Error('failed');
+
+        document.getElementById('done-text').textContent =
+          data.message || 'Your spot has been released.';
+        show('view-done');
+      } catch {
+        err.textContent = 'That did not go through. Please try again, or email info@tnsaints.com.';
+        err.hidden = false;
+        btn.disabled = false;
+        btn.textContent = 'Yes, release my spot';
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

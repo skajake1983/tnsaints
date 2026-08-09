@@ -13,7 +13,7 @@
  */
 
 import { corsHeaders, json, errorResponse, hashIp, clientIp } from './http.js';
-import { sendRegistrationEmails, sendRosterDigest } from './email.js';
+import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import {
@@ -21,6 +21,8 @@ import {
   registrationWindow,
   claimSpot,
   isRateLimited,
+  lookupByCancelToken,
+  cancelByToken,
 } from './registration.js';
 
 /** Generous ceiling for a registration payload, which runs about 2 KB. */
@@ -46,6 +48,15 @@ export default {
 
       if (url.pathname === '/api/register' && request.method === 'POST') {
         return await handleRegister(request, env, ctx, cors);
+      }
+
+      // GET is read-only by design — see lookupByCancelToken().
+      if (url.pathname === '/api/cancel/lookup' && request.method === 'GET') {
+        return await handleCancelLookup(url, env, cors);
+      }
+
+      if (url.pathname === '/api/cancel' && request.method === 'POST') {
+        return await handleCancel(request, env, ctx, cors);
       }
 
       if (url.pathname === '/api/admin/registrations' && request.method === 'GET') {
@@ -220,6 +231,64 @@ async function handleRegister(request, env, ctx, cors) {
   );
 }
 
+async function handleCancelLookup(url, env, cors) {
+  const registration = await lookupByCancelToken(env, url.searchParams.get('t'));
+
+  if (!registration) {
+    return errorResponse('That cancellation link is not valid.', 404, cors);
+  }
+
+  return json(
+    {
+      ok: true,
+      player_name: registration.player_name,
+      session_time: registration.session_time,
+      grade: registration.grade,
+      status: registration.status,
+      already_cancelled: registration.status === 'cancelled',
+    },
+    { cors }
+  );
+}
+
+async function handleCancel(request, env, ctx, cors) {
+  if (!cors['Access-Control-Allow-Origin']) {
+    return errorResponse('Requests from this origin are not allowed.', 403, cors);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse('We could not read that request. Please try again.', 400, cors);
+  }
+
+  const result = await cancelByToken(env, body.token, body.reason);
+
+  if (!result.ok) {
+    if (result.code === 'already-cancelled') {
+      return json(
+        { ok: true, already_cancelled: true, message: 'That spot was already cancelled.' },
+        { cors }
+      );
+    }
+    return errorResponse('That cancellation link is not valid.', 404, cors);
+  }
+
+  // Told after the row is already updated, so a mail failure cannot leave the
+  // spot occupied.
+  ctx.waitUntil(sendCancellationAlert(env, result));
+
+  return json(
+    {
+      ok: true,
+      message:
+        'Your spot has been released and is now open for another family. Thank you for letting us know.',
+    },
+    { cors }
+  );
+}
+
 /**
  * Roster export. Without this the registrations would be trapped in D1 —
  * owning the data only matters if you can get it out.
@@ -238,7 +307,8 @@ async function handleAdminExport(request, env, cors) {
             emergency_contact_name, emergency_contact_phone, medical_notes,
             assumption_of_risk, medical_release, photo_release,
             signature, signed_at,
-            highlight_link, player_notes, created_at
+            highlight_link, player_notes, created_at,
+            cancel_token, cancelled_at, cancel_reason
        FROM registrations
       WHERE event_id = ?1
       ORDER BY session_time, status DESC, id`
