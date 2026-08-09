@@ -214,7 +214,7 @@ async function handleRegister(request, env, ctx, cors) {
       status: 'confirmed',
       message:
         'Your player is registered. Watch for a confirmation email with details for August 29.',
-      sessions: availability.sessions,
+      sessions: publicSessions(availability),
     },
     { cors }
   );
