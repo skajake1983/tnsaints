@@ -583,12 +583,29 @@
       margin-top: 1rem;
     }
 
+    /* The dynamic fields are one grid child of the form, so the form's gap
+       applies around the whole block, not between the fields inside it. This
+       gives the injected fields the same rhythm as everything else. */
+    #dynamic-form-fields {
+      display: grid;
+      gap: 1.15rem;
+    }
+
+    /* Radio and checkbox groups read as one unit, so they get a little extra
+       air after them to separate the group from the next field. */
+    #dynamic-form-fields > .field-group {
+      margin-bottom: 0.4rem;
+    }
+
     label,
     .field-group > legend {
       font-weight: 700;
       color: var(--saints-blue-dark);
       display: block;
       margin-bottom: 0.4rem;
+      /* Browsers give legend its own horizontal padding, which pushed this
+         label a couple of pixels right of every other label in the form. */
+      padding: 0;
     }
 
     /* Radio/checkbox groups need a fieldset+legend for screen readers, but the
@@ -660,34 +677,119 @@
       border-top: 3px solid var(--saints-gold);
     }
 
-    .footer-grid {
+    /* Three defined columns instead of flex space-between, which spread four
+       unrelated children across the full width and stranded the privacy link
+       on the far edge with nothing near it. */
+    .footer-top {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    .footer-brand-row {
       display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      flex-wrap: wrap;
       align-items: center;
+      gap: 12px;
     }
 
-    .footer-nav {
+    .footer-brand-row img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+    }
+
+    .footer-brand-row strong { font-size: 1.05rem; }
+
+    .footer-contact {
+      font-size: 0.9rem;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+
+    .footer-socials {
       display: flex;
-      gap: 1rem;
       flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 14px;
+      font-size: 1.05rem;
     }
 
-    .footer-nav a {
-      color: rgba(255, 255, 255, 0.92);
+    .footer-socials a { color: rgba(255, 255, 255, 0.85); }
+    .footer-socials a:hover,
+    .footer-socials a:focus { color: var(--saints-gold); }
+
+    .footer-col h4 {
+      margin: 0 0 0.7rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--saints-gold);
     }
 
-    .footer-partners {
-      flex-basis: 100%;
-      width: 100%;
-      order: 5;
-      margin-top: 1rem;
+    .footer-links {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .footer-links a {
+      color: rgba(255, 255, 255, 0.9);
+      text-decoration: none;
+      font-size: 0.92rem;
+    }
+
+    .footer-links a:hover,
+    .footer-links a:focus { color: var(--saints-gold); }
+
+    .footer-partners-band {
+      margin-top: 1.8rem;
+      padding-top: 1.3rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 1rem 2.25rem;
       flex-wrap: wrap;
+      gap: 0.8rem 2rem;
+    }
+
+    .footer-partners-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    .footer-bottom {
+      margin-top: 1.3rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      font-size: 0.82rem;
+      color: rgba(255, 255, 255, 0.6);
+    }
+
+    .footer-bottom a {
+      color: rgba(255, 255, 255, 0.78);
+      text-decoration: none;
+    }
+
+    .footer-bottom a:hover,
+    .footer-bottom a:focus { color: var(--saints-gold); }
+
+
+    .footer-partners {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem 2.25rem;
     }
 
     .footer-partner {
@@ -703,22 +805,21 @@
       width: auto;
     }
 
+    @media (max-width: 760px) {
+      .footer-top {
+        grid-template-columns: 1fr;
+        gap: 1.6rem;
+      }
+    }
+
     @media (max-width: 640px) {
-      .footer-grid {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-      }
-
-      .footer-brand {
-        order: 1;
-        align-items: center;
-      }
-
       .footer-partners {
-        order: 2;
-        margin-top: 0.25rem;
         gap: 1.25rem;
+      }
+
+      .footer-bottom {
+        justify-content: center;
+        text-align: center;
       }
 
       /* Narrow screens: stack and fit to width instead of forcing a fixed
@@ -727,14 +828,6 @@
         height: auto;
         width: 100%;
         max-width: 260px;
-      }
-
-      .footer-spotify {
-        order: 3;
-      }
-
-      .footer-privacy {
-        order: 4;
       }
     }
 
@@ -1117,18 +1210,56 @@
 
     #turnstile-widget:not(:empty) { margin: 4px 0 16px; }
 
+    /* Sits directly above the session picker as its status line, so it reads
+       as part of that choice rather than as a stray line under the dropdown. */
     .availability-note {
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       font-weight: 600;
       color: var(--saints-blue-dark);
-      margin: 0 0 10px;
+      margin: 0 0 6px;
     }
 
     .availability-note .full { color: #b42318; }
 
+    /* Sets expectations before a parent commits to a long form: what the
+       coaches actually look at, and when feedback arrives. */
+    .eval-expect {
+      background: var(--saints-light);
+      border-left: 4px solid var(--saints-gold);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 4px 0 0;
+    }
+
+    .eval-expect strong {
+      display: block;
+      color: var(--saints-blue-dark);
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: 0.01em;
+      margin-bottom: 4px;
+    }
+
+    .eval-expect p {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: #405066;
+    }
+
+    /* The evaluation form opens with an intro paragraph; give it room to
+       breathe from the Purpose select above it. */
+    .eval-intro {
+      margin: 4px 0 14px;
+      font-size: 0.95rem;
+      line-height: 1.5;
+      opacity: 0.85;
+    }
+
     /* --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. --- */
     .event-banner {
       display: none;
+      position: relative;
       background: linear-gradient(90deg, var(--saints-gold) 0%, var(--saints-gold-dark) 100%);
       color: var(--saints-blue-dark);
       font-size: 0.95rem;
@@ -1136,42 +1267,133 @@
 
     .event-banner.show { display: block; }
 
-    .event-banner-inner {
+    /* --- Type-driven banner. No image: crisp at any resolution, weighs
+       nothing, and scales continuously instead of needing a separate
+       treatment per breakpoint. Borrows the flyer's visual language —
+       navy ground, gold accent word, chevron CTA. --- */
+    .event-banner-art {
       position: relative;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 8px 16px;
-      padding: 10px 46px 10px 16px;
-      text-align: center;
+      overflow: hidden;
+      background:
+        /* faint diagonal streaks standing in for the flyer's brush texture */
+        repeating-linear-gradient(115deg,
+          rgba(255, 255, 255, 0.045) 0 2px,
+          rgba(255, 255, 255, 0) 2px 26px),
+        radial-gradient(120% 180% at 12% 0%, rgba(20, 65, 143, 0.85) 0%, rgba(20, 65, 143, 0) 60%),
+        /* Ends on #002448 — the exact deep navy sampled from the logo — so the
+           banner reads as the same blue family as the mark above it. */
+        linear-gradient(90deg, #002448 0%, var(--saints-blue) 55%, var(--saints-blue-dark) 100%);
+      border-top: 3px solid var(--saints-gold);
+      border-bottom: 3px solid var(--saints-gold);
     }
 
-    .event-banner-copy {
+    .ebc-inner {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      justify-content: center;
-      gap: 2px 10px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px clamp(12px, 2.5vw, 32px);
+      padding: clamp(12px, 1.8vw, 20px) clamp(44px, 4vw, 56px) clamp(12px, 1.8vw, 20px) clamp(14px, 3vw, 28px);
     }
 
-    .event-banner-copy strong { font-weight: 800; }
+    .ebc-title {
+      margin: 0;
+      color: #fff;
+      font-weight: 900;
+      line-height: 0.95;
+      letter-spacing: -0.015em;
+      text-transform: uppercase;
+      /* Fluid from phone to large desktop — the reason this exists. */
+      font-size: clamp(1.35rem, 4.2vw, 2.9rem);
+      text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+    }
 
-    .event-banner-cta {
-      background: var(--saints-blue);
-      color: var(--saints-white);
-      text-decoration: none;
+    .ebc-title span {
+      color: var(--saints-gold);
+    }
+
+    .ebc-meta {
+      margin: 6px 0 0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px clamp(8px, 1.2vw, 14px);
+      color: #dce6f7;
       font-weight: 700;
-      padding: 7px 16px;
-      border-radius: 999px;
+      font-size: clamp(0.78rem, 1.35vw, 1.02rem);
+    }
+
+    .ebc-date { color: var(--saints-gold); }
+
+    .ebc-pipe {
+      width: 2px;
+      height: 1em;
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .ebc-badge {
+      background: var(--saints-gold);
+      color: var(--saints-blue-dark);
+      padding: 3px 10px;
+      border-radius: 3px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
       white-space: nowrap;
     }
 
-    .event-banner-cta:hover,
-    .event-banner-cta:focus {
-      background: var(--saints-blue-dark);
-      color: var(--saints-white);
+    .ebc-limited {
+      border: 2px solid var(--saints-gold);
+      color: #fff;
+      padding: 2px 9px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      font-size: 0.86em;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
     }
+
+    .event-banner-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      /* Brand gold, not the flyer's more orange CTA colour. Sampled against
+         the logo, the flyer button sits ~26 units away from every other gold
+         on the site, which reads as a mismatch next to the navbar rule. */
+      background: linear-gradient(180deg, var(--saints-gold) 0%, var(--saints-gold-dark) 100%);
+      color: var(--saints-blue-dark);
+      font-weight: 900;
+      font-size: clamp(0.85rem, 1.35vw, 1.15rem);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      text-decoration: none;
+      white-space: nowrap;
+      line-height: 1;
+      padding: clamp(11px, 1.3vw, 16px) clamp(26px, 3vw, 42px);
+      /* Chevron ends, echoing the flyer's CTA. */
+      clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+      transition: filter 0.15s ease, transform 0.15s ease;
+    }
+
+    .event-banner-btn:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+      color: var(--saints-blue-dark);
+    }
+
+    /* clip-path crops an outline, so focus shows as an inner ring instead —
+       otherwise keyboard users would get no visible focus at all. */
+    .event-banner-btn:focus-visible {
+      outline: none;
+      box-shadow: inset 0 0 0 3px var(--saints-blue-dark);
+      filter: brightness(1.08);
+    }
+
+
+
+
+
 
     .event-banner-close {
       position: absolute;
@@ -1185,29 +1407,64 @@
       line-height: 1;
       padding: 0 8px;
       cursor: pointer;
+      z-index: 2;
     }
 
-    @media (max-width: 720px) {
-      .event-banner-inner {
-        padding: 10px 38px 10px 12px;
-        font-size: 0.86rem;
+    .event-banner-close {
+      color: var(--saints-white);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+      opacity: 0.8;
+    }
+
+    .event-banner-close:hover { opacity: 1; }
+
+    /* One banner at every width — it reflows rather than switching layouts.
+       Below 640px the CTA goes full width so the tap target stays comfortable
+       instead of shrinking with the viewport. */
+    @media (max-width: 640px) {
+      .ebc-inner {
+        justify-content: center;
+        text-align: center;
+      }
+
+      .ebc-meta { justify-content: center; }
+
+      .event-banner-btn {
+        width: 100%;
+        padding: 13px 20px;
+        clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
       }
     }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
 <body>
-  <!-- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. -->
+  <!-- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after.
+       Two presentations of the same announcement: the designed artwork on wide
+       screens, and a text strip on narrow ones. A 6:1 banner scaled to a phone
+       renders its headline about 8px tall, so the artwork is not a responsive
+       option below ~760px — it is not a fallback, it is the correct treatment
+       at that width. Only one is ever in the accessibility tree. -->
   <div class="event-banner" id="event-banner" role="region" aria-label="Free academy evaluation registration">
-    <div class="container event-banner-inner">
-      <div class="event-banner-copy">
-        <strong>FREE Academy Evaluation &mdash; Sat, Aug 29</strong>
-        <span>9&ndash;11 AM &middot; Grassland Heights Baptist Church, Franklin</span>
-        <span id="event-banner-countdown"></span>
+
+    <div class="event-banner-art">
+      <div class="container ebc-inner">
+        <div>
+          <p class="ebc-title">Free Academy <span>Evaluation</span></p>
+          <p class="ebc-meta">
+            <span class="ebc-date">8/29 &middot; 9&ndash;11 AM</span>
+            <span class="ebc-pipe" aria-hidden="true"></span>
+            <span>Franklin, TN</span>
+            <span class="ebc-badge">Register by 8/22</span>
+            <span class="ebc-limited">Spots are limited</span>
+            <span id="event-banner-countdown"></span>
+          </p>
+        </div>
+        <a class="event-banner-btn" href="#contact" data-open-form="evaluation">Register Now</a>
       </div>
-      <a class="event-banner-cta" href="#contact" data-open-form="evaluation">Register Now</a>
-      <button class="event-banner-close" id="event-banner-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
+
+    <button class="event-banner-close" id="event-banner-close" type="button" aria-label="Dismiss announcement">&times;</button>
   </div>
 
   <div class="site-header">
@@ -1263,7 +1520,7 @@
         <div class="hero-copy">
           <h2>Team over self.<br/>Character over stats.<br/>Christ over everything.</h2>
           <p>
-            Tennessee Saints is a year-round Christian youth basketball academy in Middle Tennessee. We develop players in game-like situations instead of standing in lines running drills, so athletes learn to read the floor, make quick decisions, and play with confidence. Players train weekly for a minimum of three hours with regular scrimmages, plus optional tournament and league play.
+            Tennessee Saints is a year-round Christian youth basketball academy in Middle Tennessee. We believe faith, culture, and community are the foundation of great players and great coaches. We develop players in game-like situations instead of standing in lines running drills, so athletes learn to read the floor, make quick decisions, and play with confidence. Players train weekly for a minimum of three hours with regular scrimmages, plus optional tournament and league play. Our hope is that every player falls deeper in love with the game and enjoys the journey &mdash; growing physically, mentally, and spiritually along the way.
           </p>
 
           <div class="hero-actions">
@@ -1358,7 +1615,7 @@
         <div class="section-head">
           <div class="eyebrow">Leadership</div>
           <h3>Our Coaches &amp; Leadership</h3>
-          <p>Tennessee Saints is led by coaches committed to developing great basketball players and even better young men. We partner with PGC for camps, No Hesitation Basketball for active player development, and Transforming Basketball for coach education and training.</p>
+          <p>Tennessee Saints is led by coaches committed to developing great basketball players and even better young men. <strong>No Hesitation Basketball is our premier partner</strong>, leading player development and running camps alongside our staff. Our PGC partnership gives our families discounted rates on PGC camps, and Transforming Basketball supports our coach education and training.</p>
         </div>
 
         <div class="leader-grid" id="leader-grid">
@@ -1517,25 +1774,57 @@
   </div>
 
   <footer>
-    <div class="container footer-grid">
-      <div class="footer-brand" style="display: flex; flex-direction: column; align-items: flex-start; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <a href="#home"><img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" style="width: 60px; height: 60px; object-fit: contain;" /></a>
+    <div class="container footer-top">
+
+      <div class="footer-col">
+        <div class="footer-brand-row">
+          <a href="#home"><img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="Tennessee Saints logo" loading="lazy" /></a>
           <div>
-            <strong>Tennessee Saints</strong><br />
-            info@tnsaints.com · Middle Tennessee
+            <strong>Tennessee Saints</strong>
+            <div class="footer-contact">
+              <a href="mailto:info@tnsaints.com">info@tnsaints.com</a><br />
+              Middle Tennessee
+            </div>
           </div>
+        </div>
+        <div class="footer-socials">
+          <a href="https://www.instagram.com/tnsaints?igsh=MWp5bm9wNmk1Y3ZuYQ%3D%3D&utm_source=qr" aria-label="Instagram" target="_blank" rel="noopener noreferrer"><i class="fab fa-instagram"></i></a>
+          <a href="https://www.facebook.com/share/1JX6upExXh/?mibextid=wwXIfr" aria-label="Facebook" target="_blank" rel="noopener noreferrer"><i class="fab fa-facebook-f"></i></a>
+          <a href="https://x.com/tnsaints?s=21" aria-label="X" target="_blank" rel="noopener noreferrer"><i class="fab fa-x-twitter"></i></a>
+          <a href="https://www.youtube.com/channel/UCo9_x7jUcq8G3FfuD2_9w-Q" aria-label="YouTube" target="_blank" rel="noopener noreferrer"><i class="fab fa-youtube"></i></a>
+          <a href="https://www.linkedin.com/company/tnsaints/" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer"><i class="fab fa-linkedin"></i></a>
+          <a href="https://tnsaints.printful.me/" aria-label="Store" target="_blank" rel="noopener noreferrer"><i class="fas fa-store"></i></a>
         </div>
       </div>
 
-      <iframe class="footer-spotify" style="border-radius:12px;min-width:300px;max-width:300px;" src="https://open.spotify.com/embed/track/40fsULNhBDf1HMPrlXexiu?utm_source=generator&theme=0" width="100%" height="80" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+      <nav class="footer-col" aria-label="Footer navigation">
+        <h4>Explore</h4>
+        <ul class="footer-links">
+          <li><a href="#mission">Mission</a></li>
+          <li><a href="#values">Values</a></li>
+          <li><a href="#program">Who We Train</a></li>
+          <li><a href="#leadership">Coaches &amp; Leadership</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </nav>
 
-      <a class="footer-privacy" href="privacy-policy.html" style="font-size:0.85rem;opacity:0.7;">Privacy Policy</a>
+      <div class="footer-col">
+        <h4>Our Anthem</h4>
+        <iframe class="footer-spotify" style="border-radius:12px;max-width:100%;" src="https://open.spotify.com/embed/track/40fsULNhBDf1HMPrlXexiu?utm_source=generator&theme=0" width="300" height="80" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="The Tennessee Saints on Spotify"></iframe>
+      </div>
+    </div>
 
+    <div class="container footer-partners-band">
+      <span class="footer-partners-label">Our Partners</span>
       <div class="footer-partners">
         <a class="footer-partner" href="https://cy-ql04.na1.hubspotlinks.com/Ctc/RG+113/cy-ql04/VWlLJ22mNbGTN46cmgsmSvxxW35KrPN5PHv67MJvQnv3qn9qW7Y8-PT6lZ3ppVNj10v7zr5gQW6YYHqn1TJjLMW45XSXq5fJ_K5W2Ndd784g1cdBW1NKmfy6D2wTSW8bwFXd4544PQW2nY3mF7zwpltVF2qVK7lKDbbW1vwq8M8DBPLfW24-05V44MPlRVrqj_C1qSbxcW2rHgWg77_JkVW38Yx7m4W-Rr8W14f0LC3X9FdVW7-LjKv1pd6NnW7YG-CR2lyLMwW1v0s7-8vtHy6W4yrS3N8Tp39hVcdRW24g4tcbW5Pm4p166KwrZW232ns0990DtSW1mSMmY2TSW0rW1XY0v_4FSrr4Mjn8K2xVD5vW2PLPtJ4YW5g3W23db9K8JvkBRf4hRlzn04" target="_blank" rel="noopener noreferrer" aria-label="PGC Basketball Trusted Partner"><img src="PGCTrustedPartner.jpg" alt="PGC Trusted Partner" loading="lazy" /></a>
         <a class="footer-partner" href="https://www.nohesihoops.com/" target="_blank" rel="noopener noreferrer" aria-label="No Hesitation Basketball"><img src="no-hesitation-basketball-full.png" alt="No Hesitation Basketball" loading="lazy" /></a>
       </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <span>&copy; <span id="footer-year">2026</span> Tennessee Saints Basketball Academy</span>
+      <a href="privacy-policy.html">Privacy Policy</a>
     </div>
   </footer>
 
@@ -1560,8 +1849,20 @@
     //
     // The Turnstile SITE key is public by design; it is meant to be readable
     // here. The matching SECRET key lives only in the Worker.
-    const REGISTRATION_API = 'https://api.tnsaints.com';
-    const TURNSTILE_SITE_KEY = '0x4AAAAAAEKmJntXjTbt2yuF';
+    // Local previews point at the local Worker and Cloudflare's published
+    // always-passes Turnstile test key. Without this, a preview on 127.0.0.1
+    // shows "Unable to connect" (the real widget is bound to tnsaints.com) and
+    // could not submit anyway, since the production Worker's origin allow-list
+    // correctly rejects localhost.
+    const IS_LOCAL = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+
+    const REGISTRATION_API = IS_LOCAL
+      ? 'http://127.0.0.1:8787'
+      : 'https://api.tnsaints.com';
+
+    const TURNSTILE_SITE_KEY = IS_LOCAL
+      ? '1x00000000000000000000AA'
+      : '0x4AAAAAAEKmJntXjTbt2yuF';
     const REGISTRATION_CLOSES_AT = new Date('2026-08-22T23:59:59-05:00');
 
     const todayIso = new Date().toISOString().slice(0, 10);
@@ -1678,13 +1979,24 @@
         </div>
       `,
       evaluation: `
-        <p style="margin:0 0 4px; font-size:0.95rem; line-height:1.5; opacity:0.85;">
+        <div class="eval-expect">
+          <strong>What to expect</strong>
+          <p>
+            Experienced coaches evaluate every player across both sides of the game &mdash;
+            the measurable skills like shooting, ball handling, and defending, plus the ones
+            that never show up in a box score: effort, coachability, decision-making, and how
+            a player competes alongside a team. You'll receive written feedback on your player
+            within one week of the evaluation.
+          </p>
+        </div>
+        <p class="eval-intro">
           <strong>Saturday, August 29 &middot; Grassland Heights Baptist Church</strong><br />
-          2316 Hillsboro Rd, Franklin, TN 37069. Choose a session below &mdash; spots are limited and we'll
-          confirm your player's time by email.
+          2316 Hillsboro Rd, Franklin, TN 37069. Spots are limited and we'll confirm
+          your player's time by email.
         </p>
         <fieldset class="field-group">
           <legend>Preferred Session Time</legend>
+          <div id="availability-slot"></div>
           <div class="checkbox-row">
             <input id="evaluation-slot-9" name="session_time" type="radio" value="9:00 AM" required />
             <label for="evaluation-slot-9">9:00 AM <span class="slot-remaining" data-slot="9:00 AM"></span></label>
@@ -1933,10 +2245,16 @@
     async function renderAvailability() {
       if (!REGISTRATION_API) return;
 
+      // Rendered inside the session fieldset, under its legend. Prepending it
+      // to the whole form put the status line above the event details, which
+      // read as an orphaned fragment before the reader knew what event it was.
+      const slot = document.getElementById('availability-slot');
+      if (!slot) return;
+
       const host = document.createElement('p');
       host.className = 'availability-note';
       host.textContent = 'Checking session availability…';
-      dynamicFields.prepend(host);
+      slot.appendChild(host);
 
       try {
         const res = await fetch(`${REGISTRATION_API}/api/availability`);
@@ -2351,6 +2669,11 @@
       s.defer = true;
       document.head.appendChild(s);
     }
+
+    // Keeps the footer copyright current without an annual edit. Falls back to
+    // the hardcoded year in the markup if scripting is unavailable.
+    const footerYear = document.getElementById('footer-year');
+    if (footerYear) footerYear.textContent = new Date().getFullYear();
 
     // --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. ---
     (function initEventBanner() {
