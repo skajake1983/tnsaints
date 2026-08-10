@@ -425,3 +425,59 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+
+
+print("\n=== 24. CSP hashes match the served scripts (or every button dies) ===")
+# The admin pages hash their own inline script instead of allowing
+# 'unsafe-inline'. If the served script and the declared hash ever drift, the
+# browser silently refuses to run it: no server error, no log line, just a page
+# where nothing works. Cheap to pin, expensive to discover on send day.
+import base64, hashlib
+
+
+def csp_matches(path):
+    req = urllib.request.Request(BASE + path)
+    req.add_header("Origin", ORIGIN)
+    with urllib.request.urlopen(req) as r:
+        csp = r.headers.get("Content-Security-Policy", "")
+        html = r.read().decode()
+    declared = re.search(r"script-src '(sha256-[^']+)'", csp)
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+    if not declared or not scripts:
+        return False, f"declared={bool(declared)} scripts={len(scripts)}"
+    actual = "sha256-" + base64.b64encode(
+        hashlib.sha256(scripts[-1].encode("utf-8")).digest()).decode()
+    return declared.group(1) == actual, f"{declared.group(1)} vs {actual}"
+
+
+ok, detail = csp_matches(ADMIN + "/decisions")
+check("decisions page script hash matches its CSP", ok, detail)
+
+register("Csp Check", 9)
+C = reg_id("Csp Check")
+ok, detail = csp_matches(f"{ADMIN}/eval/{C}")
+check("evaluation form script hash matches its CSP", ok, detail)
+
+print("\n=== 25. confirmations are in-page, not browser prompts ===")
+_, body = call("GET", ADMIN + "/decisions")
+b = str(body)
+check("an in-page dialog is present", 'id="dlgBackdrop"' in b)
+check("it is a real dialog for assistive tech", 'role="dialog"' in b and 'aria-modal="true"' in b)
+check("no native prompt() remains", "= prompt(" not in b and "window.prompt(" not in b)
+check("destructive actions still require a typed word",
+      "DELETE" in b and "CANCEL" in b and "APPROVE" in b)
+
+print("\n=== 26. tables collapse to cards on a phone ===")
+for path, label in [(ADMIN + "/", "roster"), (ADMIN + "/decisions", "decisions")]:
+    _, body = call("GET", path)
+    b = str(body)
+    check(f"{label}: table is marked stackable", 'table class="stack"' in b)
+    check(f"{label}: cells carry their own labels", 'data-label="Player"' in b)
+    check(f"{label}: a narrow breakpoint exists", "max-width: 720px" in b)
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)

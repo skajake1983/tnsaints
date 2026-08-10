@@ -103,9 +103,57 @@ const STYLES = `
   .notice { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--gold);
             border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 14px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 18px 30px; }
-  @media (max-width: 640px) {
-    th, td { padding: 8px 10px; }
+  /* ---------------------------------------------------------------------
+   * Narrow screens.
+   *
+   * A horizontally scrolling five-column table is technically "responsive"
+   * and practically unusable: the player's name scrolls out of view exactly
+   * when you press the button that acts on them, which on a screen with
+   * Cancel and Delete is how the wrong child gets deleted.
+   *
+   * So below 720px the data tables stop being tables. Each row becomes a
+   * card, and every cell carries its own label from its data-label attribute,
+   * so nothing depends on a header that is no longer beside it.
+   * ------------------------------------------------------------------- */
+  @media (max-width: 720px) {
     main { padding: 16px 12px 50px; }
+    h1 { font-size: 20px; }
+
+    table.stack thead { position: absolute; width: 1px; height: 1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    table.stack tbody tr {
+      display: block; border: 1px solid var(--line); border-radius: 10px;
+      padding: 4px 0; margin: 0 0 10px; background: #fff;
+    }
+    table.stack td {
+      display: flex; gap: 12px; align-items: baseline; white-space: normal;
+      border: 0; padding: 7px 14px; text-align: left;
+    }
+    table.stack td::before {
+      content: attr(data-label); flex: 0 0 42%; max-width: 42%;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--muted);
+    }
+    /* Rows whose only content is the name read better as a heading. */
+    table.stack td[data-label="Player"] { display: block; padding-top: 11px; }
+    table.stack td[data-label="Player"]::before { display: none; }
+    /* Action cells: full-width, thumb-sized, stacked rather than crowded. */
+    table.stack td[data-label="Admin"], table.stack td[data-label="Decision"] { flex-wrap: wrap; }
+    table.stack td[data-label="Admin"] button,
+    table.stack td[data-label="Decision"] button { flex: 1 1 42%; padding: 11px 10px; }
+    .scroll { overflow-x: visible; }
+
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .card .n { font-size: 22px; }
+    header { padding: 10px 14px; }
+    header nav { width: 100%; margin-left: 0; order: 3; gap: 16px; }
+    header .who { font-size: 12px; margin-left: auto; }
+    .bigbtn { width: 100%; }
+    .toolbar { gap: 10px; }
+  }
+
+  @media (max-width: 400px) {
+    .cards { grid-template-columns: 1fr; }
   }
 `;
 

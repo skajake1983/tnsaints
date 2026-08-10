@@ -883,10 +883,10 @@ async function renderRoster(env, principal) {
       const w = count(t, 'waitlist');
       const full = availability.sessions.find((s) => s.session_time === t)?.full;
       return `<tr>
-        <td><strong>${esc(t)}</strong></td>
-        <td>${c} of ${capacity}</td>
-        <td>${full ? '<span class="pill waitlist">full</span>' : `<span class="pill confirmed">${capacity - c} open</span>`}</td>
-        <td>${w} waiting</td>
+        <td data-label="Session"><strong>${esc(t)}</strong></td>
+        <td data-label="Confirmed">${c} of ${capacity}</td>
+        <td data-label="Availability">${full ? '<span class="pill waitlist">full</span>' : `<span class="pill confirmed">${capacity - c} open</span>`}</td>
+        <td data-label="Waiting list">${w} waiting</td>
       </tr>`;
     })
     .join('');
@@ -901,7 +901,7 @@ async function renderRoster(env, principal) {
     ? rows
         .map((r) => {
           const contact = showsContact
-            ? `<td>${esc(r.parent_name)}</td><td>${esc(r.parent_email)}</td><td>${esc(r.phone)}</td>`
+            ? `<td data-label="Parent">${esc(r.parent_name)}</td><td data-label="Email">${esc(r.parent_email)}</td><td data-label="Phone">${esc(r.phone)}</td>`
             : '';
           // The flag, never the text. A coach needs to know the note exists;
           // reading it goes through the audited admin endpoint.
@@ -909,21 +909,21 @@ async function renderRoster(env, principal) {
             ? '<span class="med">medical note — see Jacob</span>'
             : '';
           return `<tr>
-        <td><strong>${esc(r.player_name)}</strong></td>
-        <td>${esc(r.grade)}</td>
-        <td>${esc(r.years_experience ?? '')}</td>
-        <td>${esc(r.session_time)}</td>
-        <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
-        <td>${esc(r.school)}</td>
+        <td data-label="Player"><strong>${esc(r.player_name)}</strong></td>
+        <td data-label="Grade">${esc(r.grade)}</td>
+        <td data-label="Yrs">${esc(r.years_experience ?? '')}</td>
+        <td data-label="Session">${esc(r.session_time)}</td>
+        <td data-label="Status"><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
+        <td data-label="School">${esc(r.school)}</td>
         ${contact}
-        <td>${flag}</td>
+        <td data-label="Flags">${flag}</td>
       </tr>`;
         })
         .join('')
     : '';
 
   const table = rows.length
-    ? `<div class="scroll"><table><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table></div>`
+    ? `<div class="scroll"><table class="stack"><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table></div>`
     : `<div class="empty">No registrations yet for this event.</div>`;
 
   const windowNote = window.open
@@ -944,7 +944,7 @@ async function renderRoster(env, principal) {
 
   <div class="panel">
     <h2>Sessions</h2>
-    <div class="scroll"><table>
+    <div class="scroll"><table class="stack">
       <thead><tr><th>Session</th><th>Confirmed</th><th>Availability</th><th>Waiting list</th></tr></thead>
       <tbody>${sessionRows}</tbody>
     </table></div>

@@ -30,6 +30,7 @@
  */
 
 import { esc } from './ui.js';
+import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
 
 const PAGE_SCRIPT = `
 (function () {
@@ -170,13 +171,19 @@ const PAGE_SCRIPT = `
   function confirmWord(btn, word, url, done) {
     btn.addEventListener('click', function () {
       if (btn.disabled) return;
-      var typed = prompt(btn.dataset.prompt + '\\n\\nType ' + word + ' to confirm:');
-      if (typed === null) return;
-      if (typed.trim().toUpperCase() !== word) { say('Not confirmed - nothing happened.', ''); return; }
-      btn.disabled = true;
-      say('Working...', '');
-      post(url).then(function (body) { done(body); })
-        .catch(function (err) { btn.disabled = false; fail('Refused', err.message); });
+      window.tnConfirm({
+        title: btn.dataset.title,
+        lines: JSON.parse(btn.dataset.lines || '[]'),
+        word: word,
+        confirmLabel: btn.dataset.confirmLabel,
+        danger: btn.dataset.danger === '1'
+      }).then(function (ok) {
+        if (!ok) return;
+        btn.disabled = true;
+        say('Working...', '');
+        post(url).then(function (body) { done(body); })
+          .catch(function (err) { btn.disabled = false; fail('Refused', err.message); });
+      });
     });
   }
 
@@ -197,27 +204,42 @@ const PAGE_SCRIPT = `
   document.querySelectorAll('[data-cancel]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var name = btn.dataset.name;
-      var typed = prompt('Cancel ' + name + "'s place?\\n\\nThis frees the seat and the first family " +
-        'on that waiting list moves up.\\n\\nType CANCEL to confirm:');
-      if (typed === null) return;
-      if (typed.trim().toUpperCase() !== 'CANCEL') { say('Not confirmed - nothing happened.', ''); return; }
-      post('/api/registration/' + btn.dataset.cancel + '/cancel', { reason: '' })
-        .then(function () { location.reload(); })
-        .catch(function (err) { fail('Could not cancel', err.message); });
+      window.tnConfirm({
+        title: 'Cancel ' + name + "'s place?",
+        lines: [
+          'This frees their seat. The first family on that session\\'s waiting list is moved up automatically.',
+          'The registration and the signed waiver are kept — only the place is released.'
+        ],
+        word: 'CANCEL',
+        confirmLabel: 'Cancel their place'
+      }).then(function (ok) {
+        if (!ok) return;
+        post('/api/registration/' + btn.dataset.cancel + '/cancel', { reason: '' })
+          .then(function () { location.reload(); })
+          .catch(function (err) { fail('Could not cancel', err.message); });
+      });
     });
   });
 
   document.querySelectorAll('[data-delete]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var name = btn.dataset.name;
-      var typed = prompt('PERMANENTLY DELETE ' + name + '?\\n\\nThis erases the registration, the signed ' +
-        'waiver record, and every coach note about this player. It cannot be undone.\\n\\n' +
-        'Cancelling instead keeps the record and still frees the seat.\\n\\nType DELETE to confirm:');
-      if (typed === null) return;
-      if (typed.trim().toUpperCase() !== 'DELETE') { say('Not confirmed - nothing happened.', ''); return; }
-      post('/api/registration/' + btn.dataset.delete + '/delete')
-        .then(function () { location.reload(); })
-        .catch(function (err) { fail('Could not delete', err.message); });
+      window.tnConfirm({
+        title: 'Permanently delete ' + name + '?',
+        lines: [
+          'This erases the registration, the signed waiver record, and every coach note about this player.',
+          'It cannot be undone.',
+          'Cancelling instead keeps the record and still frees the seat.'
+        ],
+        word: 'DELETE',
+        confirmLabel: 'Delete permanently',
+        danger: true
+      }).then(function (ok) {
+        if (!ok) return;
+        post('/api/registration/' + btn.dataset.delete + '/delete')
+          .then(function () { location.reload(); })
+          .catch(function (err) { fail('Could not delete', err.message); });
+      });
     });
   });
 })();
@@ -225,9 +247,12 @@ const PAGE_SCRIPT = `
 
 let cachedHash = null;
 
+/** Dialog first: the page script calls window.tnConfirm, so it must exist. */
+const FULL_SCRIPT = DIALOG_SCRIPT + PAGE_SCRIPT;
+
 async function scriptCspHash() {
   if (cachedHash) return cachedHash;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PAGE_SCRIPT));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(FULL_SCRIPT));
   let binary = '';
   for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
   cachedHash = `'sha256-${btoa(binary)}'`;
@@ -244,7 +269,7 @@ export async function decisionsCsp() {
   );
 }
 
-export const DECISION_STYLES = `
+export const DECISION_STYLES = DIALOG_STYLES + `
   .flash { padding: 11px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;
            background: #eef2f8; border: 1px solid var(--line); }
   .flash.good { background: #e4f3ea; border-color: #b6ddc6; color: var(--ok); font-weight: 600; }
@@ -384,16 +409,16 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
       const incomplete = !(Number(r.with_strengths) > 0 && Number(r.with_growth) > 0);
       const lock = approved ? ' disabled' : '';
       return `<tr>
-        <td><strong>${esc(r.player_name)}</strong><br>
+        <td data-label="Player"><strong>${esc(r.player_name)}</strong><br>
           <span style="font-size:12px;color:var(--muted)">${esc(r.session_time)} · ${esc(r.grade)}</span>
           ${incomplete ? `<br><a class="needs" href="/eval/${r.id}">needs a strength &amp; growth area →</a>` : ''}</td>
-        <td>${Number(r.coach_count)}</td>
-        <td>
+        <td data-label="Coaches">${Number(r.coach_count)}</td>
+        <td data-label="Decision">
           <button class="dbtn${r.decision === 'accept' ? ' on' : ''}" data-rid="${r.id}" data-decide="accept"${lock}>Accept</button>
           <button class="dbtn${r.decision === 'not_yet' ? ' on' : ''}" data-rid="${r.id}" data-decide="not_yet"${lock}>Not yet</button>
         </td>
-        <td>${msg ? esc(msg.send_state) : '<span style="color:var(--muted)">—</span>'}</td>
-        <td>
+        <td data-label="Message">${msg ? esc(msg.send_state) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td data-label="Admin">
           <button class="dbtn" data-cancel="${r.id}" data-name="${esc(r.player_name)}"${lock}>Cancel</button>
           <button class="dbtn danger" data-delete="${r.id}" data-name="${esc(r.player_name)}"${lock}>Delete</button>
         </td>
@@ -422,7 +447,9 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
       built && !approved
         ? `<button class="bigbtn" id="approveBtn"${canApprove ? '' : ' disabled'}
              data-url="/api/batch/${esc(batch.id)}/approve"
-             data-prompt="Approve ${drafts.length} message(s)? This freezes the exact text you just read. It does NOT send anything yet."
+             data-title="Approve ${drafts.length} message(s)?"
+             data-lines='["This freezes the exact text you just read. Every message becomes read-only.", "It does NOT send anything yet \u2014 sending is a separate action."]'
+             data-confirm-label="Approve and freeze"
              >${
                blocked.length
                  ? `Approve (${blocked.length} blocked)`
@@ -435,7 +462,9 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
     ${
       approved && queued && canSend
         ? `<button class="bigbtn send" id="sendBtn" data-url="/api/batch/${esc(batch.id)}/send"
-             data-prompt="Send up to 10 messages now to real families. This cannot be recalled.">Send now</button>`
+             data-title="Send ${Math.min(queued, 10)} message(s) now?"
+             data-lines='["This sends real email to real families, up to 10 in this run.", "It cannot be recalled once sent."]'
+             data-confirm-label="Send now" data-danger="1">Send now</button>`
         : ''
     }
     ${
@@ -457,11 +486,13 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
 
   <div class="panel">
     <h2>Players — ${decided} of ${rows.length} decided</h2>
-    <div class="scroll"><table>
+    <div class="scroll"><table class="stack">
       <thead><tr><th>Player</th><th>Coaches</th><th>Decision</th><th>Message</th><th>Admin</th></tr></thead>
       <tbody>${rowsHtml || '<tr><td colspan="5" class="empty">No confirmed players yet.</td></tr>'}</tbody>
     </table></div>
   </div>
 
-  <script>${PAGE_SCRIPT}</script>`;
+  ${DIALOG_MARKUP}
+
+  <script>${FULL_SCRIPT}</script>`;
 }
