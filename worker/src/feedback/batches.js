@@ -12,6 +12,25 @@ import { composeDraft, defaultBodyText, textToHtml, subjectFor, gateMessage } fr
 import { resolvePlayerId } from './players.js';
 import { reserveSend, sendComposedMessage, emailConfigured } from '../email.js';
 
+/**
+ * Fingerprint of the coach notes behind one player's draft.
+ *
+ * COUNT plus the latest updated_at: moves when a note is added, edited, or
+ * deleted, because saveEvaluation always bumps updated_at on upsert. Counting
+ * alone would miss a correction, which is the case that matters most — a note
+ * typed into the wrong player's form and fixed the next day leaves the count
+ * unchanged while the content is now somebody else's child.
+ */
+async function notesFingerprint(env, registrationId) {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(MAX(updated_at), '') AS latest
+       FROM eval_feedback WHERE registration_id = ?1`
+  )
+    .bind(registrationId)
+    .first();
+  return `${Number(row?.n || 0)}:${row?.latest || ''}`;
+}
+
 /** Batch ids are readable on purpose: they appear in audit rows and logs. */
 function batchId(eventId, now) {
   return `${eventId}-${now.replace(/[-:T]/g, '').slice(0, 14)}`;
@@ -30,6 +49,32 @@ export async function setDecision(env, { registrationId, decision, actor }) {
 
   if (!reg) return { ok: false, error: 'No such player in this event.' };
 
+  // A decision cannot change once it has been committed to a family.
+  //
+  // Without this, a stale tab rendered before approval still has live decision
+  // buttons (they are disabled in markup, which is not a control), and flipping
+  // one after approval changed nothing about the frozen body — the staleness
+  // UPDATE below only matches drafts. The screen said "Decision saved" in green
+  // while the queued email still said the opposite, and the audit log then
+  // disagreed with what the family actually received.
+  const committed = await env.DB.prepare(
+    `SELECT send_state FROM parent_messages
+      WHERE registration_id = ?1 AND send_state IN ('queued', 'sending', 'sent')
+      LIMIT 1`
+  )
+    .bind(registrationId)
+    .first();
+
+  if (committed) {
+    return {
+      ok: false,
+      error:
+        committed.send_state === 'sent'
+          ? 'This family has already been emailed, so the decision can no longer be changed.'
+          : 'This message is already approved and waiting to send. Reopen the batch before changing the decision.',
+    };
+  }
+
   await env.DB.prepare(
     `INSERT INTO decisions (registration_id, event_id, decision, decided_by, decided_at)
      VALUES (?1, ?2, ?3, ?4, ?5)
@@ -41,7 +86,23 @@ export async function setDecision(env, { registrationId, decision, actor }) {
     .bind(registrationId, reg.event_id, decision, actor, new Date().toISOString())
     .run();
 
-  return { ok: true };
+  // Any draft written for a DIFFERENT decision is now a lie, so un-read it.
+  //
+  // Clearing reviewed_at is what makes this safe rather than merely tidy:
+  // approveBatch refuses while anything is unread, so flipping a decision after
+  // reading everything cannot slip through on the strength of a read that
+  // happened when the text said the opposite.
+  const staled = await env.DB.prepare(
+    `UPDATE parent_messages
+        SET reviewed_at = NULL, reviewed_by = NULL
+      WHERE registration_id = ?1
+        AND send_state = 'draft'
+        AND COALESCE(composed_for_decision, '') != ?2`
+  )
+    .bind(registrationId, decision)
+    .run();
+
+  return { ok: true, staleDraft: staled.meta.changes > 0 };
 }
 
 /**
@@ -120,17 +181,47 @@ export async function buildBatch(env, actor) {
       .run();
   }
 
-  // Clear previous drafts AND previous skips, so rebuilding reflects the
-  // current notes rather than layering on stale copies. Skips must go too:
-  // a coach writing the missing note and the admin rebuilding should clear the
-  // block, not leave a stale "skipped" row shadowing a player who is now ready.
+  // PRESERVE HAND-EDITED DRAFTS THAT ARE STILL CORRECT.
   //
+  // Rebuilding used to delete every draft and recompose from scratch. After an
+  // admin had rewritten forty of fifty messages into their own voice, changing
+  // one player's decision and pressing Rebuild would have destroyed all forty
+  // with no warning — and rewriting a "not yet" is the most careful work anyone
+  // does in this product.
+  //
+  // An edited draft survives a rebuild as long as it is still composed for the
+  // current decision. Anything unedited, stale, or blocked is regenerated.
+  const keep = await env.DB.prepare(
+    `SELECT m.registration_id
+       FROM parent_messages m
+       LEFT JOIN decisions d ON d.registration_id = m.registration_id
+      WHERE m.batch_id = ?1
+        AND m.send_state = 'draft'
+        AND m.edited_at IS NOT NULL
+        AND m.composed_for_decision = COALESCE(d.decision, 'undecided')`
+  )
+    .bind(id)
+    .all();
+
+  const preserved = new Set((keep.results || []).map((r) => Number(r.registration_id)));
+
   // Deliberately never touches queued/sending/sent — those are commitments.
   await env.DB.prepare(
     `DELETE FROM parent_messages
-      WHERE batch_id = ?1 AND send_state IN ('draft', 'skipped')`
+      WHERE batch_id = ?1 AND send_state IN ('draft', 'skipped')
+        AND edited_at IS NULL`
   )
     .bind(id)
+    .run();
+
+  // Stale edited drafts go too — a rewritten message for the wrong decision is
+  // worse than a fresh template one, because it reads as deliberate.
+  await env.DB.prepare(
+    `DELETE FROM parent_messages
+      WHERE batch_id = ?1 AND send_state IN ('draft', 'skipped')
+        AND registration_id NOT IN (SELECT value FROM json_each(?2))`
+  )
+    .bind(id, JSON.stringify([...preserved]))
     .run();
 
   // Already-sent families are excluded outright. The unique index added in
@@ -147,10 +238,16 @@ export async function buildBatch(env, actor) {
   const problems = [];
   let composed = 0;
   let skippedAlreadySent = 0;
+  let keptEdited = 0;
 
   for (const row of rows) {
     if (sentTo.has(Number(row.id))) {
       skippedAlreadySent += 1;
+      continue;
+    }
+    if (preserved.has(Number(row.id))) {
+      keptEdited += 1;
+      composed += 1;
       continue;
     }
     const draft = await composeDraft(env, row.id, row.decision);
@@ -182,11 +279,14 @@ export async function buildBatch(env, actor) {
         await env.DB.prepare(
           `INSERT INTO parent_messages
              (player_id, registration_id, event_id, batch_id, kind, subject,
-              body_html, body_text, send_state, last_error, created_by, created_at)
-           VALUES (?1, ?2, ?3, ?4, 'evaluation_decision', ?5, '', '', 'skipped', ?6, ?7, ?8)
+              body_html, body_text, send_state, last_error, created_by, created_at,
+              composed_for_decision)
+           VALUES (?1, ?2, ?3, ?4, 'evaluation_decision', ?5, '', '', 'skipped', ?6, ?7, ?8, ?9)
            ON CONFLICT (batch_id, registration_id)
              WHERE batch_id IS NOT NULL AND registration_id IS NOT NULL
-           DO UPDATE SET send_state = 'skipped', last_error = excluded.last_error`
+           DO UPDATE SET send_state            = 'skipped',
+                         last_error            = excluded.last_error,
+                         composed_for_decision = excluded.composed_for_decision`
         )
           .bind(
             playerId,
@@ -196,7 +296,8 @@ export async function buildBatch(env, actor) {
             subjectFor(String(row.player_name).split(/\s+/)[0], env),
             why.join(' ').slice(0, 300),
             actor,
-            now
+            now,
+            row.decision
           )
           .run();
       }
@@ -206,8 +307,9 @@ export async function buildBatch(env, actor) {
     await env.DB.prepare(
       `INSERT INTO parent_messages
          (player_id, registration_id, event_id, batch_id, kind, subject,
-          body_html, body_text, send_state, created_by, created_at)
-       VALUES (?1, ?2, ?3, ?4, 'evaluation_decision', ?5, ?6, ?7, 'draft', ?8, ?9)
+          body_html, body_text, send_state, created_by, created_at, composed_for_decision,
+          composed_from_notes)
+       VALUES (?1, ?2, ?3, ?4, 'evaluation_decision', ?5, ?6, ?7, 'draft', ?8, ?9, ?10, ?11)
        -- The WHERE is not decoration: idx_messages_one_per_batch is a PARTIAL
        -- unique index, and SQLite only matches an ON CONFLICT target to a
        -- partial index when the clause is repeated here verbatim. Without it
@@ -216,9 +318,14 @@ export async function buildBatch(env, actor) {
        ON CONFLICT (batch_id, registration_id)
          WHERE batch_id IS NOT NULL AND registration_id IS NOT NULL
        DO UPDATE SET
-         subject   = excluded.subject,
-         body_html = excluded.body_html,
-         body_text = excluded.body_text`
+         subject               = excluded.subject,
+         body_html             = excluded.body_html,
+         body_text             = excluded.body_text,
+         composed_for_decision = excluded.composed_for_decision,
+         composed_from_notes   = excluded.composed_from_notes,
+         -- A regenerated body has not been read, whatever was true before.
+         reviewed_at           = NULL,
+         reviewed_by           = NULL`
     )
       .bind(
         playerId,
@@ -229,14 +336,16 @@ export async function buildBatch(env, actor) {
         textToHtml(bodyText),
         bodyText,
         actor,
-        now
+        now,
+        row.decision,
+        await notesFingerprint(env, row.id)
       )
       .run();
 
     composed += 1;
   }
 
-  return { ok: true, batchId: id, composed, problems, skippedAlreadySent, total: rows.length };
+  return { ok: true, batchId: id, composed, keptEdited, problems, skippedAlreadySent, total: rows.length };
 }
 
 /**
@@ -310,6 +419,7 @@ export async function approveBatch(env, id, actor) {
   // exists.
   const { results } = await env.DB.prepare(
     `SELECT m.id, m.body_text, m.registration_id, m.reviewed_at,
+            m.composed_for_decision, m.composed_from_notes,
             r.player_name, r.parent_email,
             COALESCE(d.decision, 'undecided') AS decision,
             SUM(CASE WHEN TRIM(COALESCE(f.strengths,   '')) != '' THEN 1 ELSE 0 END) AS with_strengths,
@@ -329,8 +439,26 @@ export async function approveBatch(env, id, actor) {
 
   const problems = [];
   const unread = [];
+  const stale = [];
 
   for (const m of messages) {
+    // THE CONTRADICTION CHECK.
+    //
+    // The body says one thing; the decision now says another. Without this,
+    // flipping a decision after building sends an accepted family a rejection —
+    // the gate below cannot see it, because it inspects the text, the address
+    // and the coach prose, none of which change when a decision does.
+    if (m.composed_for_decision !== m.decision) {
+      stale.push(m.player_name);
+      continue;
+    }
+
+    // The notes moved after this was written. Same treatment: it may now
+    // describe a different child entirely.
+    if (m.composed_from_notes !== (await notesFingerprint(env, m.registration_id))) {
+      stale.push(m.player_name);
+      continue;
+    }
     const gate = gateMessage({
       decision: m.decision,
       draft: { strengths: Array(Number(m.with_strengths) || 0), growth: Array(Number(m.with_growth) || 0) },
@@ -340,6 +468,17 @@ export async function approveBatch(env, id, actor) {
     });
     if (!gate.ok) problems.push({ player_name: m.player_name, problems: gate.problems });
     if (!m.reviewed_at) unread.push(m.player_name);
+  }
+
+  if (stale.length) {
+    return {
+      ok: false,
+      error: `${stale.length} message(s) were written for a different decision and are out of date.`,
+      problems: stale.map((player_name) => ({
+        player_name,
+        problems: ['The decision changed after this was written. Rebuild drafts, then read it again.'],
+      })),
+    };
   }
 
   if (problems.length) return { ok: false, error: 'Some messages did not pass review.', problems };
@@ -448,10 +587,29 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
     .bind(id)
     .run();
 
+  // Retire anything queued for a family who has since withdrawn. Left in place
+  // they hold the batch open forever: the completion count only looks at
+  // 'queued', while decisionGrid hides cancelled players, so the screen shows a
+  // permanent "1 queued" belonging to nobody visible.
+  await env.DB.prepare(
+    `UPDATE parent_messages
+        SET send_state = 'skipped', last_error = 'registration cancelled after approval'
+      WHERE batch_id = ?1 AND send_state = 'queued'
+        AND registration_id IN (
+          SELECT id FROM registrations WHERE status != 'confirmed'
+        )`
+  )
+    .bind(id)
+    .run();
+
   const { results } = await env.DB.prepare(
-    `SELECT m.id, m.subject, m.body_html, m.body_text, r.parent_email, r.parent_name
+    `SELECT m.id, m.subject, m.body_html, m.body_text, m.registration_id,
+            m.composed_for_decision, m.composed_from_notes,
+            COALESCE(d.decision, 'undecided') AS decision,
+            r.parent_email, r.parent_name
        FROM parent_messages m
        JOIN registrations r ON r.id = m.registration_id
+       LEFT JOIN decisions d ON d.registration_id = m.registration_id
       WHERE m.batch_id = ?1 AND m.send_state = 'queued'
         -- A family who withdrew must not receive their child's decision. Cancel
         -- flips registrations.status but leaves any queued message live and
@@ -479,6 +637,29 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
       .run();
 
     if (claim.meta.changes === 0) continue;
+
+    // LAST GATE BEFORE A REAL EMAIL.
+    //
+    // Approve checked this too, but approve can be minutes or days before the
+    // send — the free email tier splits fifty messages across two days — and
+    // nothing upstream is trusted at the point of no return. A contradiction
+    // here becomes a visible failure rather than a silent skip, because a
+    // message that quietly never sends is the failure nobody notices.
+    const currentNotes = await notesFingerprint(env, message.registration_id);
+    if (
+      message.composed_for_decision !== message.decision ||
+      message.composed_from_notes !== currentNotes
+    ) {
+      await env.DB.prepare(
+        `UPDATE parent_messages
+            SET send_state = 'failed',
+                last_error = 'The decision or the coach notes changed after approval. Rebuild and re-approve.'
+          WHERE id = ?1`
+      )
+        .bind(message.id)
+        .run();
+      continue;
+    }
 
     if (!(await reserveSend(env))) {
       // Back to 'queued', NOT 'failed'. Nothing is wrong with this message and

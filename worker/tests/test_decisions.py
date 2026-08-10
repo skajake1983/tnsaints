@@ -502,3 +502,151 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+
+
+print("\n=== 28. CHANGING A DECISION INVALIDATES THE DRAFT ===")
+# The owner found this: flip not_yet -> accept after building, and the stored
+# draft still said "We are not able to offer a spot". Approving and sending
+# would tell an ACCEPTED family they were turned away.
+for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+             "DELETE FROM decision_batches", "DELETE FROM eval_notes_internal",
+             "DELETE FROM eval_feedback", "DELETE FROM registrations", "DELETE FROM players"]:
+    sql(stmt)
+
+register("Flip Player", 11)
+F = reg_id("Flip Player")
+call("POST", f"{ADMIN}/api/eval/{F}", {
+    "strengths": "Reads the floor unusually well for his age and moves the ball early.",
+    "growth_area": "Wants to go left more often under pressure.",
+})
+call("POST", f"{ADMIN}/api/decision/{F}", {"decision": "not_yet"})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+BF = r.get("batchId")
+check("draft built for not_yet", r.get("composed") == 1, str(r)[:200])
+
+out = _wrangler(f"SELECT body_text, composed_for_decision FROM parent_messages WHERE registration_id={F}")
+check("the draft says what a not_yet says", "not able to offer" in out.lower(), out[-250:])
+check("and records which decision it was written for",
+      '"composed_for_decision": "not_yet"' in out, out[-250:])
+
+mid = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={F}")).group(1))
+call("POST", f"{ADMIN}/api/message/{mid}/review")
+
+# Now flip it.
+st, r = call("POST", f"{ADMIN}/api/decision/{F}", {"decision": "accept"})
+check("the flip is reported as invalidating the draft", r.get("staleDraft") is True, str(r))
+
+out = _wrangler(f"SELECT reviewed_at FROM parent_messages WHERE id={mid}")
+check("the earlier read no longer counts", '"reviewed_at": null' in out, out[-200:])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BF}/approve")
+check("APPROVE IS REFUSED while the text contradicts the decision", st == 400, f"got {st}")
+check("and it says the decision changed", "decision" in str(r).lower(), str(r)[:300])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BF}/send")
+check("send is refused too", st == 400 or r.get("sent") == 0, str(r)[:200])
+
+print("\n=== 29. rebuilding regenerates it for the new decision ===")
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+out = _wrangler(f"SELECT body_text, composed_for_decision FROM parent_messages WHERE registration_id={F}")
+check("the draft now matches the new decision",
+      '"composed_for_decision": "accept"' in out, out[-250:])
+check("and no longer reads as a rejection", "not able to offer" not in out.lower(), out[-250:])
+check("it must be read again", '"reviewed_at": null' in _wrangler(
+      f"SELECT reviewed_at FROM parent_messages WHERE registration_id={F}"))
+
+print("\n=== 30. rebuilding does NOT destroy hand-edited messages ===")
+mid2 = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={F} AND send_state='draft'")).group(1))
+MINE = ("Flip played really well on Saturday and we would love to have him. He reads the floor "
+        "unusually well for his age. Please reply to this email and we will get him started.")
+call("POST", f"{ADMIN}/api/message/{mid2}/edit", {"body_text": MINE})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+# Rebuilding used to delete every draft, so an admin who had rewritten forty
+# messages lost all forty by changing one player's decision.
+out = _wrangler(f"SELECT body_text FROM parent_messages WHERE registration_id={F}")
+check("a hand-edited draft survives a rebuild", "would love to have him" in out, out[-250:])
+check("and the rebuild reports it as kept", r.get("keptEdited") == 1, str(r)[:200])
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)
+
+
+print("\n=== 31. NOTES changing after build invalidates the draft ===")
+# The dangerous case: a coach types one child's observations into another
+# child's form (the exact mistake on-behalf-of exists to repair), a batch is
+# built overnight, and the notes are corrected the next day. Without this the
+# corrected player keeps a snapshot containing somebody else's child.
+for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+             "DELETE FROM decision_batches", "DELETE FROM eval_feedback",
+             "DELETE FROM eval_notes_internal", "DELETE FROM registrations",
+             "DELETE FROM players"]:
+    sql(stmt)
+
+register("Notes Player", 12)
+N = reg_id("Notes Player")
+call("POST", f"{ADMIN}/api/eval/{N}", {
+    "strengths": "Originally written about a different child entirely.",
+    "growth_area": "Also the wrong child.",
+})
+call("POST", f"{ADMIN}/api/decision/{N}", {"decision": "accept"})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+BN = r.get("batchId")
+mid = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={N}")).group(1))
+call("POST", f"{ADMIN}/api/message/{mid}/review")
+st, _ = call("POST", f"{ADMIN}/api/batch/{BN}/approve")
+check("a correct, read draft approves normally", st == 200, f"got {st}")
+
+# Reopen by rebuilding a fresh cycle, then correct the notes mid-flight.
+sql("DELETE FROM parent_messages")
+sql(f"UPDATE decision_batches SET state='draft' WHERE id='{BN}'")
+call("POST", f"{ADMIN}/api/batch/build")
+mid = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={N}")).group(1))
+call("POST", f"{ADMIN}/api/message/{mid}/review")
+out = _wrangler(f"SELECT reviewed_at FROM parent_messages WHERE id={mid}")
+check("it is read", '"reviewed_at": null' not in out, out[-160:])
+
+call("POST", f"{ADMIN}/api/eval/{N}", {
+    "strengths": "Corrected: this is what THIS player actually did on Saturday.",
+    "growth_area": "Corrected growth area for this player.",
+})
+out = _wrangler(f"SELECT reviewed_at FROM parent_messages WHERE id={mid}")
+check("correcting the notes un-reads the draft", '"reviewed_at": null' in out, out[-160:])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BN}/approve")
+check("approve is refused after the notes changed", st == 400, f"got {st} {str(r)[:200]}")
+
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+out = _wrangler(f"SELECT body_text FROM parent_messages WHERE registration_id={N}")
+check("rebuilding picks up the corrected notes", "what THIS player actually did" in out, out[-250:])
+check("and drops the wrong child's text", "different child entirely" not in out, out[-250:])
+
+print("\n=== 32. a decision cannot change once committed to a family ===")
+mid = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={N} AND send_state='draft'")).group(1))
+call("POST", f"{ADMIN}/api/message/{mid}/review")
+st, r = call("POST", f"{ADMIN}/api/batch/{BN}/approve")
+check("approve succeeds", st == 200 and r.get("ok"), str(r)[:220])
+
+# A stale tab still has live decision buttons; markup-disabled is not a control.
+st, r = call("POST", f"{ADMIN}/api/decision/{N}", {"decision": "not_yet"})
+check("flipping a decision after approval is REFUSED", st == 400, f"got {st}")
+check("and it explains the message is already committed",
+      "approved" in str(r).lower() or "already" in str(r).lower(), str(r)[:220])
+
+out = _wrangler(f"SELECT decision FROM decisions WHERE registration_id={N}")
+check("the decision on record is unchanged", '"decision": "accept"' in out, out[-160:])
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)

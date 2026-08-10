@@ -137,6 +137,21 @@ export async function saveEvaluation(env, { registrationId, authorEmail, authorL
       .run();
   }
 
+  // A draft composed from the OLD notes is now describing something that has
+  // changed. Un-read it so approveBatch refuses until someone looks again.
+  //
+  // This matters most in the case the on-behalf-of path exists to repair: a
+  // coach types one child's observations into another child's form, a batch is
+  // built overnight, and the mistake is corrected the next day. Without this the
+  // corrected player keeps a snapshot containing somebody else's child.
+  await env.DB.prepare(
+    `UPDATE parent_messages
+        SET reviewed_at = NULL, reviewed_by = NULL
+      WHERE registration_id = ?1 AND send_state = 'draft'`
+  )
+    .bind(registrationId)
+    .run();
+
   return { ok: true, playerId };
 }
 

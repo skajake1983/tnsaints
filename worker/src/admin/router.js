@@ -700,9 +700,18 @@ async function renderDecisions(env, principal) {
 
   if (batch) {
     const res = await env.DB.prepare(
-      `SELECT id, registration_id, send_state, subject, body_text,
-              reviewed_at, reviewed_by, edited_at, last_error
-         FROM parent_messages WHERE batch_id = ?1`
+      // stale_notes is computed in SQL so the screen and the server agree by
+      // construction rather than by two implementations happening to match.
+      `SELECT m.id, m.registration_id, m.send_state, m.subject, m.body_text,
+              m.reviewed_at, m.reviewed_by, m.edited_at, m.last_error,
+              m.composed_for_decision,
+              CASE WHEN m.composed_from_notes IS NULL
+                     OR m.composed_from_notes != (
+                          SELECT COUNT(*) || ':' || COALESCE(MAX(f.updated_at), '')
+                            FROM eval_feedback f
+                           WHERE f.registration_id = m.registration_id)
+                   THEN 1 ELSE 0 END AS stale_notes
+         FROM parent_messages m WHERE m.batch_id = ?1`
     )
       .bind(batch.id)
       .all();

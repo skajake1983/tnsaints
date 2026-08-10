@@ -95,11 +95,21 @@ const PAGE_SCRIPT = `
     btn.addEventListener('click', function () {
       var rid = btn.dataset.rid;
       var value = btn.dataset.decide;
-      post('/api/decision/' + rid, { decision: value }).then(function () {
+      post('/api/decision/' + rid, { decision: value }).then(function (body) {
         document.querySelectorAll('[data-rid="' + rid + '"][data-decide]').forEach(function (b) {
           b.classList.toggle('on', b.dataset.decide === value);
         });
-        say('Decision saved. Rebuild drafts to refresh the messages.', 'good');
+        // The message card above this row still shows text written for the
+        // OLD decision. Saying only "saved" leaves a contradiction on screen
+        // that looks approvable.
+        if (body.staleDraft) {
+          say('Decision saved — but the drafted message for this player was written for the ' +
+              'old decision and is now out of date. Press "Rebuild drafts" to regenerate it. ' +
+              'It cannot be approved until you do.', 'bad');
+          setTimeout(function () { location.reload(); }, 2500);
+        } else {
+          say('Decision saved. Rebuild drafts to compose the message.', 'good');
+        }
       }).catch(function (err) { fail('Could not save that decision', err.message); });
     });
   });
@@ -301,6 +311,10 @@ export const DECISION_STYLES = DIALOG_STYLES + `
   .msgcard { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--warn);
              border-radius: 10px; margin-bottom: 14px; }
   .msgcard.reviewed { border-left-color: var(--ok); }
+  .msgcard.stale { border-left-color: var(--danger); }
+  .msgcard.stale textarea { background: #fdf7f7; color: var(--muted); }
+  .stalebar { background: #f9e9e9; border-bottom: 1px solid #e5b9b9; color: var(--danger);
+              padding: 11px 15px; font-size: 13px; font-weight: 600; }
   .msgcard .head { padding: 11px 15px; border-bottom: 1px solid var(--line); background: #fafbfd;
                    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .msgcard .who { font-weight: 700; }
@@ -336,7 +350,15 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   const queued = messages.filter((m) => m.send_state === 'queued').length;
   const sentCount = messages.filter((m) => m.send_state === 'sent').length;
   const failed = messages.filter((m) => m.send_state === 'failed');
-  const unread = drafts.filter((m) => !m.reviewed_at).length;
+  const staleDrafts = drafts.filter((m) => {
+    const row = rows.find((r) => Number(r.id) === Number(m.registration_id));
+    return row && (m.composed_for_decision !== row.decision || m.stale_notes === 1);
+  });
+  // A stale draft counts as unread: its text contradicts the decision, so any
+  // earlier read of it was a read of something that is no longer true.
+  const unread = drafts.filter(
+    (m) => !m.reviewed_at || staleDrafts.some((s) => s.id === m.id)
+  ).length;
 
   const byRegistration = new Map(messages.map((m) => [Number(m.registration_id), m]));
 
@@ -381,8 +403,9 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   const reviewCards = drafts
     .map((m) => {
       const row = rows.find((r) => Number(r.id) === Number(m.registration_id));
-      const reviewed = Boolean(m.reviewed_at);
-      return `<div class="msgcard${reviewed ? ' reviewed' : ''}" id="msg-${m.id}">
+      const stale = row && (m.composed_for_decision !== row.decision || m.stale_notes === 1);
+      const reviewed = Boolean(m.reviewed_at) && !stale;
+      return `<div class="msgcard${reviewed ? ' reviewed' : ''}${stale ? ' stale' : ''}" id="msg-${m.id}">
         <div class="head">
           <span class="who">${esc(row ? row.player_name : '')}</span>
           <span class="pill ${esc(row ? row.decision : '')}">${esc(row ? row.decision.replace('_', ' ') : '')}</span>
@@ -391,11 +414,25 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
             reviewed ? (m.edited_at ? 'edited &amp; read' : 'read') : 'unread'
           }</span>
         </div>
+        ${
+          stale
+            ? `<div class="stalebar">This message was written for
+               "<strong>${esc(String(m.composed_for_decision || 'no decision').replace('_', ' '))}</strong>"
+               but the decision is now "<strong>${esc(row.decision.replace('_', ' '))}</strong>".
+               ${m.stale_notes === 1 ? 'The coach notes have also changed since this was written.' : ''}
+               The text below is out of date. Press <strong>Rebuild drafts</strong> to regenerate it —
+               it cannot be approved until you do.</div>`
+            : m.stale_notes === 1
+            ? `<div class="stalebar">A coach has changed their notes since this was written, so the
+               text below no longer reflects them. Press <strong>Rebuild drafts</strong> to regenerate it —
+               it cannot be approved until you do.</div>`
+            : ''
+        }
         <div class="subj">Subject: ${esc(m.subject)}</div>
         <textarea id="body-${m.id}" spellcheck="true">${esc(m.body_text)}</textarea>
         <div class="foot">
-          <button class="dbtn" data-save="${m.id}">Save changes</button>
-          <button class="dbtn" data-read="${m.id}"${reviewed ? ' disabled' : ''}>${
+          <button class="dbtn" data-save="${m.id}"${stale ? ' disabled' : ''}>Save changes</button>
+          <button class="dbtn" data-read="${m.id}"${reviewed || stale ? ' disabled' : ''}>${
             reviewed ? 'Read' : 'Mark as read'
           }</button>
           <span style="font-size:12px;color:var(--muted)">Edit freely — this exact text is what sends.</span>
@@ -429,7 +466,9 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
     })
     .join('');
 
-  const canApprove = built && !approved && unread === 0 && blocked.length === 0 && drafts.length > 0;
+  const canApprove =
+    built && !approved && unread === 0 && blocked.length === 0 &&
+    staleDrafts.length === 0 && drafts.length > 0;
 
   return `
   <h1>Decisions &amp; sending</h1>
