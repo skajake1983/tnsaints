@@ -36,6 +36,7 @@ import {
 } from '../registration.js';
 import { page, esc, htmlResponse, notAuthorisedPage, adminHeaders } from './ui.js';
 import { saveEvaluation, evaluationForStaff, completeness } from '../feedback/notes.js';
+import { gateMessage, textToHtml } from '../feedback/compose.js';
 import {
   setDecision,
   decisionGrid,
@@ -352,6 +353,58 @@ export async function handleAdmin(request, env, ctx, path) {
     return json({ ok: true, destroyed: result.destroyed });
   }
 
+  // Mark one message read. approveBatch() refuses while any draft is unread,
+  // so this is what makes approval reachable at all — and it can only be set by
+  // opening the message, which is the point.
+  const reviewMsg = pathname.match(/^\/api\/message\/(\d+)\/review$/);
+  if (reviewMsg && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Not permitted.' }, { status: 403 });
+    }
+    const res = await env.DB.prepare(
+      `UPDATE parent_messages SET reviewed_by = ?2, reviewed_at = ?3
+        WHERE id = ?1 AND send_state = 'draft'`
+    )
+      .bind(Number(reviewMsg[1]), principal.email, new Date().toISOString())
+      .run();
+
+    if (res.meta.changes === 0) {
+      return json(
+        { ok: false, error: 'That message is no longer a draft, so it cannot be marked read.' },
+        { status: 409 }
+      );
+    }
+    ctx.waitUntil(
+      audit(env, {
+        actor: principal.email,
+        action: 'message.review',
+        subjectType: 'message',
+        subjectId: Number(reviewMsg[1]),
+      })
+    );
+    return json({ ok: true });
+  }
+
+  // Edit the message before it is frozen.
+  //
+  // This was missing entirely, and its absence was the real defect behind
+  // "families all got the same letter": compose.js promised that a human edits
+  // the draft into one voice and that the edit is what sends, but there was no
+  // surface to do it, so machine-assembled text went out verbatim.
+  const editMsg = pathname.match(/^\/api\/message\/(\d+)\/edit$/);
+  if (editMsg && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Not permitted.' }, { status: 403 });
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+    }
+    return await handleMessageEdit(env, ctx, principal, Number(editMsg[1]), body.body_text);
+  }
+
   const previewMatch = pathname.match(/^\/api\/message\/(\d+)\/preview$/);
   if (previewMatch && request.method === 'GET') {
     if (!can(principal, 'messages:approve')) {
@@ -549,6 +602,87 @@ async function renderPreview(env, messageId) {
   });
 }
 
+/**
+ * Save an edited message body.
+ *
+ * Only while the message is a draft. Once approved the bytes are frozen — that
+ * is what makes "what you previewed is what sends" true, and an edit after
+ * approval would quietly break it.
+ *
+ * The gate runs again on the edited text, so a trim that removes the child's
+ * name or empties the body is refused rather than saved.
+ */
+async function handleMessageEdit(env, ctx, principal, messageId, bodyText) {
+  const text = typeof bodyText === 'string' ? bodyText.trim() : '';
+  if (!text) {
+    return json({ ok: false, error: 'The message cannot be empty.' }, { status: 400 });
+  }
+
+  const m = await env.DB.prepare(
+    `SELECT m.id, m.send_state, r.player_name, r.parent_email,
+            COALESCE(d.decision, 'undecided') AS decision,
+            SUM(CASE WHEN TRIM(COALESCE(f.strengths,   '')) != '' THEN 1 ELSE 0 END) AS with_strengths,
+            SUM(CASE WHEN TRIM(COALESCE(f.growth_area, '')) != '' THEN 1 ELSE 0 END) AS with_growth
+       FROM parent_messages m
+       JOIN registrations r ON r.id = m.registration_id
+       LEFT JOIN decisions d ON d.registration_id = m.registration_id
+       LEFT JOIN eval_feedback f ON f.registration_id = m.registration_id
+      WHERE m.id = ?1
+      GROUP BY m.id`
+  )
+    .bind(messageId)
+    .first();
+
+  if (!m) return json({ ok: false, error: 'No such message.' }, { status: 404 });
+  if (m.send_state !== 'draft') {
+    return json(
+      { ok: false, error: `This message is ${m.send_state} and can no longer be edited.` },
+      { status: 409 }
+    );
+  }
+
+  const gate = gateMessage({
+    decision: m.decision,
+    draft: {
+      strengths: Array(Number(m.with_strengths) || 0),
+      growth: Array(Number(m.with_growth) || 0),
+    },
+    bodyText: text,
+    parentEmail: m.parent_email,
+    playerName: m.player_name,
+  });
+
+  if (!gate.ok) {
+    return json({ ok: false, error: gate.problems.join(' ') }, { status: 400 });
+  }
+
+  const now = new Date().toISOString();
+
+  // Editing counts as reading it. Requiring a separate "mark read" click after
+  // someone has just rewritten the message would be ceremony, and ceremony is
+  // what gets clicked through without looking.
+  await env.DB.prepare(
+    `UPDATE parent_messages
+        SET body_text = ?2, body_html = ?3, edited_by = ?4, edited_at = ?5,
+            reviewed_by = ?4, reviewed_at = ?5
+      WHERE id = ?1 AND send_state = 'draft'`
+  )
+    .bind(messageId, text, textToHtml(text), principal.email, now)
+    .run();
+
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: 'message.edit',
+      subjectType: 'message',
+      subjectId: messageId,
+      detail: { chars: text.length },
+    })
+  );
+
+  return json({ ok: true });
+}
+
 async function renderDecisions(env, principal) {
   const rows = await decisionGrid(env);
 
@@ -566,7 +700,9 @@ async function renderDecisions(env, principal) {
 
   if (batch) {
     const res = await env.DB.prepare(
-      `SELECT id, registration_id, send_state FROM parent_messages WHERE batch_id = ?1`
+      `SELECT id, registration_id, send_state, subject, body_text,
+              reviewed_at, reviewed_by, edited_at, last_error
+         FROM parent_messages WHERE batch_id = ?1`
     )
       .bind(batch.id)
       .all();

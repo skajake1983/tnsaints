@@ -15,7 +15,7 @@ import urllib.request
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _harness import preflight
+from _harness import preflight, staff_email
 
 
 BASE = "http://127.0.0.1:8787"
@@ -26,8 +26,9 @@ ORIGIN = "https://tnsaints.com"
 WORKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(WORKER_DIR, "src")
 
-ME = "jacoblewisadams@gmail.com"       # must match DEV_ADMIN_EMAIL
-COACH = "turner@tnsaints.com"
+# From .dev.vars -- this repo is public, so real staff addresses stay out of it.
+ME = staff_email()
+COACH = "second.coach@example.com"
 
 INTERNAL_CANARY = "INTERNAL-CANARY-NEVER-SEND-XYZ"
 

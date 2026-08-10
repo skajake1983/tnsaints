@@ -19,7 +19,7 @@ import urllib.error
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _harness import preflight
+from _harness import preflight, staff_email
 
 
 BASE = "http://127.0.0.1:8787"
@@ -28,8 +28,9 @@ preflight(BASE)
 ADMIN = "/__admin"
 ORIGIN = "https://tnsaints.com"
 
-# Must match DEV_ADMIN_EMAIL in .dev.vars.
-STAFF_EMAIL = "jacoblewisadams@gmail.com"
+# Read from .dev.vars rather than hardcoded: this repo is public, and there is
+# no reason to publish which mailboxes are on the Access allow-list.
+STAFF_EMAIL = staff_email()
 
 passed, failed = [], []
 

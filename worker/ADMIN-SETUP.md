@@ -297,11 +297,11 @@ lowercase:
 
 ```powershell
 cd c:\Dev\TNSaints\tnsaints\worker
-npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('jacob@tnsaints.com', 'Jacob Adams', 'Coach Adams', 'admin', 1, datetime('now'), datetime('now'))"
+npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('you@tnsaints.com', 'Your Name', 'Coach Yourname', 'admin', 1, datetime('now'), datetime('now'))"
 ```
 
 `author_label` is how you are credited to parents in feedback emails later —
-"Coach Adams", not "jacob@tnsaints.com".
+the label parents see, not the email address.
 
 🌐 **BROWSER** — open <https://admin.tnsaints.com>. You should get the Microsoft
 login, then the roster.
@@ -309,7 +309,7 @@ login, then the roster.
 Add the other coaches — 💻 **TERMINAL**:
 
 ```powershell
-npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('brandon@tnsaints.com', 'Brandon Turner', 'Coach Turner', 'coach', 1, datetime('now'), datetime('now'))"
+npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('coach@tnsaints.com', 'Coach Name', 'Coach Lastname', 'coach', 1, datetime('now'), datetime('now'))"
 ```
 
 Check who is on the list at any time — 💻 **TERMINAL**:
@@ -390,7 +390,7 @@ which of these they see:
 
 The "not yet authorised" page deliberately shows the address they authenticated
 as. That is the exact string to paste into the `staff` insert — no guessing
-whether it is `brandon@` or `bturner@`.
+whether it is `firstname@` or `flastname@`.
 
 Have them confirm the last row too. A coach who thinks the roster is broken
 because contact details are missing will call you on event morning, and that is

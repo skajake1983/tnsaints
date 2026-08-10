@@ -92,43 +92,116 @@ export async function buildBatch(env, actor) {
   }
 
   const now = new Date().toISOString();
-  const id = batchId(env.EVENT_ID, now);
 
-  await env.DB.prepare(
-    `INSERT INTO decision_batches (id, event_id, state, created_by, created_at)
-     VALUES (?1, ?2, 'draft', ?3, ?4)
-     ON CONFLICT (id) DO NOTHING`
+  // REUSE the open draft rather than minting a new id.
+  //
+  // batchId() is derived from the current second, so every Build used to create
+  // a fresh batch — which meant the DELETE below, commented "replace any
+  // previous drafts", targeted the brand-new id and matched nothing. Old draft
+  // batches survived intact and independently approvable, with their Approve
+  // URL live in any tab left open. Fix a bad note, rebuild, click Approve in
+  // the wrong tab, and the exact text you rebuilt to remove is what sends.
+  const openDraft = await env.DB.prepare(
+    `SELECT id FROM decision_batches WHERE event_id = ?1 AND state = 'draft'
+      ORDER BY created_at DESC LIMIT 1`
   )
-    .bind(id, env.EVENT_ID, actor, now)
-    .run();
+    .bind(env.EVENT_ID)
+    .first();
 
-  // Replace any previous drafts for this batch, so rebuilding after edits
-  // reflects the current notes rather than layering on stale copies.
-  await env.DB.prepare(`DELETE FROM parent_messages WHERE batch_id = ?1 AND send_state = 'draft'`)
+  const id = openDraft ? openDraft.id : batchId(env.EVENT_ID, now);
+
+  if (!openDraft) {
+    await env.DB.prepare(
+      `INSERT INTO decision_batches (id, event_id, state, created_by, created_at)
+       VALUES (?1, ?2, 'draft', ?3, ?4)
+       ON CONFLICT (id) DO NOTHING`
+    )
+      .bind(id, env.EVENT_ID, actor, now)
+      .run();
+  }
+
+  // Clear previous drafts AND previous skips, so rebuilding reflects the
+  // current notes rather than layering on stale copies. Skips must go too:
+  // a coach writing the missing note and the admin rebuilding should clear the
+  // block, not leave a stale "skipped" row shadowing a player who is now ready.
+  //
+  // Deliberately never touches queued/sending/sent — those are commitments.
+  await env.DB.prepare(
+    `DELETE FROM parent_messages
+      WHERE batch_id = ?1 AND send_state IN ('draft', 'skipped')`
+  )
     .bind(id)
     .run();
 
+  // Already-sent families are excluded outright. The unique index added in
+  // migration 003 makes a duplicate impossible at the database level; this is
+  // the readable half, so the screen can say who was skipped and why.
+  const alreadySent = await env.DB.prepare(
+    `SELECT registration_id FROM parent_messages
+      WHERE event_id = ?1 AND kind = 'evaluation_decision' AND send_state = 'sent'`
+  )
+    .bind(env.EVENT_ID)
+    .all();
+  const sentTo = new Set((alreadySent.results || []).map((r) => Number(r.registration_id)));
+
   const problems = [];
   let composed = 0;
+  let skippedAlreadySent = 0;
 
   for (const row of rows) {
+    if (sentTo.has(Number(row.id))) {
+      skippedAlreadySent += 1;
+      continue;
+    }
     const draft = await composeDraft(env, row.id, row.decision);
     const bodyText = defaultBodyText(draft, row.player_name, env);
 
     const gate = gateMessage({
       decision: row.decision,
+      draft,
       bodyText,
       parentEmail: row.parent_email,
       playerName: row.player_name,
     });
 
-    if (!gate.ok) {
-      problems.push({ registration_id: row.id, player_name: row.player_name, problems: gate.problems });
+    const playerId = await resolvePlayerId(env, row.id);
+
+    if (!gate.ok || !playerId) {
+      const why = playerId ? gate.problems : ['Could not resolve this player’s identity record.'];
+      problems.push({ registration_id: row.id, player_name: row.player_name, problems: why });
+
+      // PERSIST the block rather than only returning it.
+      //
+      // These used to be pushed onto a transient array and `continue`d, so a
+      // blocked family left no trace anywhere: the batch still approved, still
+      // sent, still reported success, and nobody found out that a child had
+      // been evaluated and never answered until the parent phoned. A row in
+      // 'skipped' makes the omission visible in the table and countable by the
+      // coverage check in approveBatch().
+      if (playerId) {
+        await env.DB.prepare(
+          `INSERT INTO parent_messages
+             (player_id, registration_id, event_id, batch_id, kind, subject,
+              body_html, body_text, send_state, last_error, created_by, created_at)
+           VALUES (?1, ?2, ?3, ?4, 'evaluation_decision', ?5, '', '', 'skipped', ?6, ?7, ?8)
+           ON CONFLICT (batch_id, registration_id)
+             WHERE batch_id IS NOT NULL AND registration_id IS NOT NULL
+           DO UPDATE SET send_state = 'skipped', last_error = excluded.last_error`
+        )
+          .bind(
+            playerId,
+            row.id,
+            env.EVENT_ID,
+            id,
+            subjectFor(String(row.player_name).split(/\s+/)[0], env),
+            why.join(' ').slice(0, 300),
+            actor,
+            now
+          )
+          .run();
+      }
       continue;
     }
-
-    const playerId = await resolvePlayerId(env, row.id);
-    if (!playerId) continue;
 
     await env.DB.prepare(
       `INSERT INTO parent_messages
@@ -163,7 +236,7 @@ export async function buildBatch(env, actor) {
     composed += 1;
   }
 
-  return { ok: true, batchId: id, composed, problems, total: rows.length };
+  return { ok: true, batchId: id, composed, problems, skippedAlreadySent, total: rows.length };
 }
 
 /**
@@ -198,13 +271,55 @@ export async function approveBatch(env, id, actor) {
     return { ok: false, error: `${undecided.n} player(s) still have no decision.` };
   }
 
+  // COVERAGE: is there a message for every confirmed player?
+  //
+  // The undecided count above checks decisions; this checks messages, and they
+  // are not the same thing. A player can be decided and still have no message —
+  // blocked at build, or added after the batch was composed. Without this, a
+  // batch covering 38 of 50 families approves and sends and reports success,
+  // and the twelve who hear nothing surface as phone calls a week later.
+  const uncovered = await env.DB.prepare(
+    `SELECT r.player_name
+       FROM registrations r
+      WHERE r.event_id = ?1 AND r.status = 'confirmed'
+        AND NOT EXISTS (
+          SELECT 1 FROM parent_messages m
+           WHERE m.batch_id = ?2 AND m.registration_id = r.id
+             AND m.send_state != 'skipped'
+        )
+      ORDER BY r.player_name`
+  )
+    .bind(env.EVENT_ID, id)
+    .all();
+
+  const missing = (uncovered.results || []).map((r) => r.player_name);
+  if (missing.length) {
+    return {
+      ok: false,
+      error: `${missing.length} player(s) have no message in this batch and would hear nothing.`,
+      problems: missing.map((player_name) => ({
+        player_name,
+        problems: ['No message was composed — a coach still needs to write a strength and a growth area.'],
+      })),
+    };
+  }
+
+  // Readiness is re-derived from eval_feedback here, not trusted from build
+  // time. Notes can be edited or deleted in the window between building and
+  // approving, and closing that window is the entire reason the snapshot
+  // exists.
   const { results } = await env.DB.prepare(
-    `SELECT m.id, m.body_text, m.registration_id, r.player_name, r.parent_email,
-            COALESCE(d.decision, 'undecided') AS decision
+    `SELECT m.id, m.body_text, m.registration_id, m.reviewed_at,
+            r.player_name, r.parent_email,
+            COALESCE(d.decision, 'undecided') AS decision,
+            SUM(CASE WHEN TRIM(COALESCE(f.strengths,   '')) != '' THEN 1 ELSE 0 END) AS with_strengths,
+            SUM(CASE WHEN TRIM(COALESCE(f.growth_area, '')) != '' THEN 1 ELSE 0 END) AS with_growth
        FROM parent_messages m
        JOIN registrations r ON r.id = m.registration_id
        LEFT JOIN decisions d ON d.registration_id = m.registration_id
-      WHERE m.batch_id = ?1 AND m.send_state = 'draft'`
+       LEFT JOIN eval_feedback f ON f.registration_id = m.registration_id
+      WHERE m.batch_id = ?1 AND m.send_state = 'draft'
+      GROUP BY m.id`
   )
     .bind(id)
     .all();
@@ -213,17 +328,37 @@ export async function approveBatch(env, id, actor) {
   if (!messages.length) return { ok: false, error: 'This batch has no draft messages.' };
 
   const problems = [];
+  const unread = [];
+
   for (const m of messages) {
     const gate = gateMessage({
       decision: m.decision,
+      draft: { strengths: Array(Number(m.with_strengths) || 0), growth: Array(Number(m.with_growth) || 0) },
       bodyText: m.body_text,
       parentEmail: m.parent_email,
       playerName: m.player_name,
     });
     if (!gate.ok) problems.push({ player_name: m.player_name, problems: gate.problems });
+    if (!m.reviewed_at) unread.push(m.player_name);
   }
 
   if (problems.length) return { ok: false, error: 'Some messages did not pass review.', problems };
+
+  // NOBODY APPROVES WHAT THEY HAVE NOT READ.
+  //
+  // This is the enforcement; the screen's read-tracking is only the convenience
+  // that makes it satisfiable. Without a server-side refusal, "I reviewed them"
+  // is an assertion about a tired person at 11pm rather than a fact.
+  if (unread.length) {
+    return {
+      ok: false,
+      error: `${unread.length} message(s) have not been read yet.`,
+      problems: unread.map((player_name) => ({
+        player_name,
+        problems: ['Open this message and mark it read before approving.'],
+      })),
+    };
+  }
 
   const now = new Date().toISOString();
 
@@ -318,6 +453,11 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
        FROM parent_messages m
        JOIN registrations r ON r.id = m.registration_id
       WHERE m.batch_id = ?1 AND m.send_state = 'queued'
+        -- A family who withdrew must not receive their child's decision. Cancel
+        -- flips registrations.status but leaves any queued message live and
+        -- invisible, because decisionGrid filters cancelled players out of the
+        -- screen entirely.
+        AND r.status = 'confirmed'
       ORDER BY m.id
       LIMIT ?2`
   )

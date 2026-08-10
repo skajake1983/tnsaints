@@ -170,15 +170,26 @@ export function defaultBodyText(draft, playerName, env) {
   const strength = joinObservations(draft.strengths);
   const growth = joinObservations(draft.growth);
 
+  // NO FALLBACK SENTENCES.
+  //
+  // These slots used to degrade to "Our coaches enjoyed working with {name}."
+  // and "There are a few areas we would want to build on next." when nothing
+  // was written. That was the most dangerous line in the file: it made an
+  // absence look like content, so neither the gate nor a human skimming the
+  // preview could see that nobody had written a word about this child.
+  //
+  // A missing observation now renders as a conspicuous placeholder. The gate
+  // blocks it from sending anyway, but the draft has to LOOK broken to the
+  // person reading it, not merely be rejected by a machine.
+  const MISSING = '[NO COACH WROTE THIS YET — this message cannot be sent]';
+
   if (draft.decision === 'accept') {
     return [
       `Thank you for bringing ${name} out on Saturday. We loved having them in the gym.`,
       '',
-      strength
-        ? `What stood out to us: ${strength}`
-        : `Our coaches enjoyed working with ${name}.`,
+      strength ? `What stood out to us: ${strength}` : MISSING,
       '',
-      growth ? `What we want to build on next: ${growth}` : '',
+      growth ? `What we want to build on next: ${growth}` : MISSING,
       '',
       draft.extra.length ? draft.extra.join(' ') : '',
       '',
@@ -197,14 +208,12 @@ export function defaultBodyText(draft, playerName, env) {
   return [
     `Thank you for bringing ${name} out on Saturday. We are glad we got to watch them play.`,
     '',
-    strength
-      ? `Something our coaches noticed: ${strength}`
-      : `Our coaches enjoyed working with ${name}.`,
+    strength ? `Something our coaches noticed: ${strength}` : MISSING,
     '',
     growth
-      ? `The area we would want to build on next is ${growth} That is very normal at this age,`
-      : `There are a few areas we would want to build on next. That is very normal at this age,`,
-    `and it is the kind of thing that changes quickly with reps.`,
+      ? `The area we would want to build on next: ${growth} That is very normal at this age, ` +
+        `and it is the kind of thing that changes quickly with reps.`
+      : MISSING,
     '',
     draft.extra.length ? draft.extra.join(' ') : '',
     '',
@@ -243,18 +252,43 @@ export function textToHtml(text) {
 }
 
 /**
- * Quality gate for one message, run before a batch may be approved.
+ * Did a human actually write anything about this child?
+ *
+ * Both a strength and a growth area are required, for every decision. That is
+ * the owner's rule, and it matches what the evaluation form asks for and what
+ * the message has slots for.
+ *
+ * This is the ONLY honest readiness test, and it has to look at the draft
+ * rather than the rendered message — see gateMessage() below for why.
+ */
+export function draftHasProse(draft) {
+  return Boolean(draft && draft.strengths.length > 0 && draft.growth.length > 0);
+}
+
+/**
+ * Quality gate for one message, run at build AND again at approve.
  *
  * THIS IS WHERE QUALITY IS ENFORCED, deliberately not at capture time. A coach
  * with thirty seconds between drills should be able to save four ratings and
  * nothing else; what must never happen is that incompleteness reaching a
- * family. So capture is permissive and this is strict.
+ * family. Capture is permissive precisely because this is strict — so if this
+ * is wrong, the permissiveness upstream becomes a liability rather than a
+ * kindness.
  *
- * The length floor on a "not yet" exists for one reason: a rushed form-letter
- * no is the single worst thing this system could produce, and it is also the
- * easiest thing to produce at 11pm when there are forty left to review.
+ * IT WAS WRONG. The original version took only the rendered `bodyText` and
+ * refused a "not yet" under 400 characters, on the theory that a rushed
+ * form-letter no would be short. Measured by executing the module: the
+ * template's own fixed scaffolding is 869 characters with EMPTY inputs, and the
+ * shortest body it can emit for any name is 844. The floor could never fire.
+ * Worse, `accept` had no floor at all, and the name check passed
+ * unconditionally because the template always interpolates the name.
+ *
+ * The lesson is general enough to state: LENGTH IS A PROXY FOR EFFORT, AND THE
+ * TEMPLATE SATISFIES THE PROXY WITHOUT THE EFFORT. A gate that inspects its own
+ * output measures the generator, not the human. So it now takes the DRAFT — the
+ * coach-authored source — and asks whether anyone wrote anything.
  */
-export function gateMessage({ decision, bodyText, parentEmail, playerName }) {
+export function gateMessage({ decision, draft, bodyText, parentEmail, playerName }) {
   const problems = [];
 
   if (decision !== 'accept' && decision !== 'not_yet') {
@@ -270,16 +304,39 @@ export function gateMessage({ decision, bodyText, parentEmail, playerName }) {
     problems.push('The message body is empty.');
   }
 
-  if (decision === 'not_yet' && body.length < 400) {
+  // The load-bearing check. Applied to accept and not_yet alike: the promise of
+  // written feedback was made to every family, not only the ones turned away.
+  if (draft && !draftHasProse(draft)) {
+    const missing = [];
+    if (!draft.strengths.length) missing.push('a strength');
+    if (!draft.growth.length) missing.push('a growth area');
     problems.push(
-      'This "not yet" message is very short. It is the one families read most closely — ' +
-        'name something specific the player did before sending it.'
+      `No coach has written ${missing.join(' or ')} for this player. ` +
+        'Nothing can be sent about a child nobody wrote about.'
     );
   }
 
-  if (playerName && body && !body.toLowerCase().includes(firstName(playerName).toLowerCase())) {
+  if (playerName && body && !mentionsPlayer(body, playerName)) {
     problems.push('The message never uses the player’s name.');
   }
 
   return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Does the body genuinely name the child?
+ *
+ * Word-anchored, and with the signature block removed first. A plain substring
+ * test matched names hiding inside the sign-off — "Cade" is inside "Academy",
+ * "Al" inside "Basketball", "Ten" inside "Tennessee" — so the check passed for
+ * a message that never mentioned the child at all. It only starts to matter now
+ * that bodies are editable, which is exactly when it would have been trusted.
+ */
+function mentionsPlayer(body, playerName) {
+  const name = firstName(playerName);
+  if (!name) return true;
+
+  const withoutSignature = body.split('Tennessee Saints Basketball Academy')[0] || '';
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(withoutSignature);
 }

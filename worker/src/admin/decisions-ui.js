@@ -1,60 +1,105 @@
 /**
  * The decisions screen: where a human authorises fifty emails.
  *
- * Four separate, deliberate steps, and the separation is the whole point:
+ * Four steps, deliberately separate:
  *
  *   1. DECIDE   accept / not yet, per player
  *   2. BUILD    compose drafts and run the quality gate over all of them
- *   3. APPROVE  freeze the exact bytes that will send
- *   4. SEND     actually mail them, ten at a time
+ *   3. REVIEW   read every message, edit any of them
+ *   4. APPROVE  freeze the exact bytes, then SEND as a fifth explicit act
  *
- * Nothing here happens on a timer. The cron does not drain batches. There is no
- * path from "a coach saved a note" to "a family received an email" that does not
- * pass through a person clicking Approve and then, separately, clicking Send.
+ * Nothing happens on a timer. There is no path from "a coach saved a note" to
+ * "a family received an email" that does not pass through a person reading the
+ * message and then pressing two different buttons.
  *
- * Approve and Send are two actions rather than one because they answer two
- * different questions — "are these right?" and "send them now?" — and merging
- * them removes the last moment where someone can stop. Both require typing a
- * word to confirm, because a misplaced click at the end of a long review
- * session is exactly how the wrong thing gets sent.
+ * WHAT THIS SCREEN GOT WRONG THE FIRST TIME
+ *
+ * Approve rendered on the single condition "a batch was built". Preview was one
+ * optional button per row that painted a shared box at the top of the page and
+ * scrolled you away from your place in the list. Nothing recorded that anything
+ * had been read, and the server asked for no such evidence. So fifty messages
+ * could be frozen for sending having been seen by nobody — which is exactly what
+ * the owner reported, and exactly what a batch is supposed to prevent.
+ *
+ * Worse, there was no way to EDIT a draft at all, so what would have sent was
+ * machine-assembled text verbatim: fifty families receiving the same eight
+ * paragraphs differing only in a first name.
+ *
+ * Now every draft is rendered inline, in a textarea, in decision order. Reading
+ * is tracked per message and the server refuses approval while any is unread.
  */
 
 import { esc } from './ui.js';
 
 const PAGE_SCRIPT = `
 (function () {
+  var flash = document.getElementById('flash');
+
+  function say(msg, cls) {
+    if (!flash) return;
+    flash.textContent = msg;
+    flash.className = 'flash ' + (cls || '');
+    flash.hidden = false;
+    if (cls === 'bad') flash.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // Every failure path funnels through here. Errors used to be shown for 2.5
+  // seconds and then lost to a page reload, or swallowed entirely when a fetch
+  // rejected -- so a batch could half-fail and look fine.
+  function fail(context, detail) {
+    var text = context;
+    if (detail) text += ' - ' + detail;
+    say(text, 'bad');
+    try { console.error('[tnsaints]', context, detail); } catch (e) {}
+  }
+
   function post(url, body) {
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {})
     }).then(function (r) {
-      return r.json().then(function (b) { return { ok: r.ok, body: b }; });
+      return r.text().then(function (raw) {
+        var parsed = null;
+        try { parsed = JSON.parse(raw); } catch (e) {}
+        if (!parsed) {
+          // A non-JSON response means the Worker threw or Access bounced us to
+          // a login page. Saying "could not save" would hide that.
+          throw new Error('Server returned ' + r.status + ' (' + raw.slice(0, 120) + ')');
+        }
+        if (!r.ok || !parsed.ok) {
+          var msg = parsed.error || ('HTTP ' + r.status);
+          if (parsed.problems && parsed.problems.length) {
+            msg += ' -- ' + parsed.problems.map(function (p) {
+              return (p.player_name || '') + ': ' + (p.problems || []).join(' ');
+            }).join(' | ');
+          }
+          throw new Error(msg);
+        }
+        return parsed;
+      });
     });
   }
 
-  function say(msg, cls) {
-    var el = document.getElementById('flash');
-    if (!el) return;
-    el.textContent = msg;
-    el.className = 'flash ' + (cls || '');
-    el.hidden = false;
-  }
+  // Anything that escapes a handler still reaches the screen rather than only
+  // the console, which nobody has open at 11pm.
+  window.addEventListener('error', function (e) {
+    fail('Something broke on this page', e.message);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    fail('A request failed', e.reason && e.reason.message ? e.reason.message : String(e.reason));
+  });
 
-  // Decision buttons
   document.querySelectorAll('[data-decide]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var rid = btn.dataset.rid;
       var value = btn.dataset.decide;
-      post('/api/decision/' + rid, { decision: value }).then(function (res) {
-        if (!res.ok || !res.body.ok) { say(res.body.error || 'Could not save.', 'bad'); return; }
+      post('/api/decision/' + rid, { decision: value }).then(function () {
         document.querySelectorAll('[data-rid="' + rid + '"][data-decide]').forEach(function (b) {
           b.classList.toggle('on', b.dataset.decide === value);
         });
-        var row = document.getElementById('row-' + rid);
-        if (row) row.dataset.decision = value;
-        say('Saved.', 'good');
-      });
+        say('Decision saved. Rebuild drafts to refresh the messages.', 'good');
+      }).catch(function (err) { fail('Could not save that decision', err.message); });
     });
   });
 
@@ -62,36 +107,76 @@ const PAGE_SCRIPT = `
   if (buildBtn) buildBtn.addEventListener('click', function () {
     buildBtn.disabled = true;
     say('Composing drafts...', '');
-    post('/api/batch/build').then(function (res) {
-      buildBtn.disabled = false;
-      if (!res.ok || !res.body.ok) { say(res.body.error || 'Could not build.', 'bad'); return; }
+    post('/api/batch/build').then(function (body) {
+      // Blocked players used to be returned and silently ignored here, so the
+      // screen said nothing while families were dropped from the batch.
+      if (body.problems && body.problems.length) {
+        say(body.composed + ' composed, ' + body.problems.length +
+            ' blocked: ' + body.problems.map(function (p) { return p.player_name; }).join(', ') +
+            '. They are listed below and must be fixed before approving.', 'bad');
+        setTimeout(function () { location.reload(); }, 4000);
+        return;
+      }
       location.reload();
+    }).catch(function (err) {
+      buildBtn.disabled = false;
+      fail('Could not build drafts', err.message);
     });
   });
 
-  // Approve and Send both require typing a word. A stray click at the end of a
-  // long review is precisely how fifty families get the wrong thing.
+  document.querySelectorAll('[data-save]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.dataset.save;
+      var box = document.getElementById('body-' + id);
+      btn.disabled = true;
+      post('/api/message/' + id + '/edit', { body_text: box.value }).then(function () {
+        markRead(id, 'edited');
+        say('Message saved and marked read.', 'good');
+      }).catch(function (err) { fail('Could not save that message', err.message); })
+        .then(function () { btn.disabled = false; });
+    });
+  });
+
+  document.querySelectorAll('[data-read]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.dataset.read;
+      btn.disabled = true;
+      post('/api/message/' + id + '/review').then(function () {
+        markRead(id, 'read');
+      }).catch(function (err) {
+        btn.disabled = false;
+        fail('Could not mark that read', err.message);
+      });
+    });
+  });
+
+  function markRead(id, how) {
+    var card = document.getElementById('msg-' + id);
+    if (card) card.classList.add('reviewed');
+    var badge = document.getElementById('state-' + id);
+    if (badge) { badge.textContent = how === 'edited' ? 'edited & read' : 'read'; badge.className = 'rbadge on'; }
+    var btn = document.querySelector('[data-read="' + id + '"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Read'; }
+    var left = document.querySelectorAll('.msgcard:not(.reviewed)').length;
+    var counter = document.getElementById('unreadCount');
+    if (counter) counter.textContent = String(left);
+    var approve = document.getElementById('approveBtn');
+    if (approve) {
+      approve.disabled = left > 0;
+      approve.textContent = left > 0 ? ('Approve (' + left + ' unread)') : 'Approve all';
+    }
+  }
+
   function confirmWord(btn, word, url, done) {
     btn.addEventListener('click', function () {
+      if (btn.disabled) return;
       var typed = prompt(btn.dataset.prompt + '\\n\\nType ' + word + ' to confirm:');
       if (typed === null) return;
       if (typed.trim().toUpperCase() !== word) { say('Not confirmed - nothing happened.', ''); return; }
       btn.disabled = true;
       say('Working...', '');
-      post(url).then(function (res) {
-        btn.disabled = false;
-        if (!res.ok || !res.body.ok) {
-          say(res.body.error || 'Refused.', 'bad');
-          if (res.body.problems) {
-            say((res.body.error || 'Refused.') + ' ' +
-                res.body.problems.map(function (p) {
-                  return (p.player_name || '') + ': ' + (p.problems || []).join(' ');
-                }).join(' | '), 'bad');
-          }
-          return;
-        }
-        done(res.body);
-      });
+      post(url).then(function (body) { done(body); })
+        .catch(function (err) { btn.disabled = false; fail('Refused', err.message); });
     });
   }
 
@@ -102,47 +187,23 @@ const PAGE_SCRIPT = `
 
   var sendBtn = document.getElementById('sendBtn');
   if (sendBtn) confirmWord(sendBtn, 'SEND', sendBtn.dataset.url, function (body) {
-    say('Sent ' + body.sent + '. Remaining in queue: ' + body.queued +
-        (body.failed ? '. Failed: ' + body.failed : '') +
-        (body.budgetStopped ? '. Stopped on the daily email budget - run Send again tomorrow.' : ''),
+    say('Sent ' + body.sent + '. Remaining: ' + body.queued +
+        (body.failed ? '. FAILED: ' + body.failed + ' - see the table.' : '') +
+        (body.budgetStopped ? '. Stopped on the daily email budget; run Send again tomorrow.' : ''),
         body.failed ? 'bad' : 'good');
-    setTimeout(function () { location.reload(); }, 2500);
+    setTimeout(function () { location.reload(); }, body.failed ? 8000 : 3000);
   });
 
-  // Preview opens the frozen snapshot, not a fresh render.
-  document.querySelectorAll('[data-preview]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      fetch('/api/message/' + btn.dataset.preview + '/preview')
-        .then(function (r) { return r.json(); })
-        .then(function (m) {
-          if (!m.ok) { say(m.error || 'No preview.', 'bad'); return; }
-          var box = document.getElementById('previewBox');
-          document.getElementById('pvTo').textContent = m.player_name + '  ->  ' + m.to;
-          document.getElementById('pvSubject').textContent = m.subject;
-          document.getElementById('pvDecision').textContent = m.decision;
-          document.getElementById('pvBody').innerHTML = m.body_html;
-          box.hidden = false;
-          box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    });
-  });
-
-  var closePv = document.getElementById('pvClose');
-  if (closePv) closePv.addEventListener('click', function () {
-    document.getElementById('previewBox').hidden = true;
-  });
-
-  // Cancel / delete, each with its own typed confirmation.
   document.querySelectorAll('[data-cancel]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var name = btn.dataset.name;
-      var reason = prompt('Cancel ' + name + "'s place?\\n\\nThis frees the seat and the first family " +
-        'on that session\\'s waiting list is moved up automatically.\\n\\nReason (optional):');
-      if (reason === null) return;
-      post('/api/registration/' + btn.dataset.cancel + '/cancel', { reason: reason }).then(function (res) {
-        if (!res.ok || !res.body.ok) { say(res.body.error || 'Could not cancel.', 'bad'); return; }
-        location.reload();
-      });
+      var typed = prompt('Cancel ' + name + "'s place?\\n\\nThis frees the seat and the first family " +
+        'on that waiting list moves up.\\n\\nType CANCEL to confirm:');
+      if (typed === null) return;
+      if (typed.trim().toUpperCase() !== 'CANCEL') { say('Not confirmed - nothing happened.', ''); return; }
+      post('/api/registration/' + btn.dataset.cancel + '/cancel', { reason: '' })
+        .then(function () { location.reload(); })
+        .catch(function (err) { fail('Could not cancel', err.message); });
     });
   });
 
@@ -154,10 +215,9 @@ const PAGE_SCRIPT = `
         'Cancelling instead keeps the record and still frees the seat.\\n\\nType DELETE to confirm:');
       if (typed === null) return;
       if (typed.trim().toUpperCase() !== 'DELETE') { say('Not confirmed - nothing happened.', ''); return; }
-      post('/api/registration/' + btn.dataset.delete + '/delete').then(function (res) {
-        if (!res.ok || !res.body.ok) { say(res.body.error || 'Could not delete.', 'bad'); return; }
-        location.reload();
-      });
+      post('/api/registration/' + btn.dataset.delete + '/delete')
+        .then(function () { location.reload(); })
+        .catch(function (err) { fail('Could not delete', err.message); });
     });
   });
 })();
@@ -189,7 +249,7 @@ export const DECISION_STYLES = `
            background: #eef2f8; border: 1px solid var(--line); }
   .flash.good { background: #e4f3ea; border-color: #b6ddc6; color: var(--ok); font-weight: 600; }
   .flash.bad { background: #f9e9e9; border-color: #e5b9b9; color: var(--danger); font-weight: 600; }
-  .steps { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-bottom: 20px; }
+  .steps { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px; }
   .step { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px; }
   .step .n { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .step .t { font-weight: 700; margin: 3px 0 4px; }
@@ -205,15 +265,32 @@ export const DECISION_STYLES = `
   .bigbtn { background: var(--navy); color: #fff; border: 0; border-radius: 8px; padding: 13px 22px;
             font-size: 15px; font-weight: 700; cursor: pointer; }
   .bigbtn.send { background: var(--danger); }
-  .bigbtn:disabled { opacity: .45; cursor: default; }
+  .bigbtn:disabled { opacity: .4; cursor: not-allowed; }
   .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
   .warnbar { background: #fdf0dd; border: 1px solid #e8c893; border-radius: 8px; padding: 12px 14px;
              font-size: 14px; margin-bottom: 16px; }
-  .preview { background: #fff; border: 2px solid var(--navy); border-radius: 10px; margin-bottom: 22px; }
-  .preview header { background: var(--navy); border-bottom: 0; padding: 12px 16px; }
-  .preview .pvmeta { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px; background: #fafbfd; }
-  .preview .pvmeta b { display: inline-block; min-width: 84px; color: var(--muted); font-weight: 600; }
-  .preview .pvbody { padding: 18px 16px; }
+  .blockbar { background: #f9e9e9; border: 1px solid #e5b9b9; border-radius: 8px; padding: 12px 14px;
+              font-size: 14px; margin-bottom: 16px; }
+  .blockbar a { color: var(--danger); font-weight: 700; }
+  .msgcard { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--warn);
+             border-radius: 10px; margin-bottom: 14px; }
+  .msgcard.reviewed { border-left-color: var(--ok); }
+  .msgcard .head { padding: 11px 15px; border-bottom: 1px solid var(--line); background: #fafbfd;
+                   display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .msgcard .who { font-weight: 700; }
+  .msgcard .to { color: var(--muted); font-size: 13px; }
+  .rbadge { margin-left: auto; font-size: 11px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; padding: 3px 9px; border-radius: 99px; background: #fdf0dd; color: var(--warn); }
+  .rbadge.on { background: #e4f3ea; color: var(--ok); }
+  .pill.accept { background: #e4f3ea; color: var(--ok); }
+  .pill.not_yet { background: #fdf0dd; color: var(--warn); }
+  .msgcard .subj { padding: 9px 15px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .msgcard textarea { width: 100%; border: 0; border-radius: 0; padding: 14px 15px; font: inherit;
+                      font-size: 15px; line-height: 1.55; min-height: 300px; resize: vertical;
+                      background: #fff; color: var(--ink); }
+  .msgcard textarea:focus { outline: 2px solid var(--navy-soft); outline-offset: -2px; }
+  .msgcard .foot { padding: 10px 15px; border-top: 1px solid var(--line); display: flex; gap: 10px;
+                   align-items: center; flex-wrap: wrap; background: #fafbfd; }
   .needs { color: var(--danger); font-size: 12px; font-weight: 600; }
 `;
 
@@ -224,76 +301,135 @@ function stepCard(n, title, detail, state) {
 
 export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   const decided = rows.filter((r) => r.decision !== 'undecided').length;
-  const ready = rows.filter((r) => Number(r.with_strengths) > 0 && Number(r.with_growth) > 0).length;
+  const blocked = rows.filter((r) => !(Number(r.with_strengths) > 0 && Number(r.with_growth) > 0));
 
   const built = Boolean(batch);
   const approved = batch && ['approved', 'sending', 'sent', 'partial'].includes(batch.state);
+  const drafts = messages.filter((m) => m.send_state === 'draft');
+  const skipped = messages.filter((m) => m.send_state === 'skipped');
   const queued = messages.filter((m) => m.send_state === 'queued').length;
   const sentCount = messages.filter((m) => m.send_state === 'sent').length;
+  const failed = messages.filter((m) => m.send_state === 'failed');
+  const unread = drafts.filter((m) => !m.reviewed_at).length;
+
+  const byRegistration = new Map(messages.map((m) => [Number(m.registration_id), m]));
 
   const steps = [
     stepCard(1, 'Decide', `${decided} of ${rows.length} decided`,
-      decided === rows.length && rows.length ? 'done' : 'now'),
-    stepCard(2, 'Build drafts', built ? `${messages.length} composed` : 'Not built yet',
-      built ? 'done' : decided === rows.length && rows.length ? 'now' : ''),
-    stepCard(3, 'Review & approve', approved ? 'Approved and frozen' : 'Not approved',
-      approved ? 'done' : built ? 'now' : ''),
-    stepCard(4, 'Send', sentCount ? `${sentCount} sent, ${queued} queued` : `${queued} queued`,
+      rows.length && decided === rows.length ? 'done' : 'now'),
+    stepCard(2, 'Build drafts',
+      built ? `${drafts.length} composed${skipped.length ? `, ${skipped.length} blocked` : ''}` : 'Not built',
+      built && !skipped.length ? 'done' : rows.length && decided === rows.length && !built ? 'now' : ''),
+    stepCard(3, 'Read every message', approved ? 'Reviewed' : `${unread} still unread`,
+      approved || (built && unread === 0) ? 'done' : built ? 'now' : ''),
+    stepCard(4, approved ? 'Send' : 'Approve',
+      sentCount ? `${sentCount} sent, ${queued} queued` : approved ? `${queued} queued` : 'Not approved',
       approved && queued ? 'now' : sentCount && !queued ? 'done' : ''),
   ].join('');
 
-  const rowsHtml = rows
-    .map((r) => {
-      const msg = messages.find((m) => m.registration_id === r.id);
-      const incomplete = !(Number(r.with_strengths) > 0 && Number(r.with_growth) > 0);
-      const lock = approved ? ' disabled' : '';
-      return `<tr id="row-${r.id}" data-decision="${esc(r.decision)}">
-        <td><strong>${esc(r.player_name)}</strong><br>
-          <span class="sub" style="font-size:12px;color:var(--muted)">${esc(r.session_time)} · ${esc(r.grade)}</span>
-          ${incomplete ? '<br><span class="needs">needs a strength &amp; growth area</span>' : ''}</td>
-        <td>${Number(r.coach_count)}</td>
-        <td>
-          <button class="dbtn${r.decision === 'accept' ? ' on' : ''}" data-rid="${r.id}" data-decide="accept"${lock}>Accept</button>
-          <button class="dbtn${r.decision === 'not_yet' ? ' on' : ''}" data-rid="${r.id}" data-decide="not_yet"${lock}>Not yet</button>
-        </td>
-        <td>${msg ? `<button class="dbtn" data-preview="${msg.id}">Preview</button>` : '<span style="color:var(--muted)">—</span>'}</td>
-        <td>${msg ? esc(msg.send_state) : ''}</td>
-        <td>
-          <button class="dbtn" data-cancel="${r.id}" data-name="${esc(r.player_name)}">Cancel</button>
-          <button class="dbtn danger" data-delete="${r.id}" data-name="${esc(r.player_name)}">Delete</button>
-        </td>
-      </tr>`;
-    })
-    .join('');
+  // Blocked players are named with a link straight to the form that fixes them.
+  // "3 players are blocked" without saying who is a puzzle, not a warning.
+  const blockBar = blocked.length
+    ? `<div class="blockbar"><strong>${blocked.length} player(s) cannot be sent anything yet</strong> —
+       no coach has written both a strength and a growth area:
+       ${blocked
+         .map((b) => `<a href="/eval/${b.id}">${esc(b.player_name)}</a>`)
+         .join(', ')}.
+       Nothing can be approved until every player has both.</div>`
+    : '';
 
   const budgetWarning =
     approved && pre && !pre.enough
       ? `<div class="warnbar"><strong>Not enough email budget today.</strong>
          ${pre.to_send} to send, ${pre.budget_remaining} left of ${pre.budget_limit}.
-         Sending will deliver what it can and stop; the rest stay queued and go out on the next
-         Send. Nothing is lost and nothing is sent twice.</div>`
+         Send will deliver what it can and stop; the rest stay queued for the next Send.
+         Nothing is lost and nobody is sent twice.</div>`
       : '';
+
+  const failedBar = failed.length
+    ? `<div class="blockbar"><strong>${failed.length} message(s) failed to send.</strong>
+       ${failed.map((f) => esc(String(f.last_error || '').slice(0, 120))).join(' | ')}</div>`
+    : '';
+
+  // The review column: every draft, in full, editable.
+  const reviewCards = drafts
+    .map((m) => {
+      const row = rows.find((r) => Number(r.id) === Number(m.registration_id));
+      const reviewed = Boolean(m.reviewed_at);
+      return `<div class="msgcard${reviewed ? ' reviewed' : ''}" id="msg-${m.id}">
+        <div class="head">
+          <span class="who">${esc(row ? row.player_name : '')}</span>
+          <span class="pill ${esc(row ? row.decision : '')}">${esc(row ? row.decision.replace('_', ' ') : '')}</span>
+          <span class="to">to ${esc(row ? row.parent_email : '')}</span>
+          <span class="rbadge${reviewed ? ' on' : ''}" id="state-${m.id}">${
+            reviewed ? (m.edited_at ? 'edited &amp; read' : 'read') : 'unread'
+          }</span>
+        </div>
+        <div class="subj">Subject: ${esc(m.subject)}</div>
+        <textarea id="body-${m.id}" spellcheck="true">${esc(m.body_text)}</textarea>
+        <div class="foot">
+          <button class="dbtn" data-save="${m.id}">Save changes</button>
+          <button class="dbtn" data-read="${m.id}"${reviewed ? ' disabled' : ''}>${
+            reviewed ? 'Read' : 'Mark as read'
+          }</button>
+          <span style="font-size:12px;color:var(--muted)">Edit freely — this exact text is what sends.</span>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  const rowsHtml = rows
+    .map((r) => {
+      const msg = byRegistration.get(Number(r.id));
+      const incomplete = !(Number(r.with_strengths) > 0 && Number(r.with_growth) > 0);
+      const lock = approved ? ' disabled' : '';
+      return `<tr>
+        <td><strong>${esc(r.player_name)}</strong><br>
+          <span style="font-size:12px;color:var(--muted)">${esc(r.session_time)} · ${esc(r.grade)}</span>
+          ${incomplete ? `<br><a class="needs" href="/eval/${r.id}">needs a strength &amp; growth area →</a>` : ''}</td>
+        <td>${Number(r.coach_count)}</td>
+        <td>
+          <button class="dbtn${r.decision === 'accept' ? ' on' : ''}" data-rid="${r.id}" data-decide="accept"${lock}>Accept</button>
+          <button class="dbtn${r.decision === 'not_yet' ? ' on' : ''}" data-rid="${r.id}" data-decide="not_yet"${lock}>Not yet</button>
+        </td>
+        <td>${msg ? esc(msg.send_state) : '<span style="color:var(--muted)">—</span>'}</td>
+        <td>
+          <button class="dbtn" data-cancel="${r.id}" data-name="${esc(r.player_name)}"${lock}>Cancel</button>
+          <button class="dbtn danger" data-delete="${r.id}" data-name="${esc(r.player_name)}"${lock}>Delete</button>
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  const canApprove = built && !approved && unread === 0 && blocked.length === 0 && drafts.length > 0;
 
   return `
   <h1>Decisions &amp; sending</h1>
-  <p class="sub">Nothing is emailed to a family until you approve, and then separately press Send.</p>
+  <p class="sub">Nothing is emailed until every message has been read, approved, and then sent —
+  three separate actions.</p>
 
   <div id="flash" class="flash" hidden></div>
 
   <div class="steps">${steps}</div>
 
+  ${blockBar}
+  ${failedBar}
   ${budgetWarning}
 
   <div class="toolbar">
-    ${
-      !approved
-        ? `<button class="bigbtn" id="buildBtn">${built ? 'Rebuild drafts' : 'Build drafts'}</button>`
-        : ''
-    }
+    ${!approved ? `<button class="bigbtn" id="buildBtn">${built ? 'Rebuild drafts' : 'Build drafts'}</button>` : ''}
     ${
       built && !approved
-        ? `<button class="bigbtn" id="approveBtn" data-url="/api/batch/${esc(batch.id)}/approve"
-             data-prompt="Approve ${messages.length} message(s)? This freezes the exact text that will send. It does NOT send anything yet.">Approve</button>`
+        ? `<button class="bigbtn" id="approveBtn"${canApprove ? '' : ' disabled'}
+             data-url="/api/batch/${esc(batch.id)}/approve"
+             data-prompt="Approve ${drafts.length} message(s)? This freezes the exact text you just read. It does NOT send anything yet."
+             >${
+               blocked.length
+                 ? `Approve (${blocked.length} blocked)`
+                 : unread > 0
+                   ? `Approve (<span id="unreadCount">${unread}</span> unread)`
+                   : 'Approve all'
+             }</button>`
         : ''
     }
     ${
@@ -310,22 +446,20 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
     }
   </div>
 
-  <div class="preview" id="previewBox" hidden>
-    <header><div class="mark">Exactly what the family receives</div></header>
-    <div class="pvmeta">
-      <div><b>To</b> <span id="pvTo"></span></div>
-      <div><b>Subject</b> <span id="pvSubject"></span></div>
-      <div><b>Decision</b> <span id="pvDecision"></span></div>
-    </div>
-    <div class="pvbody" id="pvBody"></div>
-    <div style="padding:0 16px 16px"><button class="dbtn" id="pvClose">Close preview</button></div>
-  </div>
+  ${
+    drafts.length
+      ? `<div class="panel"><h2>Read every message before approving —
+         ${unread} of ${drafts.length} still unread</h2></div>${reviewCards}`
+      : built
+        ? '<div class="panel"><div class="empty">No drafts. Every player is either blocked above or already sent.</div></div>'
+        : ''
+  }
 
   <div class="panel">
-    <h2>Players — ${decided} of ${rows.length} decided, ${ready} with complete feedback</h2>
+    <h2>Players — ${decided} of ${rows.length} decided</h2>
     <div class="scroll"><table>
-      <thead><tr><th>Player</th><th>Coaches</th><th>Decision</th><th>Message</th><th>State</th><th>Admin</th></tr></thead>
-      <tbody>${rowsHtml || '<tr><td colspan="6" class="empty">No confirmed players yet.</td></tr>'}</tbody>
+      <thead><tr><th>Player</th><th>Coaches</th><th>Decision</th><th>Message</th><th>Admin</th></tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="5" class="empty">No confirmed players yet.</td></tr>'}</tbody>
     </table></div>
   </div>
 

@@ -15,7 +15,7 @@ import urllib.request
 import urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _harness import preflight as harness_preflight
+from _harness import preflight as harness_preflight, staff_email
 
 BASE = "http://127.0.0.1:8787"
 harness_preflight(BASE)
@@ -23,8 +23,9 @@ harness_preflight(BASE)
 ADMIN = "/__admin"
 ORIGIN = "https://tnsaints.com"
 WORKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ME = "jacoblewisadams@gmail.com"
-COACH = "turner@tnsaints.com"
+# From .dev.vars -- this repo is public, so real staff addresses stay out of it.
+ME = staff_email()
+COACH = "second.coach@example.com"
 
 passed, failed = [], []
 
@@ -178,8 +179,20 @@ st, r = call("GET", f"{ADMIN}/api/batch/{BATCH}/preflight")
 check("preflight responds", st == 200 and r.get("ok"), str(r))
 check("it reports how many would send", r.get("to_send") == 0, f"pre-approval, so 0: {r}")
 
+print("\n=== 6b. approval is refused until every message has been READ ===")
 st, r = call("POST", f"{ADMIN}/api/batch/{BATCH}/approve")
-check("approve succeeds once everyone is decided", st == 200 and r.get("ok"), str(r)[:200])
+check("approve refuses while messages are unread", st == 400 and not r.get("ok"), str(r)[:200])
+check("the refusal names the unread players", "read" in str(r).lower(), str(r)[:300])
+
+msg_ids = [int(m) for m in re.findall(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE batch_id='{BATCH}' AND send_state='draft'"))]
+check("draft message ids found", len(msg_ids) == 2, str(msg_ids))
+for mid in msg_ids:
+    st, r = call("POST", f"{ADMIN}/api/message/{mid}/review")
+    check(f"message {mid} marked read", st == 200 and r.get("ok"), str(r))
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BATCH}/approve")
+check("approve succeeds once everyone is decided and read", st == 200 and r.get("ok"), str(r)[:200])
 check("both messages queued", r.get("queued") == 2, str(r))
 
 st, r = call("GET", f"{ADMIN}/api/batch/{BATCH}/preflight")
@@ -259,8 +272,10 @@ print("\n=== 12. the decisions screen exists and gates by role ===")
 st, body = call("GET", ADMIN + "/decisions")
 check("decisions page loads for an admin", st == 200, f"got {st}")
 check("it shows the four-step flow", "Step 1" in str(body) and "Step 4" in str(body), str(body)[:200])
-check("it states nothing sends without approval",
-      "until you approve" in str(body).lower(), str(body)[:400])
+check("it states nothing sends until read, approved and sent",
+      all(w in str(body).lower() for w in ["read", "approved", "sent"]), str(body)[:400])
+check("it exposes a review step, not just approve",
+      "unread" in str(body).lower() or "read every message" in str(body).lower(), str(body)[:400])
 check("Approve and Send are separate controls",
       "approveBtn" in str(body) or "sendBtn" in str(body), str(body)[:300])
 
@@ -312,6 +327,97 @@ check("coach cannot cancel", st == 403, f"got {st}")
 st, _ = call("POST", f"{ADMIN}/api/registration/{B}/delete")
 check("coach cannot delete", st == 403, f"got {st}")
 sql(f"UPDATE staff SET role='admin' WHERE email_norm='{ME}'")
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)
+
+
+print("\n=== 18. THE HOLLOW MESSAGE: a player nobody wrote about blocks everything ===")
+# This is the defect the whole audit was about. Previously a player with zero
+# coach prose composed 869 characters of boilerplate that passed every check.
+for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+             "DELETE FROM decision_batches", "DELETE FROM eval_notes_internal",
+             "DELETE FROM eval_feedback", "DELETE FROM registrations", "DELETE FROM players"]:
+    sql(stmt)
+
+register("Silent Player", 7)
+S = reg_id("Silent Player")
+# Ratings only -- the state notes.js explicitly calls "valid and expected" on
+# event day, and precisely the state the old gate could not see.
+call("POST", f"{ADMIN}/api/eval/{S}", {"rating_skill": 4, "rating_effort": 5})
+call("POST", f"{ADMIN}/api/decision/{S}", {"decision": "not_yet"})
+
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+check("build reports the player as blocked", len(r.get("problems", [])) == 1, str(r)[:300])
+check("nothing was composed for them", r.get("composed") == 0, str(r)[:200])
+BATCH2 = r.get("batchId")
+
+out = _wrangler(f"SELECT send_state, last_error FROM parent_messages WHERE registration_id={S}")
+# Blocked players used to vanish entirely, leaving no record that a child was
+# evaluated and never answered.
+check("the block is PERSISTED, not silently dropped", '"send_state": "skipped"' in out, out[-300:])
+check("and it records why", "strength" in out.lower(), out[-300:])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BATCH2}/approve")
+check("approve refuses -- nobody can be sent a hollow message", st == 400, f"got {st}")
+
+print("\n=== 19. accept is held to the same bar as not_yet ===")
+call("POST", f"{ADMIN}/api/decision/{S}", {"decision": "accept"})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+check("an accept with no prose is blocked too", r.get("composed") == 0, str(r)[:250])
+
+print("\n=== 20. writing the missing prose unblocks it ===")
+call("POST", f"{ADMIN}/api/eval/{S}", {
+    "strengths": "Quick first step and genuinely tried to guard the ball.",
+    "growth_area": "Needs to keep his head up when the pressure comes.",
+})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+check("now it composes", r.get("composed") == 1 and not r.get("problems"), str(r)[:250])
+out = _wrangler(f"SELECT send_state FROM parent_messages WHERE registration_id={S}")
+check("the stale 'skipped' row was cleared", '"send_state": "skipped"' not in out, out[-200:])
+
+print("\n=== 21. the draft is editable, and the edit is what would send ===")
+mid = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={S} AND send_state='draft'")).group(1))
+EDITED = ("Dear family, we watched Silent play on Saturday and wanted to write personally. "
+          "His quick first step stood out to every coach on the floor. We would love to see "
+          "him again at our next evaluation. Please reply to this email with any questions.")
+st, r = call("POST", f"{ADMIN}/api/message/{mid}/edit", {"body_text": EDITED})
+check("edit saves", st == 200 and r.get("ok"), str(r)[:200])
+out = _wrangler(f"SELECT body_text, reviewed_at FROM parent_messages WHERE id={mid}")
+check("the edited text is stored", "wanted to write personally" in out, out[-200:])
+check("editing counts as reading it", '"reviewed_at": null' not in out, out[-200:])
+
+st, r = call("POST", f"{ADMIN}/api/message/{mid}/edit", {"body_text": "too short"})
+check("an edit that drops the player's name is refused", st == 400, f"got {st} {r}")
+
+print("\n=== 22. a message cannot be edited once frozen ===")
+st, r = call("POST", f"{ADMIN}/api/batch/{r.get('batchId', BATCH2)}/approve") if False else (0, {})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+BATCH3 = r.get("batchId")
+mid2 = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={S} AND send_state='draft'")).group(1))
+call("POST", f"{ADMIN}/api/message/{mid2}/review")
+st, r = call("POST", f"{ADMIN}/api/batch/{BATCH3}/approve")
+check("approve succeeds", st == 200 and r.get("ok"), str(r)[:250])
+st, r = call("POST", f"{ADMIN}/api/message/{mid2}/edit", {"body_text": EDITED})
+check("editing an approved message is refused", st == 409, f"got {st}")
+check("marking an approved message read is refused",
+      call("POST", f"{ADMIN}/api/message/{mid2}/review")[0] == 409)
+
+print("\n=== 23. a cancelled family is never mailed ===")
+out = _wrangler(f"SELECT send_state FROM parent_messages WHERE id={mid2}")
+check("message is queued", '"send_state": "queued"' in out, out[-200:])
+call("POST", f"{ADMIN}/api/registration/{S}/cancel", {"reason": "Family withdrew."})
+# The drain joins registrations and now filters on status='confirmed', so a
+# withdrawn family cannot receive their child's decision.
+st, r = call("POST", f"{ADMIN}/api/batch/{BATCH3}/send")
+check("drain does not send to a cancelled registration",
+      (not r.get("ok")) or r.get("sent") == 0, str(r)[:200])
 
 print("\n" + "=" * 62)
 print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")

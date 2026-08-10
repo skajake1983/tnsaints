@@ -73,6 +73,50 @@ def require_email_disabled():
         )
 
 
+def _dev_vars():
+    """Parse worker/.dev.vars into a dict. Empty if the file is absent."""
+    path = os.path.join(os.path.dirname(__file__), "..", ".dev.vars")
+    if not os.path.exists(path):
+        return {}
+
+    settings = {}
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            settings[key.strip()] = value.strip()
+    return settings
+
+
+def staff_email():
+    """The address the local dev bypass signs in as.
+
+    Read from .dev.vars rather than hardcoded, for two reasons.
+
+    The first is correctness: it has to match DEV_ADMIN_EMAIL or every admin
+    test 403s, and a hardcoded copy is a second source of truth that drifts.
+
+    The second is that this repository is PUBLIC. Hardcoding real staff
+    addresses publishes exactly which mailboxes are on the Cloudflare Access
+    allow-list -- which is the useful half of a targeted phishing attempt
+    against accounts that can read children's medical notes. The addresses are
+    not secret, and the security model does not depend on their secrecy, but
+    there is no reason to hand over the target list with the source.
+    """
+    email = _dev_vars().get("DEV_ADMIN_EMAIL", "").strip()
+    if not email:
+        sys.exit(
+            "\nREFUSING TO RUN.\n"
+            "  DEV_ADMIN_EMAIL is not set in worker/.dev.vars, so there is no\n"
+            "  identity to sign in as locally. Add it:\n"
+            "      DEV_ADMIN_EMAIL=you@example.com\n"
+            "  and make sure that address exists in the `staff` table.\n"
+        )
+    return email
+
+
 def preflight(base_url):
     """Run every guard. Call this before the first request in a suite."""
     require_local(base_url)
