@@ -239,7 +239,29 @@ for path in ("/", "/whoami", "/api/roster", "/api/health"):
     else:
         check(f"public API has no {path}", st == 404, f"got {st}")
 
-print("\n=== 8. a forged Access assertion grants nothing ===")
+print("\n=== 8. the local dev bypass refuses anything from the Cloudflare edge ===")
+# This guard has been written wrong twice: once keyed on the request hostname
+# (which wrangler dev rewrites, so it never fired), once on ACCESS_AUD being
+# empty (which died the moment Access was genuinely configured). It is now
+# keyed on the absence of Cf-Ray, a fact about the request rather than about
+# configuration -- pinned here so a third rewrite has to stay honest.
+req = urllib.request.Request(BASE + ADMIN + "/", method="GET")
+req.add_header("Cf-Ray", "a28c36137db46d3d-ATL")
+try:
+    with urllib.request.urlopen(req) as r:
+        st, body = r.status, r.read().decode()
+except urllib.error.HTTPError as e:
+    st, body = e.code, e.read().decode()
+check("a request carrying Cf-Ray is refused (401), not signed in", st == 401, f"got {st}")
+check("the refusal leaks no roster data", "Marcus Canary" not in body)
+
+# And without it, local development still works -- otherwise the guard is
+# "secure" by way of being broken, which is how the last two versions passed
+# review.
+st, _ = call("GET", ADMIN + "/")
+check("without Cf-Ray, local dev still signs in", st == 200, f"got {st}")
+
+print("\n=== 9. a forged Access assertion grants nothing ===")
 req = urllib.request.Request(BASE + "/api/admin/registrations", method="GET")
 req.add_header("Cf-Access-Jwt-Assertion", "eyJhbGciOiJub25lIn0.eyJlbWFpbCI6ImF0dGFja2VyQGV2aWwuY29tIn0.")
 try:

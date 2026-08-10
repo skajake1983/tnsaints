@@ -64,7 +64,7 @@ ALLOWED_ORIGINS = "https://tnsaints.com,https://www.tnsaints.com"
 # ---------------------------------------------------------------------------
 ADMIN_HOSTNAME = "admin.tnsaints.com"
 ACCESS_TEAM_DOMAIN = "tnsaints.cloudflareaccess.com"
-ACCESS_AUD = ""
+ACCESS_AUD = "7f3323d37c62e2fcf6006d924b9ecdd3c0a2a8671e56a1cb3ba65f4413064875"
 
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links

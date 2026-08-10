@@ -91,26 +91,34 @@ export function readAccessToken(request) {
  * data. That is a worse risk than this function, but only if the function is
  * genuinely unreachable in production, so:
  *
- *   1. DEV_ADMIN_EMAIL must be set. It exists only in .dev.vars, which is
- *      gitignored and is NOT uploaded by `wrangler deploy` — secrets reach
- *      production solely through an explicit `wrangler secret put`. This same
- *      variable also gates the /__admin dev route in index.js, so without it
- *      there is no local door to walk through either.
+ *   1. DEV_ADMIN_EMAIL must be set — the PRIMARY guard. It exists only in
+ *      .dev.vars, which is gitignored and is NOT uploaded by `wrangler deploy`;
+ *      values reach production solely through an explicit `wrangler secret put`.
+ *      This same variable also gates the /__admin route in index.js, so without
+ *      it there is no local door to walk through either.
  *
- *   2. ACCESS_AUD must be EMPTY. Production sets it in wrangler.toml, which is
- *      committed and deployed. So even if someone deliberately pushed
- *      DEV_ADMIN_EMAIL as a production secret, this stays dead — and the day
- *      ACCESS_AUD is filled in (Phase A setup), condition 2 fails permanently
- *      and independently of condition 1.
+ *   2. The request must carry NO Cf-Ray header — the secondary guard.
+ *      Cloudflare's edge stamps Cf-Ray on every request it proxies, and in
+ *      production this Worker is reachable only through that edge. A request
+ *      without one did not come from Cloudflare, so it is not a production
+ *      request no matter how the environment is configured.
  *
- * Two independent conditions, each sufficient on its own to close the door.
+ * TWO EARLIER VERSIONS OF THIS GUARD WERE WRONG. Recorded so the reasoning is
+ * not re-derived from scratch a third time:
  *
- * An earlier version keyed on the request hostname being localhost. That was
- * stronger in principle and useless in practice: `wrangler dev` reports the
- * hostname of the first configured route, not the address you connected to, so
- * the check was false locally and the bypass never worked. Recording it here
- * because the replacement is weaker and the reason should not be re-litigated
- * from scratch.
+ *   - Keying on the request hostname being localhost was stronger in principle
+ *     and useless in practice: `wrangler dev` reports the hostname of the first
+ *     configured route, not the address you connected to, so the check was
+ *     false locally and the bypass simply never worked.
+ *
+ *   - Keying on ACCESS_AUD being empty worked only until Access was actually
+ *     configured. The moment the real AUD tag landed in wrangler.toml the
+ *     bypass died and the admin surface became untestable locally — which is
+ *     precisely when local testing starts to matter, since every subsequent
+ *     feature is built on this surface.
+ *
+ * The lesson both times: a guard keyed on configuration breaks when the
+ * configuration legitimately changes. Key on facts about the request instead.
  *
  * Every use logs a warning, so it cannot sit forgotten and silent.
  */
@@ -118,11 +126,11 @@ export function devPrincipalEmail(request, env) {
   const email = normEmail(env.DEV_ADMIN_EMAIL);
   if (!email) return null;
 
-  if (String(env.ACCESS_AUD || '').trim()) {
+  if (request.headers.get('Cf-Ray')) {
     console.error(
       JSON.stringify({
         event: 'dev_auth_bypass_refused',
-        reason: 'ACCESS_AUD is configured — this is a real deployment',
+        reason: 'request arrived through the Cloudflare edge — not local development',
       })
     );
     return null;
