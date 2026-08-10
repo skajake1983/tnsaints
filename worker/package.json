@@ -12,11 +12,11 @@
     "db:init:local": "wrangler d1 execute tnsaints --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute tnsaints --remote --file=./schema.sql",
     "db:dump:local": "wrangler d1 execute tnsaints --local --command=\"SELECT * FROM registrations ORDER BY id\"",
-    "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM registrations; DELETE FROM email_budget;\"",
+    "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM eval_notes_internal; DELETE FROM eval_feedback; DELETE FROM registrations; DELETE FROM players; DELETE FROM email_budget;\"",
     "staff:list": "wrangler d1 execute tnsaints --remote --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
     "staff:list:local": "wrangler d1 execute tnsaints --local --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
     "audit:tail": "wrangler d1 execute tnsaints --remote --command=\"SELECT at, actor, action, subject_type, subject_id FROM audit_log ORDER BY id DESC LIMIT 40\"",
-    "test:local": "npm run db:reset:local && python tests/test_acceptance.py && npm run db:reset:local && python tests/test_cancellation.py && npm run db:reset:local && python tests/test_concurrency.py && npm run db:reset:local && python tests/test_admin_auth.py && npm run db:reset:local"
+    "test:local": "npm run db:reset:local && python tests/test_acceptance.py && npm run db:reset:local && python tests/test_cancellation.py && npm run db:reset:local && python tests/test_concurrency.py && npm run db:reset:local && python tests/test_admin_auth.py && npm run db:reset:local && python tests/test_eval_capture.py && npm run db:reset:local"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

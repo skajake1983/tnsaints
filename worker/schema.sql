@@ -3,6 +3,25 @@
 -- Capacity is never stored as a counter. It is always derived from
 -- COUNT(*) of confirmed rows, so deleting a bogus registration
 -- automatically reopens that spot with no extra bookkeeping.
+--
+-- ---------------------------------------------------------------------------
+-- DELETION ORDER — read this before deleting a registration.
+--
+-- D1 enforces foreign keys. Once a player has notes, `DELETE FROM
+-- registrations` fails with SQLITE_CONSTRAINT_FOREIGNKEY rather than silently
+-- orphaning them. That is the correct behaviour — a note about a child who is
+-- not in the event is a bug — but it means deletes go child-first:
+--
+--   DELETE FROM eval_notes_internal WHERE registration_id = ?;
+--   DELETE FROM eval_feedback       WHERE registration_id = ?;
+--   DELETE FROM registrations       WHERE id = ?;
+--
+-- To remove a test registration that has no notes, the third line alone is
+-- enough. `npm run db:reset:local` already does the full order.
+--
+-- Prefer cancelling to deleting for anything real: status='cancelled' frees the
+-- capacity, keeps the record, and touches no foreign key.
+-- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS registrations (
   id                      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,6 +75,15 @@ CREATE TABLE IF NOT EXISTS registrations (
   -- Salted hash, never the raw address. Rate limiting needs to correlate
   -- requests without the site storing visitor IPs as PII.
   ip_hash                 TEXT
+
+  -- NOTE: registrations.player_id is deliberately NOT here. It is added by
+  -- migrations/001_add_player_id.sql, for both fresh and existing databases.
+  --
+  -- Putting it here as well looked tidier and was wrong: this file is re-run
+  -- against live databases, where CREATE TABLE IF NOT EXISTS is skipped
+  -- entirely once the table exists — so the column never appeared, while the
+  -- index below it referenced a column that was not there and the whole run
+  -- errored. One column, one place that creates it.
 );
 
 -- One registration per player per event. This is the single strongest bot
@@ -168,3 +196,104 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log (at);
 CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log (actor, at);
+
+-- ---------------------------------------------------------------------------
+-- Players (Phase B)
+--
+-- A durable person, separate from the event-scoped registration row. A child
+-- evaluated in August and coached through May is ONE person with one history;
+-- notes, feedback, and every future message anchor here rather than to a
+-- registration, so a second event next spring extends that history instead of
+-- starting a new one.
+--
+-- Adding this now costs a table and a join. Adding it in November means
+-- migrating every note and message already written.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS players (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name      TEXT    NOT NULL,
+  name_norm         TEXT    NOT NULL,
+  parent_email_norm TEXT    NOT NULL,
+  grade             TEXT,
+  created_at        TEXT    NOT NULL,
+  updated_at        TEXT    NOT NULL
+);
+
+-- Identity is (parent email, player name), reusing exactly the normalisation
+-- the registration duplicate-guard already computes. Two children under one
+-- parent email stay distinct because the name differs; the same child
+-- registering twice with different capitalisation resolves to one row.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_players_identity
+  ON players (parent_email_norm, name_norm);
+
+-- ---------------------------------------------------------------------------
+-- Coach notes — INTERNAL ONLY.
+--
+-- NOTHING in this table is ever passed to an email composer. That is enforced
+-- structurally rather than by a visibility column: a single forgotten
+-- `WHERE visibility = 'parent'` on a shared table would send a coach's candid
+-- assessment to the child's family, and there is no undo for that. Two tables
+-- mean a careless SELECT * on the parent-facing one is safe by construction.
+--
+-- worker/src/feedback/compose.js imports no accessor that can read this table.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS eval_notes_internal (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_id       INTEGER NOT NULL REFERENCES players(id),
+  registration_id INTEGER NOT NULL REFERENCES registrations(id),
+  event_id        TEXT    NOT NULL,
+  -- Who the note is ATTRIBUTED to. May differ from who typed it when an admin
+  -- transcribes from paper — audit_log records the actual typist.
+  author_email    TEXT    NOT NULL,
+  body            TEXT    NOT NULL,
+  created_at      TEXT    NOT NULL,
+  updated_at      TEXT    NOT NULL
+);
+
+-- One row per coach per player, upserted. A coach revisiting on Tuesday edits
+-- Saturday's note rather than adding a second one, which is what makes the
+-- multi-day refinement window work without the record turning into a thread.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_one
+  ON eval_notes_internal (registration_id, author_email);
+
+CREATE INDEX IF NOT EXISTS idx_notes_event
+  ON eval_notes_internal (event_id, registration_id);
+
+-- ---------------------------------------------------------------------------
+-- Parent-facing evaluation feedback.
+--
+-- INVARIANT: every column here is safe to show a parent. SELECT * is safe.
+-- Anything a family should not read belongs in eval_notes_internal above.
+-- Adding a column here is a decision to show that column to a family.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS eval_feedback (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  player_id           INTEGER NOT NULL REFERENCES players(id),
+  registration_id     INTEGER NOT NULL REFERENCES registrations(id),
+  event_id            TEXT    NOT NULL,
+  author_email        TEXT    NOT NULL,
+  -- Snapshotted from staff.author_label at write time. If a coach later leaves
+  -- and their row is deactivated, feedback already sent still reads correctly.
+  author_label        TEXT    NOT NULL,
+
+  rating_skill        INTEGER CHECK (rating_skill        BETWEEN 1 AND 5),
+  rating_effort       INTEGER CHECK (rating_effort       BETWEEN 1 AND 5),
+  rating_coachability INTEGER CHECK (rating_coachability BETWEEN 1 AND 5),
+  rating_decisions    INTEGER CHECK (rating_decisions    BETWEEN 1 AND 5),
+
+  -- Required before a decision batch can be approved, not required to save a
+  -- draft. Coaches on the day capture ratings in seconds and write prose later;
+  -- forcing prose at the gym is how you get "good kid" fifty times.
+  strengths           TEXT,
+  growth_area         TEXT,
+  parent_note         TEXT,
+
+  created_at          TEXT    NOT NULL,
+  updated_at          TEXT    NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_one
+  ON eval_feedback (registration_id, author_email);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_event
+  ON eval_feedback (event_id, registration_id);

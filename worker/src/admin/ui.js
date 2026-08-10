@@ -79,7 +79,7 @@ const STYLES = `
  * identically on a phone in a church gym with one bar of signal, and every
  * external request is another thing that can hang there.
  */
-export function page({ title, principal, nav = [], current = '', body }) {
+export function page({ title, principal, nav = [], current = '', body, extraStyles = '' }) {
   const links = nav
     .map(
       (n) =>
@@ -94,7 +94,7 @@ export function page({ title, principal, nav = [], current = '', body }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>${esc(title)} · TN Saints Admin</title>
-<style>${STYLES}</style>
+<style>${STYLES}${extraStyles}</style>
 </head>
 <body>
 <header>

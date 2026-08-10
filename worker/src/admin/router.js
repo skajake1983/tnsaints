@@ -27,10 +27,13 @@ import { json } from '../http.js';
 import { verifyAccessJwt, devPrincipalEmail } from '../auth/access.js';
 import { loadStaff, can, audit, rosterView } from '../auth/staff.js';
 import { getAvailability, registrationWindow, slotCapacity, sessionTimes } from '../registration.js';
-import { page, esc, htmlResponse, notAuthorisedPage } from './ui.js';
+import { page, esc, htmlResponse, notAuthorisedPage, adminHeaders } from './ui.js';
+import { saveEvaluation, evaluationForStaff, completeness } from '../feedback/notes.js';
+import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
+  { href: '/eval', label: 'Evaluations' },
   { href: '/whoami', label: 'Who am I' },
 ];
 
@@ -122,6 +125,20 @@ export async function handleAdmin(request, env, ctx, path) {
     return await handleMedicalRead(env, ctx, principal, Number(medical[1]));
   }
 
+  if (pathname === '/eval' && request.method === 'GET') {
+    return await renderEvalList(env, principal);
+  }
+
+  const evalForm = pathname.match(/^\/eval\/(\d+)$/);
+  if (evalForm && request.method === 'GET') {
+    return await renderEvalForm(env, principal, Number(evalForm[1]));
+  }
+
+  const evalSave = pathname.match(/^\/api\/eval\/(\d+)$/);
+  if (evalSave && request.method === 'POST') {
+    return await handleEvalSave(request, env, ctx, principal, Number(evalSave[1]));
+  }
+
   return htmlResponse(
     page({
       title: 'Not found',
@@ -183,6 +200,186 @@ async function handleMedicalRead(env, ctx, principal, registrationId) {
     registration_id: row.id,
     player_name: row.player_name,
     medical_notes: row.medical_notes || null,
+  });
+}
+
+/**
+ * Who this evaluation is attributed to.
+ *
+ * Normally the signed-in coach. An admin may set `on_behalf_of` to another
+ * staff member — the paper-transcription path, and the fix for a note typed
+ * into the wrong player.
+ *
+ * ATTRIBUTION AND AUTHORSHIP ARE DELIBERATELY DIFFERENT THINGS. The note is
+ * attributed to the coach who watched the child, because that is what makes it
+ * true and useful. The audit row records who actually typed it, because that is
+ * what makes it accountable. Collapsing the two would mean either losing the
+ * real observer's name or being unable to answer "who entered this".
+ *
+ * Never taken from the request for a non-admin: a coach cannot write a note
+ * under someone else's name.
+ */
+async function resolveAuthor(env, principal, requestedOnBehalfOf) {
+  const wants = String(requestedOnBehalfOf || '').trim().toLowerCase();
+
+  if (!wants || wants === principal.email) {
+    return { email: principal.email, label: principal.authorLabel, delegated: false };
+  }
+
+  if (!can(principal, 'notes:write_on_behalf')) {
+    return { error: 'Only academy admins can enter notes on behalf of another coach.' };
+  }
+
+  const target = await env.DB.prepare(
+    `SELECT email_norm, author_label FROM staff WHERE email_norm = ?1 AND active = 1`
+  )
+    .bind(wants)
+    .first();
+
+  if (!target) return { error: 'That coach is not on the staff list.' };
+
+  return { email: target.email_norm, label: target.author_label, delegated: true };
+}
+
+async function handleEvalSave(request, env, ctx, principal, registrationId) {
+  if (!can(principal, 'notes:write')) {
+    return json({ ok: false, error: 'This role cannot write evaluations.' }, { status: 403 });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: 'Could not read that submission.' }, { status: 400 });
+  }
+
+  const author = await resolveAuthor(env, principal, body.on_behalf_of);
+  if (author.error) {
+    return json({ ok: false, error: author.error }, { status: 403 });
+  }
+
+  const result = await saveEvaluation(env, {
+    registrationId,
+    authorEmail: author.email,
+    authorLabel: author.label,
+    data: body,
+  });
+
+  if (!result.ok) {
+    return json({ ok: false, error: 'That player is no longer in this event.' }, { status: 404 });
+  }
+
+  // Identifiers and shape only — never the note text. An audit log holding the
+  // notes would be a second copy of the sensitive content under different
+  // access rules, which is what auditing was supposed to avoid.
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: 'eval.save',
+      subjectType: 'registration',
+      subjectId: registrationId,
+      detail: {
+        attributed_to: author.email,
+        delegated: author.delegated,
+        has_internal: Boolean(String(body.internal_note || '').trim()),
+      },
+    })
+  );
+
+  return json({ ok: true, saved_as: author.label });
+}
+
+async function renderEvalList(env, principal) {
+  const summary = await completeness(env);
+
+  const { results } = await env.DB.prepare(
+    `SELECT registration_id FROM eval_feedback WHERE event_id = ?1 AND author_email = ?2`
+  )
+    .bind(env.EVENT_ID, principal.email)
+    .all();
+
+  const mineByRegistration = new Set((results || []).map((r) => Number(r.registration_id)));
+
+  return htmlResponse(
+    page({
+      title: 'Evaluations',
+      principal,
+      nav: NAV,
+      current: '/eval',
+      extraStyles: EVAL_STYLES,
+      body: evalListBody({ summary, mineByRegistration }),
+    })
+  );
+}
+
+async function renderEvalForm(env, principal, registrationId) {
+  const registration = await env.DB.prepare(
+    `SELECT id, player_name, session_time, grade, years_experience, school, status,
+            CASE WHEN medical_notes IS NOT NULL AND TRIM(medical_notes) != ''
+                 THEN 1 ELSE 0 END AS has_medical_notes
+       FROM registrations
+      WHERE id = ?1 AND event_id = ?2`
+  )
+    .bind(registrationId, env.EVENT_ID)
+    .first();
+
+  if (!registration) {
+    return htmlResponse(
+      page({
+        title: 'Not found',
+        principal,
+        nav: NAV,
+        body: '<h1>Not found</h1><p class="sub">No player with that id in this event.</p>',
+      }),
+      { status: 404 }
+    );
+  }
+
+  const { feedback, internal } = await evaluationForStaff(env, registrationId);
+
+  const mineFeedback = feedback.find((f) => f.author_email === principal.email) || null;
+  const mineInternal = internal.find((n) => n.author_email === principal.email) || null;
+  const mine = mineFeedback
+    ? { ...mineFeedback, internal_note: mineInternal?.body || '' }
+    : mineInternal
+      ? { internal_note: mineInternal.body }
+      : null;
+
+  const canDelegate = can(principal, 'notes:write_on_behalf');
+  let staffList = [];
+  if (canDelegate) {
+    const res = await env.DB.prepare(
+      `SELECT email_norm, display_name, author_label
+         FROM staff
+        WHERE active = 1 AND email_norm != ?1
+        ORDER BY display_name`
+    )
+      .bind(principal.email)
+      .all();
+    staffList = res.results || [];
+  }
+
+  const html = page({
+    title: registration.player_name,
+    principal,
+    nav: NAV,
+    current: '/eval',
+    extraStyles: EVAL_STYLES,
+    body: evalFormBody({
+      registration,
+      mine,
+      others: feedback.filter((f) => f.author_email !== principal.email),
+      internalOthers: internal.filter((n) => n.author_email !== principal.email),
+      canDelegate,
+      staffList,
+      actingAs: '',
+    }),
+  });
+
+  // This page runs the only script in the admin surface, so it carries its own
+  // CSP with that script's hash rather than the default deny-all.
+  return new Response(html, {
+    headers: adminHeaders({ 'Content-Security-Policy': await evalCsp() }),
   });
 }
 
