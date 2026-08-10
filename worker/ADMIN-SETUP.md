@@ -2,7 +2,7 @@
 
 One-time setup for the staff dashboard. Roughly 20–30 minutes.
 
-Do this **before August 18**, so there is time for the Brandon dry run while it
+Do this **before August 18**, so there is time for the coach dry run while it
 still matters. Nothing here touches the public registration form — that is the
 whole point of putting the dashboard on its own hostname.
 
@@ -38,8 +38,8 @@ the folder containing `wrangler.toml`.
 
   coach   ──►  admin.tnsaints.com        (same Worker)
                     │
-                    ├─ Cloudflare Access ── Entra ID  (@tnsaints.com mailboxes)
-                    │                    └─ One-time PIN (Brandon, external)
+                    ├─ Cloudflare Access ── Entra ID (every coach has an
+                    │                                 @tnsaints.com mailbox)
                     │
                     └─ `staff` table in D1 ── decides what they can actually see
 ```
@@ -48,6 +48,9 @@ Two locks in series, on purpose. Access decides **who comes through the door**.
 The `staff` table decides **what they may do inside**. If someone later widens
 the Access policy to "anyone with an @tnsaints.com address", that person still
 gets a 403, because they are not in `staff`.
+
+Every coach signs in the same way — Entra, with whatever MFA your M365 tenant
+already enforces. One login path, one place to revoke someone.
 
 ---
 
@@ -160,18 +163,19 @@ login loop fails with a generic error that does not mention consent.
 > Cloudflare's docs also list `Directory.Read.All` and `GroupMember.Read.All`.
 > **Skip both.** Those exist so Access can read your Entra group memberships,
 > and we deliberately do not use groups — authorization lives in the `staff`
-> table instead, because Brandon signs in by One-time PIN and carries no group
-> claims at all. Granting directory-wide read for a feature we do not use would
-> hand Cloudflare a copy of your org chart for no benefit.
+> table instead. Granting directory-wide read for a feature we do not use would
+> hand Cloudflare a readable copy of your whole M365 directory for no benefit.
+>
+> If you later decide you *do* want group-based policies, add them then. Adding
+> a permission is a two-minute job; un-granting one after it has been in place
+> for a year is a conversation about what was read in the meantime.
 
 ---
 
-## Step 4 — Add the two login methods in Cloudflare
+## Step 4 — Add the login method in Cloudflare
 
 ☁️ **CLOUDFLARE** → **Zero Trust** → **Integrations** → **Identity providers** →
 **Add new identity provider**
-
-### 4a. Azure AD
 
 Choose **Azure AD** (Cloudflare still uses the old label; it is Entra ID).
 
@@ -185,16 +189,25 @@ Choose **Azure AD** (Cloudflare still uses the old label; it is Entra ID).
 before you go on — testing here isolates an Entra problem from an Access policy
 problem, and debugging both at once is miserable.
 
-### 4b. One-time PIN
+That is the only login method to add. **Do not enable One-time PIN.**
 
-☁️ **CLOUDFLARE** → same screen → **Add new identity provider** →
-**One-time PIN**
+Every coach, Brandon included, has an `@tnsaints.com` mailbox and signs in
+through Entra. One-time PIN exists for people who do not, and enabling it
+anyway would actively weaken this setup:
 
-There is nothing to configure. This is how Brandon signs in: he has no
-`@tnsaints.com` mailbox, so Cloudflare emails him a six-digit code instead.
+- With OTP enabled, anyone whose address is in the Access policy can get in by
+  receiving a six-digit code **in email**. That skips Entra entirely — and with
+  it, whatever MFA and conditional-access rules your M365 tenant enforces.
+- Enabling both methods does not give you the stronger of the two. It gives an
+  attacker the weaker one. Someone who compromises a coach's mailbox but not
+  their Entra credentials is stopped by Entra-only, and let straight through by
+  Entra-plus-OTP.
 
-PINs are sent from `noreply@notify.cloudflare.com`. Worth knowing when his code
-"never arrives" — see the dry run table in Step 8.
+**You are not locking yourself out by leaving it off.** If the Entra client
+secret expires and every coach is blocked, your Cloudflare dashboard login is a
+separate credential that still works — you can add One-time PIN back from this
+same screen in about a minute. Keeping the weaker path permanently open to
+avoid a one-minute fix is a bad trade.
 
 ---
 
@@ -225,17 +238,15 @@ someone remembers to extend a rule.
 | Include → selector | **Emails** |
 | Value | every staff address, **listed individually** |
 
-List addresses individually rather than using **Emails ending in** →
-`@tnsaints.com`. The domain rule silently admits every future mailbox on the
-domain — an assistant, a shared inbox, a departing coach whose account has not
-been closed yet. Since `staff` is a second gate anyway this is belt and braces,
-but the belt is free.
+List addresses individually — including Brandon's `@tnsaints.com` address —
+rather than using **Emails ending in** → `@tnsaints.com`. It is tempting, since
+every coach is now on the domain, but the domain rule silently admits every
+*future* mailbox on it: an assistant, a shared inbox, a departing coach whose
+account has not been closed yet. Since `staff` is a second gate anyway this is
+belt and braces, but the belt is free.
 
-Include Brandon's real personal address in this same list. With One-time PIN
-enabled, Access emails him a code rather than sending him to Microsoft.
-
-Under **Login methods**, make sure both **Azure AD** and **One-time PIN** are
-enabled for this application.
+Under **Login methods**, enable **Azure AD only**. Leave One-time PIN off — see
+Step 4 for why.
 
 ---
 
@@ -298,7 +309,7 @@ login, then the roster.
 Add the other coaches — 💻 **TERMINAL**:
 
 ```powershell
-npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('brandon@example.com', 'Brandon Turner', 'Coach Turner', 'coach', 1, datetime('now'), datetime('now'))"
+npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('brandon@tnsaints.com', 'Brandon Turner', 'Coach Turner', 'coach', 1, datetime('now'), datetime('now'))"
 ```
 
 Check who is on the list at any time — 💻 **TERMINAL**:
@@ -344,33 +355,46 @@ npm run audit:tail
 
 ---
 
-## Step 8 — The dry run, with Brandon's real address
+## Step 8 — The dry run, on a coach's own phone
 
-**Do not skip this, and do not substitute a test account.** Two distinct things
-can go wrong and they look identical from Brandon's side:
+**Do not skip this, and do not substitute your own account.** You are the
+account most likely to work — you set all of this up, you are already signed
+into M365 on this machine, and you are an `admin` rather than a `coach`. Testing
+with yourself proves the least.
 
-1. **Access refuses him** — his One-time PIN email lands in spam, or his address
-   is missing from the policy. He never reaches the app.
-2. **Access admits him, `staff` does not** — he sees "you are signed in but not
-   yet authorised". His login is fine; the row is missing.
+Three distinct things can go wrong, and from the coach's side they look the
+same — "it didn't work" — while the fixes are in three different systems:
 
-A test account exercises neither: it will not reproduce his spam filter and it
-will not catch a typo in *his* address.
+1. **Access refuses them** — their address is not in the policy. ☁️ Cloudflare.
+2. **Access admits them, `staff` does not** — they see "signed in but not yet
+   authorised". Their login is fine; the row is missing. 💻 Terminal.
+3. **Entra refuses them** — no M365 licence on the mailbox, MFA not yet
+   enrolled, or the account is in a different tenant. 🪟 Entra.
 
-🌐 **BROWSER — Brandon's phone**, the one he will actually have on August 29.
-Ask him to open <https://admin.tnsaints.com> and tell you which of these he
-sees:
+Number 3 is the new one now that everyone is on Entra, and it is the one most
+likely to surface on a phone rather than a desktop: a coach who has only ever
+read `@tnsaints.com` mail in the Outlook app may never have completed MFA
+enrolment in a browser, and the first time they are asked will be here.
 
-| What he sees | What it means | Fix |
+🌐 **BROWSER — the coach's own phone**, the one they will actually have in the
+gym on August 29. Ask them to open <https://admin.tnsaints.com> and tell you
+which of these they see:
+
+| What they see | What it means | Fix |
 |---|---|---|
 | Microsoft login, then the roster | Working | — |
 | "Signed in but not yet authorised" | Access fine, `staff` row missing or wrong address | 💻 TERMINAL — add the exact address the page displays |
-| A code request, but the code never arrives | One-time PIN in spam | Have him check junk and allow-list `noreply@notify.cloudflare.com` |
 | "Access denied" from Cloudflare | Address not in the policy | ☁️ CLOUDFLARE — add it in Step 5 |
+| Microsoft error, or an MFA setup prompt they cannot finish | Entra account or licence problem | 🪟 ENTRA — check the mailbox is licensed and MFA enrolment is complete |
+| The roster loads, but with no phone numbers | **Correct** — that is the `coach` role | Nothing. See Roles above |
 
-The "not yet authorised" page deliberately shows the address he authenticated
-as — that is the exact string to paste into the `staff` insert, which removes
-the guesswork.
+The "not yet authorised" page deliberately shows the address they authenticated
+as. That is the exact string to paste into the `staff` insert — no guessing
+whether it is `brandon@` or `bturner@`.
+
+Have them confirm the last row too. A coach who thinks the roster is broken
+because contact details are missing will call you on event morning, and that is
+a worse time to explain the design than now.
 
 ---
 
@@ -411,7 +435,25 @@ consider whether the task needs it.
 
 **Everyone locked out, and nothing changed on our side.**
 🪟 ENTRA — check whether the client secret expired. That is the most common
-cause of a sudden org-wide lockout, and Entra gives no warning.
+cause of a sudden org-wide lockout, it hits every coach at the same moment, and
+Entra gives no warning.
+
+Entra is the only login method, so this locks out all staff at once. It does
+**not** lock you out of Cloudflare — that is a separate credential. Recovery,
+in order:
+
+1. 🪟 ENTRA — issue a new client secret (Step 3), 
+   ☁️ CLOUDFLARE — paste it into the Azure AD provider (Step 4a). This is the
+   real fix and takes a few minutes.
+2. If you need someone in *right now* and cannot reach Entra: ☁️ CLOUDFLARE →
+   **Zero Trust** → **Integrations** → **Identity providers** → add
+   **One-time PIN**, and enable it on the application. Anyone in the Access
+   policy can then sign in with an emailed code. **Turn it back off once Entra
+   is fixed** — leaving it on permanently is the weaker-auth problem described
+   in Step 4.
+
+This is worth rehearsing mentally before August 29, because the failure is
+silent until someone tries to sign in.
 
 **Registration broke after all this.**
 It should not have — the public API is a different hostname and none of the

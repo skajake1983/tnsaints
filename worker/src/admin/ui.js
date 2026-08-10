@@ -142,12 +142,12 @@ export function htmlResponse(html, { status = 200, headers = {} } = {}) {
 /**
  * The "you got in, but you are not on the list" page.
  *
- * A bare 403 is the wrong answer here, and the risk register says why: when
- * Brandon signs in through a One-time PIN and the app refuses him, the two
- * possible causes — Access rejected him, or Access admitted him and `staff`
- * did not — look identical from the outside and lead to completely different
- * fixes. Telling him which one happened, and who to text, turns a blocked
- * evening into a thirty-second fix.
+ * A bare 403 is the wrong answer here, and the risk register says why: when a
+ * coach is refused, the two possible causes — Access rejected them, or Access
+ * admitted them and `staff` did not — look identical from the outside and lead
+ * to completely different fixes. One is a login problem, the other is a
+ * one-line INSERT. Saying which it is, and who to text, turns a blocked evening
+ * on the night before an event into a thirty-second fix.
  *
  * This discloses only the email the visitor already authenticated as, so it
  * tells an attacker nothing they did not already supply.

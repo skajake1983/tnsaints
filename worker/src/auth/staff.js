@@ -57,8 +57,9 @@ export function can(principal, capability) {
  *
  * Returns null when the email is unknown or deactivated — the caller turns
  * that into a 403 rather than a 401, because the person genuinely is
- * authenticated. They are simply not authorised, and telling them so is what
- * lets Brandon text Jacob instead of assuming the login is broken.
+ * authenticated. They are simply not authorised, and saying so is what lets a
+ * coach text Jacob for a one-line fix instead of concluding their login is
+ * broken and giving up.
  */
 export async function loadStaff(env, email) {
   const norm = normEmail(email);

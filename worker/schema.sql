@@ -113,16 +113,21 @@ CREATE INDEX IF NOT EXISTS idx_registrations_rate
 -- Staff and authorization (Phase A)
 --
 -- Cloudflare Access answers "may this human come through the door". This table
--- answers "what may they do once inside". Keeping those separate matters for
--- one concrete reason: Brandon Turner has no @tnsaints.com mailbox and arrives
--- through One-time PIN, which carries no identity-provider group claims at
--- all. Any design that leans on group claims for authorization breaks for
--- exactly the person it needs to work for.
+-- answers "what may they do once inside".
 --
--- The second reason is containment. A signed-in email that is absent here, or
--- has active = 0, gets 403 even though Access admitted it. That is the control
--- that survives someone widening the Access policy to "anyone with an
--- @tnsaints.com address" without thinking it through.
+-- The reason to keep those separate is containment. Access policies are edited
+-- in a dashboard by whoever holds the Cloudflare account; this table changes
+-- through a reviewed command in the repo. A signed-in email that is absent
+-- here, or has active = 0, gets 403 even though Access admitted it — so
+-- widening the Access policy to "anyone with an @tnsaints.com address", which
+-- is a two-click mistake, does not by itself grant anyone a thing.
+--
+-- It also keeps authorization independent of the identity provider. Every
+-- coach currently has an @tnsaints.com mailbox and arrives through Entra, but
+-- the first guest coach, contractor, or evaluator who does not will arrive some
+-- other way, carrying whatever claims that method happens to supply. Roles
+-- living here means adding that person is one INSERT rather than a rethink of
+-- how authorization works.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS staff (
   -- Lowercased, trimmed. The JWT email claim is normalised the same way before
