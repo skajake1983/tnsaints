@@ -176,13 +176,30 @@ if m:
     check("it never references the internal table", "eval_notes_internal" not in fn, fn[:200])
     check("it reads only eval_feedback", "eval_feedback" in fn)
 
+def strip_comments(js):
+    """Remove block and line comments.
+
+    The canary must judge CODE, not prose. compose.js documents at length that
+    it cannot reach the internal table -- naming it to say so -- and a raw
+    substring search failed on exactly that sentence. A test that forces you to
+    delete the explanation in order to pass is a test that makes the codebase
+    worse.
+    """
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    js = re.sub(r"(?m)^\s*//.*$", "", js)
+    return js
+
+
 compose_path = os.path.join(SRC, "feedback", "compose.js")
 if os.path.exists(compose_path):
-    compose_src = open(compose_path, encoding="utf-8").read()
-    check("compose.js never names the internal table",
-          "eval_notes_internal" not in compose_src)
+    compose_code = strip_comments(open(compose_path, encoding="utf-8").read())
+    check("compose.js never queries the internal table",
+          "eval_notes_internal" not in compose_code, compose_code[:300])
     check("compose.js does not import the staff-wide accessor",
-          "evaluationForStaff" not in compose_src)
+          "evaluationForStaff" not in compose_code)
+    # The positive half: it must actually go through the one permitted accessor.
+    check("compose.js reads only via parentFacingFeedback",
+          "parentFacingFeedback" in compose_code)
 else:
     print("  ....  compose.js not written yet - canary re-checks it when it lands")
 

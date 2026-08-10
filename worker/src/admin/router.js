@@ -29,6 +29,14 @@ import { loadStaff, can, audit, rosterView } from '../auth/staff.js';
 import { getAvailability, registrationWindow, slotCapacity, sessionTimes } from '../registration.js';
 import { page, esc, htmlResponse, notAuthorisedPage, adminHeaders } from './ui.js';
 import { saveEvaluation, evaluationForStaff, completeness } from '../feedback/notes.js';
+import {
+  setDecision,
+  decisionGrid,
+  buildBatch,
+  approveBatch,
+  preflight,
+  drainBatch,
+} from '../feedback/batches.js';
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 
 const NAV = [
@@ -137,6 +145,114 @@ export async function handleAdmin(request, env, ctx, path) {
   const evalSave = pathname.match(/^\/api\/eval\/(\d+)$/);
   if (evalSave && request.method === 'POST') {
     return await handleEvalSave(request, env, ctx, principal, Number(evalSave[1]));
+  }
+
+  // --- Decisions and the outbound batch ------------------------------------
+  // Everything here is admin-only. A coach records what they saw; deciding who
+  // is offered a place, and mailing fifty families about it, is not that job.
+
+  const decide = pathname.match(/^\/api\/decision\/(\d+)$/);
+  if (decide && request.method === 'POST') {
+    if (!can(principal, 'decisions:set')) {
+      return json({ ok: false, error: 'Only academy admins set decisions.' }, { status: 403 });
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+    }
+    const result = await setDecision(env, {
+      registrationId: Number(decide[1]),
+      decision: body.decision,
+      actor: principal.email,
+    });
+    if (result.ok) {
+      ctx.waitUntil(
+        audit(env, {
+          actor: principal.email,
+          action: 'decision.set',
+          subjectType: 'registration',
+          subjectId: Number(decide[1]),
+          detail: { decision: body.decision },
+        })
+      );
+    }
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  if (pathname === '/api/batch/build' && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Only academy admins build batches.' }, { status: 403 });
+    }
+    const result = await buildBatch(env, principal.email);
+    if (result.ok) {
+      ctx.waitUntil(
+        audit(env, {
+          actor: principal.email,
+          action: 'batch.build',
+          subjectType: 'batch',
+          subjectId: result.batchId,
+          detail: { composed: result.composed, blocked: result.problems.length },
+        })
+      );
+    }
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  const approve = pathname.match(/^\/api\/batch\/([\w.-]+)\/approve$/);
+  if (approve && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Only academy admins approve batches.' }, { status: 403 });
+    }
+    const result = await approveBatch(env, approve[1], principal.email);
+    if (result.ok) {
+      ctx.waitUntil(
+        audit(env, {
+          actor: principal.email,
+          action: 'batch.approve',
+          subjectType: 'batch',
+          subjectId: approve[1],
+          detail: { queued: result.queued },
+        })
+      );
+    }
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  const pre = pathname.match(/^\/api\/batch\/([\w.-]+)\/preflight$/);
+  if (pre && request.method === 'GET') {
+    return json({ ok: true, ...(await preflight(env, pre[1])) });
+  }
+
+  // The only endpoint in this system that mails families. Deliberately a
+  // separate, explicit action from approval — approving says "these messages
+  // are right", sending says "send them now", and collapsing the two removes
+  // the last moment where someone can stop.
+  const drain = pathname.match(/^\/api\/batch\/([\w.-]+)\/send$/);
+  if (drain && request.method === 'POST') {
+    if (!can(principal, 'messages:send')) {
+      return json({ ok: false, error: 'Only academy admins send batches.' }, { status: 403 });
+    }
+    const result = await drainBatch(env, drain[1], { max: 10 });
+    ctx.waitUntil(
+      audit(env, {
+        actor: principal.email,
+        action: 'batch.send_tick',
+        subjectType: 'batch',
+        subjectId: drain[1],
+        detail: { sent: result.sent, queued: result.queued, failed: result.failed },
+      })
+    );
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  const previewMatch = pathname.match(/^\/api\/message\/(\d+)\/preview$/);
+  if (previewMatch && request.method === 'GET') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Not permitted.' }, { status: 403 });
+    }
+    return await renderPreview(env, Number(previewMatch[1]));
   }
 
   return htmlResponse(
@@ -287,6 +403,45 @@ async function handleEvalSave(request, env, ctx, principal, registrationId) {
   );
 
   return json({ ok: true, saved_as: author.label });
+}
+
+/**
+ * Render one queued message exactly as the family will receive it.
+ *
+ * Reads the SNAPSHOT — body_html as frozen at build time — rather than
+ * recomposing. Recomposing for the preview would defeat the entire purpose:
+ * you would be reviewing a fresh render while a different, older one sits
+ * queued to send.
+ *
+ * Player name and parent email are shown together above the message, because
+ * the catastrophic failure in this system is one family receiving another
+ * child's feedback, and the only reliable way to catch it is to see the pair
+ * side by side.
+ */
+async function renderPreview(env, messageId) {
+  const m = await env.DB.prepare(
+    `SELECT m.id, m.subject, m.body_html, m.send_state, r.player_name, r.parent_email,
+            COALESCE(d.decision, 'undecided') AS decision
+       FROM parent_messages m
+       JOIN registrations r ON r.id = m.registration_id
+       LEFT JOIN decisions d ON d.registration_id = m.registration_id
+      WHERE m.id = ?1`
+  )
+    .bind(messageId)
+    .first();
+
+  if (!m) return json({ ok: false, error: 'No such message.' }, { status: 404 });
+
+  return json({
+    ok: true,
+    id: m.id,
+    to: m.parent_email,
+    player_name: m.player_name,
+    decision: m.decision,
+    subject: m.subject,
+    send_state: m.send_state,
+    body_html: m.body_html,
+  });
 }
 
 async function renderEvalList(env, principal) {

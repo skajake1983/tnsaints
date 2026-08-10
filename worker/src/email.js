@@ -56,7 +56,7 @@ export function emailConfigured(env) {
  *
  * @returns {Promise<boolean>} true if this send is within budget
  */
-async function reserveSend(env, { reserveFloor = 0 } = {}) {
+export async function reserveSend(env, { reserveFloor = 0 } = {}) {
   const limit = parseInt(env.EMAIL_DAILY_LIMIT, 10) || 100;
   // Resend's counter is UTC-based, so key the budget the same way.
   const day = new Date().toISOString().slice(0, 10);
@@ -85,13 +85,16 @@ async function reserveSend(env, { reserveFloor = 0 } = {}) {
   }
 }
 
-async function send(env, { to, subject, html, replyTo, attachments }) {
+async function send(env, { to, subject, html, text, replyTo, attachments }) {
   const payload = {
     from: env.NOTIFY_EMAIL_FROM,
     to: Array.isArray(to) ? to : [to],
     subject,
     html,
   };
+  // A plain-text alternative materially helps deliverability for a burst of
+  // near-identical messages, which is exactly the shape of a decision batch.
+  if (text) payload.text = text;
   if (replyTo) payload.reply_to = replyTo;
   if (attachments) payload.attachments = attachments;
 
@@ -108,6 +111,37 @@ async function send(env, { to, subject, html, replyTo, attachments }) {
     // Body may contain the address; log status and provider message only.
     const detail = await res.text();
     throw new Error(`Resend responded ${res.status}: ${detail.slice(0, 300)}`);
+  }
+
+  // The provider id is worth keeping: it is what turns "we sent it" into
+  // something checkable when a family says nothing arrived.
+  try {
+    const body = await res.json();
+    return body?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send one already-composed message and report the outcome rather than throwing.
+ *
+ * The batch drain needs to record per-message success or failure and carry on,
+ * so an exception here would either abort the whole run or have to be caught at
+ * every call site. Budget is NOT reserved inside this function: the drain
+ * reserves first so it can put a message back on the queue untouched when the
+ * budget runs out, which is different from a send that genuinely failed.
+ */
+export async function sendComposedMessage(env, { to, subject, html, text, replyTo }) {
+  if (!emailConfigured(env)) {
+    return { ok: false, error: 'email not configured' };
+  }
+
+  try {
+    const id = await send(env, { to, subject, html, text, replyTo });
+    return { ok: true, id };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'send failed' };
   }
 }
 
