@@ -178,6 +178,7 @@ export const EVAL_STYLES = `
     -webkit-tap-highlight-color: transparent; user-select: none;
   }
   .scale label.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .scale label:focus-within { outline: 2px solid var(--navy-soft); outline-offset: 2px; }
   .scale input { position: absolute; opacity: 0; pointer-events: none; }
   .field { margin-bottom: 18px; }
   .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
@@ -186,7 +187,7 @@ export const EVAL_STYLES = `
     width: 100%; min-height: 88px; padding: 11px 12px; border: 1px solid var(--line);
     border-radius: 8px; font: inherit; font-size: 16px; resize: vertical; background: #fff; color: var(--ink);
   }
-  textarea:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+  textarea:focus { outline: 2px solid var(--navy-soft); outline-offset: 1px; }
   .internal {
     background: #f3f0e6; border: 1px solid #ddd3b4; border-left: 4px solid var(--gold);
     border-radius: 8px; padding: 14px 16px; margin: 4px 0 20px;

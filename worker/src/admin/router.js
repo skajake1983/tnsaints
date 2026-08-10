@@ -38,11 +38,12 @@ import {
   drainBatch,
 } from '../feedback/batches.js';
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
+import { logoResponse } from './logo.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
   { href: '/eval', label: 'Evaluations' },
-  { href: '/whoami', label: 'Who am I' },
+  { href: '/profile', label: 'Profile' },
 ];
 
 /**
@@ -55,6 +56,15 @@ export async function handleAdmin(request, env, ctx, path) {
   // not read url.pathname directly here — that would make every route below
   // wrong under local dev, which is exactly where they get tested.
   const pathname = path || url.pathname;
+
+  // Served before the STAFF check — Cloudflare Access still gates the hostname
+  // in front of it, so this is not a public URL. It sits here so the response
+  // stays a plain cacheable image rather than something that varies by
+  // principal: these are the same bytes tnsaints.com serves to anyone, and
+  // nothing about who is signed in can be inferred from them.
+  if (pathname === '/logo.png' && request.method === 'GET') {
+    return logoResponse();
+  }
 
   // Local development only — see devPrincipalEmail(). Null in production.
   const devEmail = devPrincipalEmail(request, env);
@@ -104,7 +114,7 @@ export async function handleAdmin(request, env, ctx, path) {
     return await renderRoster(env, principal);
   }
 
-  if (pathname === '/whoami' && request.method === 'GET') {
+  if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
   }
 
@@ -541,10 +551,10 @@ async function renderEvalForm(env, principal, registrationId) {
 function renderWhoami(principal) {
   return htmlResponse(
     page({
-      title: 'Who am I',
+      title: 'Profile',
       principal,
       nav: NAV,
-      current: '/whoami',
+      current: '/profile',
       body: `
   <h1>Signed in</h1>
   <p class="sub">What this account can see and do.</p>

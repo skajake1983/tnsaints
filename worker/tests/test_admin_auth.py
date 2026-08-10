@@ -230,7 +230,7 @@ check("the audit log does NOT contain contact details",
       CANARIES["parent email"] not in log)
 
 print("\n=== 7. the admin surface does not exist on the public API ===")
-for path in ("/", "/whoami", "/api/roster", "/api/health"):
+for path in ("/", "/profile", "/api/roster", "/api/health"):
     st, body = call("GET", path)
     if path == "/api/health":
         # The public API has its own health endpoint; it must not name a principal.

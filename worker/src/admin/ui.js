@@ -22,9 +22,26 @@ export function esc(value) {
 }
 
 const STYLES = `
+  /*
+   * Lifted verbatim from index.html's custom properties so the dashboard and
+   * the public site cannot drift apart. Same names, same values.
+   *
+   * One deliberate distinction: --gold (#f5cf00) is a bright accent that works
+   * on the dark blue header and fails WCAG badly as text on white — roughly
+   * 1.7:1. So gold is used for marks and accents on dark, and --gold-ink
+   * (#8a6f00) carries any gold-flavoured TEXT on a light background, where it
+   * clears AA. Reaching for --gold on a white card is the mistake to avoid.
+   */
   :root {
-    --navy: #0d2340; --navy-soft: #16304f; --gold: #c8a04a; --gold-soft: #e0c07a;
-    --ink: #10151c; --muted: #5d6b7d; --line: #dfe5ec; --bg: #f4f6f9;
+    --navy: #06255c;        /* --saints-blue-dark */
+    --navy-soft: #0b3a8d;   /* --saints-blue */
+    --gold: #f5cf00;        /* --saints-gold — accents on dark only */
+    --gold-soft: #ffe873;   /* legible nav links on the navy header */
+    --gold-ink: #8a6f00;    /* gold-toned text on light backgrounds */
+    --ink: #13233d;         /* --saints-text */
+    --muted: #5a6b85;
+    --line: #dfe3ea;        /* --saints-gray */
+    --bg: #f3f5f9;          /* --saints-light */
     --ok: #1c7c4a; --warn: #a8620d; --danger: #a32020;
   }
   * { box-sizing: border-box; }
@@ -34,11 +51,16 @@ const STYLES = `
     -webkit-text-size-adjust: 100%;
   }
   header {
-    background: var(--navy); color: #fff; padding: 14px 18px;
+    background: var(--navy); color: #fff; padding: 12px 18px;
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    border-bottom: 3px solid var(--gold);
   }
-  header .mark { font-weight: 700; letter-spacing: .02em; }
+  header .brand { display: flex; align-items: center; gap: 10px; }
+  header .brand img { width: 34px; height: 34px; display: block; }
+  header .mark { font-weight: 700; letter-spacing: .02em; line-height: 1.15; }
   header .mark span { color: var(--gold); }
+  header .mark small { display: block; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .1em; color: #9fb4d6; }
   header nav { display: flex; gap: 14px; margin-left: auto; flex-wrap: wrap; }
   header nav a { color: var(--gold-soft); text-decoration: none; font-size: 14px; }
   header nav a[aria-current="page"] { color: #fff; text-decoration: underline; }
@@ -98,7 +120,10 @@ export function page({ title, principal, nav = [], current = '', body, extraStyl
 </head>
 <body>
 <header>
-  <div class="mark">TN <span>Saints</span> Admin</div>
+  <div class="brand">
+    <img src="/logo.png" width="34" height="34" alt="">
+    <div class="mark">TN <span>Saints</span><small>Staff</small></div>
+  </div>
   <nav>${links}</nav>
   ${principal ? `<div class="who">${esc(principal.displayName)} · ${esc(principal.role)}</div>` : ''}
 </header>
