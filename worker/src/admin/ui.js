@@ -45,6 +45,21 @@ const STYLES = `
     --ok: #1c7c4a; --warn: #a8620d; --danger: #a32020;
   }
   * { box-sizing: border-box; }
+  /*
+   * Reserve the scrollbar's width whether or not the page needs one.
+   *
+   * Without this, the layout jumps sideways between pages: the player list is
+   * short enough to fit the viewport while an evaluation form is roughly twice
+   * as tall, so moving between them adds and removes a vertical scrollbar,
+   * narrows the viewport by ~15px, and shifts everything centred — including
+   * the header — to the left. It reads as the page being broken rather than as
+   * a scrollbar appearing.
+   *
+   * Set on html because that is the scrolling element. Mobile is unaffected
+   * either way, since overlay scrollbars take no space; this is for the desktop
+   * review sessions where the jump is obvious.
+   */
+  html { scrollbar-gutter: stable; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
