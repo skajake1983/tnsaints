@@ -1,11 +1,32 @@
 # Staff admin setup — `admin.tnsaints.com`
 
-One-time setup for the staff dashboard. Roughly 20 minutes, all in the
-Cloudflare dashboard except two commands.
+One-time setup for the staff dashboard. Roughly 20–30 minutes.
 
 Do this **before August 18**, so there is time for the Brandon dry run while it
 still matters. Nothing here touches the public registration form — that is the
 whole point of putting the dashboard on its own hostname.
+
+---
+
+## Where each step happens
+
+Every step below is tagged with one of these three places. Check the tag before
+you start looking for a menu.
+
+| Tag | What it means |
+|---|---|
+| 💻 **TERMINAL** | The VS Code terminal on your PC (PowerShell), in `c:\Dev\TNSaints\tnsaints\worker` |
+| ☁️ **CLOUDFLARE** | Browser → <https://dash.cloudflare.com> → pick your account → **Zero Trust** in the left sidebar |
+| 🪟 **ENTRA** | Browser → <https://entra.microsoft.com> (sign in with your M365 admin account) |
+
+For every 💻 TERMINAL step, be in the `worker` folder first:
+
+```powershell
+cd c:\Dev\TNSaints\tnsaints\worker
+```
+
+Running wrangler from the repo root fails with "Worker name missing" — it needs
+the folder containing `wrangler.toml`.
 
 ---
 
@@ -32,10 +53,12 @@ gets a 403, because they are not in `staff`.
 
 ## Step 1 — Deploy, so the hostname exists
 
+💻 **TERMINAL**
+
 Access applications attach to a hostname, so the hostname has to exist first.
 
-```bash
-cd worker
+```powershell
+cd c:\Dev\TNSaints\tnsaints\worker
 npm run deploy
 ```
 
@@ -46,150 +69,241 @@ correct and deliberate: `ACCESS_AUD` is still empty, and the code treats a
 missing Access configuration as "refuse everything" rather than "skip the
 check". A deployment mistake must never produce an open admin panel.
 
-Confirm it:
+Confirm it — 💻 **TERMINAL**:
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://admin.tnsaints.com/
-# expect 401
+```powershell
+curl.exe -s -o NUL -w "%{http_code}`n" https://admin.tnsaints.com/
 ```
 
+Expect `401`. Use `curl.exe`, not `curl` — in PowerShell, bare `curl` is an
+alias for `Invoke-WebRequest`, which takes different flags and will error.
+
+> Certificate provisioning can take a couple of minutes. If you get `404` at
+> first, wait 2–3 minutes and try again — that is the domain still coming up,
+> not a misconfiguration.
+
 ---
 
-## Step 2 — Add Microsoft Entra ID as a login method
+## Step 2 — Find your team domain
 
-**Zero Trust dashboard → Settings → Authentication → Login methods → Add new →
-Azure AD** (Cloudflare still labels it Azure AD; it is Entra ID).
+☁️ **CLOUDFLARE** → **Zero Trust** → **Settings** → **General** → **Team name**
 
-You need three values from the Azure/Entra side. In the
-[Entra admin center](https://entra.microsoft.com) → **App registrations → New
-registration**:
+Your team domain is that team name plus `.cloudflareaccess.com`. If the team
+name is `tnsaints`, the team domain is:
+
+```
+tnsaints.cloudflareaccess.com
+```
+
+Write it down — you need it twice: once in Entra (Step 3) and once to confirm
+`wrangler.toml` (Step 6).
+
+If no team name is set yet, set one here. It becomes part of the login URL your
+coaches see, so pick something recognisable.
+
+---
+
+## Step 3 — Register the app in Entra
+
+🪟 **ENTRA** → <https://entra.microsoft.com>
+
+Navigate: **Applications** → **Enterprise applications** → **New application**
+→ **Create your own application**.
 
 - Name: `Cloudflare Access`
+- Choose: **Register an application to integrate with Microsoft Entra ID (App
+  you're developing)**
+- Select **Create**
+
+On the registration screen, set the **Redirect URI**:
+
+- Platform: **Web**
+- URI: `https://tnsaints.cloudflareaccess.com/cdn-cgi/access/callback`
+  *(substitute your team domain from Step 2)*
 - Supported account types: **Single tenant**
-- Redirect URI: **Web** →
-  `https://tnsaints.cloudflareaccess.com/cdn-cgi/access/callback`
 
-Then collect:
+Select **Register**.
 
-| Cloudflare field | Where it comes from |
+### Collect three values
+
+🪟 **ENTRA** → **Applications** → **App registrations** → **All applications** →
+select `Cloudflare Access`
+
+| Value you need | Where it is |
 |---|---|
-| Application ID | Entra app → Overview → **Application (client) ID** |
-| Application secret | Entra app → **Certificates & secrets** → New client secret → copy the **Value**, not the Secret ID |
-| Directory ID | Entra app → Overview → **Directory (tenant) ID** |
+| **Application (client) ID** | **Overview** tab |
+| **Directory (tenant) ID** | **Overview** tab |
+| **Client secret** | **Certificates & secrets** → **New client secret** → copy the **Value** column |
 
-In Entra, under **API permissions**, add Microsoft Graph delegated
-`email`, `openid`, `profile`, `offline_access`, `User.Read` and click
-**Grant admin consent**. Without the consent step the login loop fails with a
-generic error.
+> Copy the client secret's **Value**, not its **Secret ID** — they sit next to
+> each other and only one works. Copy it the moment Entra shows it; it is masked
+> permanently once you navigate away.
+>
+> It also **expires**. Put the expiry date in your calendar now, because when it
+> lapses every coach is locked out at once, with no warning and no obvious
+> cause.
 
-Back in Cloudflare, click **Save** then **Test** — it must say success before
-you continue.
+### Grant API permissions
 
-> Copy the client secret the moment Entra shows it. It is never displayed
-> again, and it expires: note the expiry date somewhere you will see it, because
-> when it lapses every coach is locked out at once with no warning.
+🪟 **ENTRA** → same app → **API permissions** → **Add a permission** →
+**Microsoft Graph** → **Delegated permissions**
 
-**Also enable One-time PIN** in the same Login methods list. That is how
-Brandon signs in — he has no `@tnsaints.com` mailbox, and Cloudflare emails him
-a six-digit code instead. This is why authorization lives in D1 rather than
-leaning on identity-provider group claims: Brandon arrives carrying no group
-claims at all.
+Add exactly these five:
+
+```
+email    offline_access    openid    profile    User.Read
+```
+
+Then select **Grant admin consent for <your org>**. Without the consent step the
+login loop fails with a generic error that does not mention consent.
+
+> Cloudflare's docs also list `Directory.Read.All` and `GroupMember.Read.All`.
+> **Skip both.** Those exist so Access can read your Entra group memberships,
+> and we deliberately do not use groups — authorization lives in the `staff`
+> table instead, because Brandon signs in by One-time PIN and carries no group
+> claims at all. Granting directory-wide read for a feature we do not use would
+> hand Cloudflare a copy of your org chart for no benefit.
 
 ---
 
-## Step 3 — Create the Access application
+## Step 4 — Add the two login methods in Cloudflare
 
-**Zero Trust → Access → Applications → Add an application → Self-hosted.**
+☁️ **CLOUDFLARE** → **Zero Trust** → **Integrations** → **Identity providers** →
+**Add new identity provider**
+
+### 4a. Azure AD
+
+Choose **Azure AD** (Cloudflare still uses the old label; it is Entra ID).
+
+| Field | Paste from Step 3 |
+|---|---|
+| Application ID | Application (client) ID |
+| Application secret | Client secret **Value** |
+| Directory ID | Directory (tenant) ID |
+
+**Save**, then use the **Test** button on the provider. It must report success
+before you go on — testing here isolates an Entra problem from an Access policy
+problem, and debugging both at once is miserable.
+
+### 4b. One-time PIN
+
+☁️ **CLOUDFLARE** → same screen → **Add new identity provider** →
+**One-time PIN**
+
+There is nothing to configure. This is how Brandon signs in: he has no
+`@tnsaints.com` mailbox, so Cloudflare emails him a six-digit code instead.
+
+PINs are sent from `noreply@notify.cloudflare.com`. Worth knowing when his code
+"never arrives" — see the dry run table in Step 8.
+
+---
+
+## Step 5 — Create the Access application
+
+☁️ **CLOUDFLARE** → **Zero Trust** → **Access controls** → **Applications** →
+**Create new application** → **Self-hosted and private** → **Add public
+hostname**
 
 | Field | Value |
 |---|---|
 | Application name | `TN Saints Admin` |
-| Session duration | `24 hours` |
 | Subdomain | `admin` |
-| Domain | `tnsaints.com` |
-| Path | *leave empty* |
+| Domain | `tnsaints.com` (from the dropdown) |
+| Path | **leave empty** |
+| Session duration | `24 hours` |
 
-Leaving the path empty is the point: the whole hostname is covered, so any
-admin route added later is protected the moment it exists rather than the
-moment someone remembers to extend a rule.
+Leaving the path empty is the point: the whole hostname is covered, so any admin
+route added later is protected the moment it exists rather than the moment
+someone remembers to extend a rule.
 
-Then add **one policy**:
+### Add one policy
 
 | Field | Value |
 |---|---|
 | Policy name | `Academy staff` |
 | Action | `Allow` |
-| Include → Emails | every staff address, listed individually |
+| Include → selector | **Emails** |
+| Value | every staff address, **listed individually** |
 
-List addresses individually rather than using "Emails ending in @tnsaints.com".
-The domain rule silently admits every future mailbox on the domain — an
-assistant, a shared inbox, a departing coach whose account has not been closed
-yet. Since `staff` is a second gate anyway, this is belt and braces, but the
-belt is free.
+List addresses individually rather than using **Emails ending in** →
+`@tnsaints.com`. The domain rule silently admits every future mailbox on the
+domain — an assistant, a shared inbox, a departing coach whose account has not
+been closed yet. Since `staff` is a second gate anyway this is belt and braces,
+but the belt is free.
 
-Include Brandon's real personal address here. With One-time PIN enabled, Access
-emails him a code.
+Include Brandon's real personal address in this same list. With One-time PIN
+enabled, Access emails him a code rather than sending him to Microsoft.
+
+Under **Login methods**, make sure both **Azure AD** and **One-time PIN** are
+enabled for this application.
 
 ---
 
-## Step 4 — Copy the AUD tag into the Worker
+## Step 6 — Copy the AUD tag into the Worker
 
-On the application's **Overview** tab, copy the **Application Audience (AUD)
-Tag** — a long hex string.
+☁️ **CLOUDFLARE** → **Zero Trust** → **Access controls** → **Applications** →
+**Configure** on `TN Saints Admin` → **Additional settings** → copy the
+**Application Audience (AUD) Tag**
 
-Put it in `worker/wrangler.toml`:
+It is a long hex string.
+
+💻 **TERMINAL** — open `c:\Dev\TNSaints\tnsaints\worker\wrangler.toml` in VS Code
+and set:
 
 ```toml
 ACCESS_AUD = "paste-the-aud-tag-here"
-```
-
-It is not a secret, so it belongs in version control alongside the route it
-protects.
-
-It is, however, load-bearing. Every Access application in your account is signed
-by the same team keys, so without an audience check a token minted for *any*
-other application would verify here perfectly and be accepted. The AUD tag is
-what ties a valid token to *this* app.
-
-Also confirm the team domain matches yours:
-
-```toml
 ACCESS_TEAM_DOMAIN = "tnsaints.cloudflareaccess.com"
 ```
 
-(Zero Trust → Settings → Custom Pages shows your team domain if unsure.)
+`ACCESS_TEAM_DOMAIN` should already be correct — confirm it matches Step 2.
 
-Deploy again:
+The AUD tag is not a secret, so it belongs in version control alongside the
+route it protects. It is, however, load-bearing: every Access application in
+your account is signed by the same team keys, so without an audience check a
+token minted for *any* other app would verify here perfectly and be accepted.
+The AUD tag is what ties a valid token to *this* application.
 
-```bash
+The tag never changes unless the application is deleted and recreated — if you
+ever rebuild the Access app, come back and update this value or everyone is
+locked out.
+
+Then redeploy — 💻 **TERMINAL**:
+
+```powershell
+cd c:\Dev\TNSaints\tnsaints\worker
 npm run deploy
 ```
 
 ---
 
-## Step 5 — Add yourself to `staff`, then sign in
+## Step 7 — Add yourself to `staff`, then sign in
 
-Access will now let you through the door, but the app will still refuse you
-until you are on the list. Add yourself:
+💻 **TERMINAL**
 
-```bash
+Access will now let you through the door, but the app still refuses you until
+you are on the list. Add yourself — use the address you actually sign in with,
+lowercase:
+
+```powershell
+cd c:\Dev\TNSaints\tnsaints\worker
 npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('jacob@tnsaints.com', 'Jacob Adams', 'Coach Adams', 'admin', 1, datetime('now'), datetime('now'))"
 ```
 
-Use the address you actually sign in with. `email_norm` must be lowercase.
+`author_label` is how you are credited to parents in feedback emails later —
+"Coach Adams", not "jacob@tnsaints.com".
 
-Now open <https://admin.tnsaints.com> — you should get the Microsoft login, then
-the roster.
+🌐 **BROWSER** — open <https://admin.tnsaints.com>. You should get the Microsoft
+login, then the roster.
 
-Add the rest of the coaches:
+Add the other coaches — 💻 **TERMINAL**:
 
-```bash
+```powershell
 npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('brandon@example.com', 'Brandon Turner', 'Coach Turner', 'coach', 1, datetime('now'), datetime('now'))"
 ```
 
-Check who is on the list at any time:
+Check who is on the list at any time — 💻 **TERMINAL**:
 
-```bash
+```powershell
 npm run staff:list
 ```
 
@@ -205,30 +319,32 @@ npm run staff:list
 
 Coaches evaluate basketball. Contact details are not an input to that job, so
 the coach roster does not merely hide them — **it never contains them**. There
-is nothing in the response for a view-source, a screenshot, a browser
-extension, or a future template bug to expose.
+is nothing in the response for a view-source, a screenshot, a browser extension,
+or a future template bug to expose.
 
 Medical notes are a genuine safety need on event day, so they are resolved by
 *access path* rather than by widening the coach role: the coach view shows
 "medical note — see Jacob", and an admin opens the note through an endpoint that
-writes an audit row naming who read whose. To revoke someone:
+writes an audit row naming who read whose.
 
-```bash
+To revoke someone — 💻 **TERMINAL**:
+
+```powershell
 npx wrangler d1 execute tnsaints --remote --command "UPDATE staff SET active=0 WHERE email_norm='someone@example.com'"
 ```
 
 Set `active=0` rather than deleting the row — deleting orphans any notes they
 authored, while `active=0` ends access immediately and keeps attribution intact.
 
-Review access at any time:
+Review who accessed what — 💻 **TERMINAL**:
 
-```bash
+```powershell
 npm run audit:tail
 ```
 
 ---
 
-## Step 6 — The dry run, with Brandon's real address
+## Step 8 — The dry run, with Brandon's real address
 
 **Do not skip this, and do not substitute a test account.** Two distinct things
 can go wrong and they look identical from Brandon's side:
@@ -241,15 +357,16 @@ can go wrong and they look identical from Brandon's side:
 A test account exercises neither: it will not reproduce his spam filter and it
 will not catch a typo in *his* address.
 
-Ask him to open <https://admin.tnsaints.com> on the phone he will actually use
-on August 29, and report which of these he sees:
+🌐 **BROWSER — Brandon's phone**, the one he will actually have on August 29.
+Ask him to open <https://admin.tnsaints.com> and tell you which of these he
+sees:
 
 | What he sees | What it means | Fix |
 |---|---|---|
 | Microsoft login, then the roster | Working | — |
-| "Signed in but not yet authorised" | Access fine, `staff` row missing or wrong address | Add the exact address the page shows |
-| A code request that never arrives | One-time PIN in spam | Have him check junk; allow-list `noreply@notify.cloudflare.com` |
-| "Access denied" from Cloudflare | Address not in the policy | Add it in Step 3 |
+| "Signed in but not yet authorised" | Access fine, `staff` row missing or wrong address | 💻 TERMINAL — add the exact address the page displays |
+| A code request, but the code never arrives | One-time PIN in spam | Have him check junk and allow-list `noreply@notify.cloudflare.com` |
+| "Access denied" from Cloudflare | Address not in the policy | ☁️ CLOUDFLARE — add it in Step 5 |
 
 The "not yet authorised" page deliberately shows the address he authenticated
 as — that is the exact string to paste into the `staff` insert, which removes
@@ -259,27 +376,64 @@ the guesswork.
 
 ## Troubleshooting
 
-**Everything returns 401, including you.** `ACCESS_AUD` is empty or wrong.
-This is the fail-closed default, not a bug. Re-copy the AUD tag and redeploy.
+**Everything returns 401, including you.**
+`ACCESS_AUD` is empty or wrong. This is the fail-closed default, not a bug.
+☁️ Re-copy the AUD tag (Step 6), 💻 redeploy.
 
-**401 with `access_jwt_rejected` in `npm run tail`.** The AUD tag or team domain
-does not match. `code` in the log narrows it: `ERR_JWT_CLAIM_VALIDATION_FAILED`
-is a wrong AUD or issuer, `ERR_JWKS_NO_MATCHING_KEY` a wrong team domain.
+**401, and you want to know why.** 💻 **TERMINAL**:
 
-**403 "not yet authorised".** Working as designed — Access admitted them, the
-`staff` table did not. Add the row.
-
-**A coach says the roster is missing phone numbers.** Also working as designed.
-Their role does not include contact details, and the data is not in the page at
-all. Change the role if that is genuinely wanted, but consider whether the task
-needs it.
-
-**Registration broke after all this.** It should not have — the public API is a
-different hostname and none of the above touches it. Verify:
-
-```bash
-curl -s https://api.tnsaints.com/api/availability
+```powershell
+cd c:\Dev\TNSaints\tnsaints\worker
+npm run tail
 ```
 
-If that is healthy, families can still sign up regardless of what the dashboard
-is doing.
+Then load the page in a browser and watch the log. Look for
+`access_jwt_rejected` and read its `code`:
+
+| `code` | Meaning |
+|---|---|
+| `ERR_JWT_CLAIM_VALIDATION_FAILED` | Wrong `ACCESS_AUD` or wrong team domain |
+| `ERR_JWKS_NO_MATCHING_KEY` | Wrong `ACCESS_TEAM_DOMAIN` |
+| `ERR_JWT_EXPIRED` | Stale session — sign out and back in |
+
+**403 "not yet authorised".**
+Working as designed — Access admitted them, the `staff` table did not.
+💻 Add the row (Step 7).
+
+**A coach says the roster is missing phone numbers.**
+Also working as designed. Their role does not include contact details, and the
+data is not in the page at all. Change the role if that is genuinely wanted, but
+consider whether the task needs it.
+
+**Login loops back to Microsoft forever.**
+🪟 ENTRA — the redirect URI does not match. It must be exactly
+`https://<your-team-domain>/cdn-cgi/access/callback`, with no trailing slash.
+
+**Everyone locked out, and nothing changed on our side.**
+🪟 ENTRA — check whether the client secret expired. That is the most common
+cause of a sudden org-wide lockout, and Entra gives no warning.
+
+**Registration broke after all this.**
+It should not have — the public API is a different hostname and none of the
+above touches it. 💻 Verify:
+
+```powershell
+curl.exe -s https://api.tnsaints.com/api/availability
+```
+
+If that returns `"registration_open": true`, families can still sign up
+regardless of what the dashboard is doing.
+
+---
+
+## Sources
+
+Dashboard navigation verified August 2026 against:
+
+- [Microsoft Entra ID integration](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/entra-id/)
+- [One-time PIN](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/one-time-pin/)
+- [Self-hosted public app](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)
+- [Validate JWTs](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+
+Cloudflare moves these menus periodically. If a path here does not match what
+you see, the doc links above are authoritative.
