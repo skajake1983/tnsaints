@@ -270,6 +270,127 @@ export async function promoteFirstWaitlisted(env, sessionTime) {
   return res.meta.changes > 0 ? next : null;
 }
 
+/**
+ * Cancel a registration from the admin surface, by id rather than by token.
+ *
+ * Same effect as a family cancelling themselves — status flips, the seat frees,
+ * and the longest-waiting family in that session is promoted — but reachable
+ * without holding their cancel link.
+ *
+ * CANCEL IS THE DEFAULT, DELETE IS NOT. The row survives, which matters: the
+ * waiver acknowledgement, the signature, and the timestamp are the record that
+ * a parent agreed to those terms for that child on that date. Deleting destroys
+ * that; cancelling keeps it while freeing the place.
+ */
+export async function adminCancelRegistration(env, registrationId, reason) {
+  const existing = await env.DB.prepare(
+    `SELECT id, player_name, session_time, status FROM registrations
+      WHERE id = ?1 AND event_id = ?2`
+  )
+    .bind(registrationId, env.EVENT_ID)
+    .first();
+
+  if (!existing) return { ok: false, code: 'not-found' };
+  if (existing.status === 'cancelled') {
+    return { ok: false, code: 'already-cancelled', registration: existing };
+  }
+
+  const trimmed = typeof reason === 'string' ? reason.trim().slice(0, 500) : '';
+
+  const res = await env.DB.prepare(
+    `UPDATE registrations
+        SET status = 'cancelled', cancelled_at = ?2, cancel_reason = ?3
+      WHERE id = ?1 AND status != 'cancelled'`
+  )
+    .bind(registrationId, new Date().toISOString(), trimmed || null)
+    .run();
+
+  if (res.meta.changes === 0) {
+    return { ok: false, code: 'already-cancelled', registration: existing };
+  }
+
+  const promoted =
+    existing.status === 'confirmed'
+      ? await promoteFirstWaitlisted(env, existing.session_time)
+      : null;
+
+  return { ok: true, registration: existing, promoted };
+}
+
+/**
+ * Permanently delete a registration and everything written about it.
+ *
+ * For test rows and genuine mistakes only. Deletes child-first because D1
+ * enforces foreign keys — notes reference the registration, so the parent row
+ * cannot go while they exist.
+ *
+ * Returns what it destroyed so the caller can audit it and the UI can say so
+ * plainly. This is the one operation here with no undo.
+ */
+export async function adminDeleteRegistration(env, registrationId) {
+  const existing = await env.DB.prepare(
+    `SELECT id, player_name, session_time, status FROM registrations
+      WHERE id = ?1 AND event_id = ?2`
+  )
+    .bind(registrationId, env.EVENT_ID)
+    .first();
+
+  if (!existing) return { ok: false, code: 'not-found' };
+
+  const counts = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM eval_feedback       WHERE registration_id = ?1) AS feedback,
+       (SELECT COUNT(*) FROM eval_notes_internal WHERE registration_id = ?1) AS internal,
+       (SELECT COUNT(*) FROM parent_messages     WHERE registration_id = ?1) AS messages`
+  )
+    .bind(registrationId)
+    .first();
+
+  // A registration that has already been mailed is not a mistake to erase — it
+  // is a record of something a family received. Refuse rather than quietly
+  // destroying the only evidence of what was sent.
+  const sent = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM parent_messages
+      WHERE registration_id = ?1 AND send_state = 'sent'`
+  )
+    .bind(registrationId)
+    .first();
+
+  if (Number(sent?.n || 0) > 0) {
+    return { ok: false, code: 'already-messaged' };
+  }
+
+  await env.DB.prepare(`DELETE FROM eval_notes_internal WHERE registration_id = ?1`)
+    .bind(registrationId)
+    .run();
+  await env.DB.prepare(`DELETE FROM eval_feedback WHERE registration_id = ?1`)
+    .bind(registrationId)
+    .run();
+  await env.DB.prepare(`DELETE FROM parent_messages WHERE registration_id = ?1`)
+    .bind(registrationId)
+    .run();
+  await env.DB.prepare(`DELETE FROM decisions WHERE registration_id = ?1`)
+    .bind(registrationId)
+    .run();
+  await env.DB.prepare(`DELETE FROM registrations WHERE id = ?1`).bind(registrationId).run();
+
+  const promoted =
+    existing.status === 'confirmed'
+      ? await promoteFirstWaitlisted(env, existing.session_time)
+      : null;
+
+  return {
+    ok: true,
+    registration: existing,
+    destroyed: {
+      feedback: Number(counts?.feedback || 0),
+      internal: Number(counts?.internal || 0),
+      messages: Number(counts?.messages || 0),
+    },
+    promoted,
+  };
+}
+
 function isUniqueViolation(err) {
   return /UNIQUE constraint failed/i.test(err?.message || '') ||
          /SQLITE_CONSTRAINT/i.test(err?.message || '');

@@ -253,3 +253,69 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+
+
+print("\n=== 12. the decisions screen exists and gates by role ===")
+st, body = call("GET", ADMIN + "/decisions")
+check("decisions page loads for an admin", st == 200, f"got {st}")
+check("it shows the four-step flow", "Step 1" in str(body) and "Step 4" in str(body), str(body)[:200])
+check("it states nothing sends without approval",
+      "until you approve" in str(body).lower(), str(body)[:400])
+check("Approve and Send are separate controls",
+      "approveBtn" in str(body) or "sendBtn" in str(body), str(body)[:300])
+
+sql(f"UPDATE staff SET role='coach' WHERE email_norm='{ME}'")
+st, _ = call("GET", ADMIN + "/decisions")
+check("a coach cannot reach the decisions screen", st == 403, f"got {st}")
+sql(f"UPDATE staff SET role='admin' WHERE email_norm='{ME}'")
+
+print("\n=== 13. ratings are staff-only: no numbers reach a family ===")
+# eval_feedback holds ratings AND is the parent-safe table, so nothing structural
+# stops a future edit from putting them in a message. Pinned here instead.
+bodies = _wrangler("SELECT body_text, body_html FROM parent_messages")
+for label in ["rating_", "Skill:", "Effort:", "Coachability:", "Decisions:", "out of 5", "/5"]:
+    check(f'no rating marker "{label}" in any message', label not in bodies)
+
+print("\n=== 14. admin cancel frees the seat and keeps the record ===")
+st, r = call("POST", f"{ADMIN}/api/registration/{B}/cancel", {"reason": "Family withdrew."})
+check("cancel succeeds", st == 200 and r.get("ok"), str(r))
+out = _wrangler(f"SELECT status, cancel_reason FROM registrations WHERE id={B}")
+check("status is cancelled", '"status": "cancelled"' in out, out[-200:])
+check("the row and its waiver survive", '"cancel_reason": "Family withdrew."' in out, out[-200:])
+st, r = call("POST", f"{ADMIN}/api/registration/{B}/cancel", {"reason": "again"})
+check("cancelling twice is refused, not silently repeated", st == 409, f"got {st}")
+
+print("\n=== 15. delete refuses once a family has been emailed ===")
+sql(f"UPDATE parent_messages SET send_state='sent' WHERE registration_id={A}")
+st, r = call("POST", f"{ADMIN}/api/registration/{A}/delete")
+check("delete is refused after a message was sent", st == 409, f"got {st}")
+check("the refusal suggests cancelling instead", "cancel" in str(r).lower(), str(r))
+sql(f"UPDATE parent_messages SET send_state='queued' WHERE registration_id={A}")
+
+print("\n=== 16. delete removes the player and everything about them ===")
+st, r = call("POST", f"{ADMIN}/api/registration/{A}/delete")
+check("delete succeeds", st == 200 and r.get("ok"), str(r))
+out = _wrangler(f"SELECT COUNT(*) AS n FROM registrations WHERE id={A}")
+check("the registration is gone", '"n": 0' in out, out[-200:])
+for table in ["eval_feedback", "eval_notes_internal", "parent_messages", "decisions"]:
+    out = _wrangler(f"SELECT COUNT(*) AS n FROM {table} WHERE registration_id={A}")
+    check(f"{table} rows went with it", '"n": 0' in out, out[-200:])
+
+log = _wrangler("SELECT actor, action, detail FROM audit_log ORDER BY id DESC LIMIT 6")
+check("the delete is audited with what it destroyed",
+      "registration.delete" in log and "destroyed" in log, log[-300:])
+
+print("\n=== 17. a coach cannot cancel or delete ===")
+sql(f"UPDATE staff SET role='coach' WHERE email_norm='{ME}'")
+st, _ = call("POST", f"{ADMIN}/api/registration/{B}/cancel", {"reason": "x"})
+check("coach cannot cancel", st == 403, f"got {st}")
+st, _ = call("POST", f"{ADMIN}/api/registration/{B}/delete")
+check("coach cannot delete", st == 403, f"got {st}")
+sql(f"UPDATE staff SET role='admin' WHERE email_norm='{ME}'")
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)

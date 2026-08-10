@@ -124,6 +124,20 @@ function firstName(fullName) {
 }
 
 /**
+ * Join several coaches' observations into one readable run of sentences.
+ *
+ * Ends each fragment with a full stop so concatenation does not produce
+ * "kept his head up in transition Left hand needs work" — coaches type
+ * fragments, not sentences, and the draft has to survive that.
+ */
+function joinObservations(lines) {
+  return lines
+    .map((line) => (/[.!?]$/.test(line) ? line : `${line}.`))
+    .join(' ')
+    .trim();
+}
+
+/**
  * Default body text for a draft, which the admin then edits.
  *
  * The "not yet" shape, in order, and each part is load-bearing:
@@ -146,8 +160,15 @@ export function defaultBodyText(draft, playerName, env) {
   const contact = env.NOTIFY_EMAIL_TO || 'info@tnsaints.com';
   const who = draft.coaches.length ? draft.coaches.join(', ') : 'Your evaluation team';
 
-  const strength = draft.strengths[0] || '';
-  const growth = draft.growth[0] || '';
+  // Every coach's observation, not just the first.
+  //
+  // This used to take strengths[0] and drop the rest, which threw away a second
+  // coach's distinct observation BEFORE any human saw it. Wrong direction: the
+  // draft exists to be trimmed, and a person cutting a redundant sentence is a
+  // two-second edit, while material silently discarded upstream is gone. Note
+  // dedupe() has already collapsed the "good motor" / "Good motor." case.
+  const strength = joinObservations(draft.strengths);
+  const growth = joinObservations(draft.growth);
 
   if (draft.decision === 'accept') {
     return [

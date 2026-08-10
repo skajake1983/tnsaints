@@ -26,7 +26,14 @@
 import { json } from '../http.js';
 import { verifyAccessJwt, devPrincipalEmail } from '../auth/access.js';
 import { loadStaff, can, audit, rosterView } from '../auth/staff.js';
-import { getAvailability, registrationWindow, slotCapacity, sessionTimes } from '../registration.js';
+import {
+  getAvailability,
+  registrationWindow,
+  slotCapacity,
+  sessionTimes,
+  adminCancelRegistration,
+  adminDeleteRegistration,
+} from '../registration.js';
 import { page, esc, htmlResponse, notAuthorisedPage, adminHeaders } from './ui.js';
 import { saveEvaluation, evaluationForStaff, completeness } from '../feedback/notes.js';
 import {
@@ -39,10 +46,12 @@ import {
 } from '../feedback/batches.js';
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 import { logoResponse } from './logo.js';
+import { decisionsBody, DECISION_STYLES, decisionsCsp } from './decisions-ui.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
   { href: '/eval', label: 'Evaluations' },
+  { href: '/decisions', label: 'Decisions' },
   { href: '/profile', label: 'Profile' },
 ];
 
@@ -257,6 +266,92 @@ export async function handleAdmin(request, env, ctx, path) {
     return json(result, { status: result.ok ? 200 : 400 });
   }
 
+  if (pathname === '/decisions' && request.method === 'GET') {
+    if (!can(principal, 'decisions:set')) {
+      return htmlResponse(
+        page({
+          title: 'Decisions',
+          principal,
+          nav: NAV,
+          body: '<h1>Not permitted</h1><p class="sub">Decisions and sending are limited to academy admins.</p>',
+        }),
+        { status: 403 }
+      );
+    }
+    return await renderDecisions(env, principal);
+  }
+
+  // Cancel keeps the record and frees the seat; delete destroys it. Both are
+  // admin-only and both are audited. See registration.js for why cancel is the
+  // default and delete refuses once a family has already been mailed.
+  const cancelReg = pathname.match(/^\/api\/registration\/(\d+)\/cancel$/);
+  if (cancelReg && request.method === 'POST') {
+    if (!can(principal, 'decisions:set')) {
+      return json({ ok: false, error: 'Only academy admins can cancel a place.' }, { status: 403 });
+    }
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      /* reason is optional */
+    }
+    const result = await adminCancelRegistration(env, Number(cancelReg[1]), body.reason);
+    if (!result.ok) {
+      return json(
+        {
+          ok: false,
+          error:
+            result.code === 'already-cancelled'
+              ? 'That place is already cancelled.'
+              : 'No such player in this event.',
+        },
+        { status: result.code === 'already-cancelled' ? 409 : 404 }
+      );
+    }
+    ctx.waitUntil(
+      audit(env, {
+        actor: principal.email,
+        action: 'registration.cancel',
+        subjectType: 'registration',
+        subjectId: Number(cancelReg[1]),
+        detail: { promoted: Boolean(result.promoted) },
+      })
+    );
+    return json({ ok: true, promoted: Boolean(result.promoted) });
+  }
+
+  const deleteReg = pathname.match(/^\/api\/registration\/(\d+)\/delete$/);
+  if (deleteReg && request.method === 'POST') {
+    if (!can(principal, 'decisions:set')) {
+      return json({ ok: false, error: 'Only academy admins can delete a player.' }, { status: 403 });
+    }
+    const result = await adminDeleteRegistration(env, Number(deleteReg[1]));
+    if (!result.ok) {
+      return json(
+        {
+          ok: false,
+          error:
+            result.code === 'already-messaged'
+              ? 'This family has already been emailed, so the record cannot be deleted. Cancel it instead.'
+              : 'No such player in this event.',
+        },
+        { status: result.code === 'already-messaged' ? 409 : 404 }
+      );
+    }
+    // Audited with what was destroyed, because this is the one action with no
+    // undo and "how many notes went with it" is the question asked afterwards.
+    ctx.waitUntil(
+      audit(env, {
+        actor: principal.email,
+        action: 'registration.delete',
+        subjectType: 'registration',
+        subjectId: Number(deleteReg[1]),
+        detail: { destroyed: result.destroyed, promoted: Boolean(result.promoted) },
+      })
+    );
+    return json({ ok: true, destroyed: result.destroyed });
+  }
+
   const previewMatch = pathname.match(/^\/api\/message\/(\d+)\/preview$/);
   if (previewMatch && request.method === 'GET') {
     if (!can(principal, 'messages:approve')) {
@@ -451,6 +546,51 @@ async function renderPreview(env, messageId) {
     subject: m.subject,
     send_state: m.send_state,
     body_html: m.body_html,
+  });
+}
+
+async function renderDecisions(env, principal) {
+  const rows = await decisionGrid(env);
+
+  // The most recent batch for this event. Only one can be in flight at a time,
+  // enforced by a partial unique index, so "most recent" is unambiguous.
+  const batch = await env.DB.prepare(
+    `SELECT id, state, approved_by, approved_at FROM decision_batches
+      WHERE event_id = ?1 ORDER BY created_at DESC LIMIT 1`
+  )
+    .bind(env.EVENT_ID)
+    .first();
+
+  let messages = [];
+  let pre = null;
+
+  if (batch) {
+    const res = await env.DB.prepare(
+      `SELECT id, registration_id, send_state FROM parent_messages WHERE batch_id = ?1`
+    )
+      .bind(batch.id)
+      .all();
+    messages = res.results || [];
+    pre = await preflight(env, batch.id);
+  }
+
+  const html = page({
+    title: 'Decisions',
+    principal,
+    nav: NAV,
+    current: '/decisions',
+    extraStyles: DECISION_STYLES,
+    body: decisionsBody({
+      rows,
+      batch,
+      messages,
+      pre,
+      canSend: can(principal, 'messages:send'),
+    }),
+  });
+
+  return new Response(html, {
+    headers: adminHeaders({ 'Content-Security-Policy': await decisionsCsp() }),
   });
 }
 
