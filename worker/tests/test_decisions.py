@@ -481,3 +481,24 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+
+
+print("\n=== 27. destructive labels name what they act on ===")
+_, body = call("GET", ADMIN + "/decisions")
+b = str(body)
+# "Cancel" alone reads as "dismiss this action" in every other UI on earth, and
+# it sat directly beside Delete. Ambiguity next to an irreversible button is
+# how the wrong child gets removed.
+check("the row button says what it cancels", "Cancel spot" in b, b[:200])
+check("assistive tech gets the player's name too", "aria-label=\"Cancel " in b)
+check("delete is likewise labelled with the player", 'aria-label="Permanently delete' in b)
+# Two buttons both beginning "Cancel", one inert and one releasing a spot.
+check("the dialog dismiss is not also called Cancel", ">Go back<" in b)
+check("no bare Cancel button remains", ">Cancel</button>" not in b, b[:300])
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)

@@ -77,7 +77,16 @@ export const DIALOG_MARKUP = `
       <input id="dlgInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
     </div>
     <div class="actions">
-      <button type="button" id="dlgCancel">Cancel</button>
+      <!--
+        "Go back", not "Cancel".
+
+        This app has a domain action called cancelling — releasing a player's
+        spot — so a dismiss button labelled "Cancel" sat next to a confirm
+        button labelled "Cancel their place". Two buttons starting with the same
+        word, one doing nothing and one releasing a child's place. Unambiguous
+        beats conventional here.
+      -->
+      <button type="button" id="dlgCancel">Go back</button>
       <button type="button" class="go" id="dlgGo">Confirm</button>
     </div>
   </div>

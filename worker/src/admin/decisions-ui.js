@@ -205,13 +205,14 @@ const PAGE_SCRIPT = `
     btn.addEventListener('click', function () {
       var name = btn.dataset.name;
       window.tnConfirm({
-        title: 'Cancel ' + name + "'s place?",
+        title: 'Cancel ' + name + "'s spot at the evaluation?",
         lines: [
-          'This frees their seat. The first family on that session\\'s waiting list is moved up automatically.',
-          'The registration and the signed waiver are kept — only the place is released.'
+          'This releases their seat. The first family on that session\\'s waiting list is moved up automatically.',
+          'The registration and the signed waiver are kept - only the spot is given up.',
+          'This does not cancel the evaluation itself, and it affects no other player.'
         ],
         word: 'CANCEL',
-        confirmLabel: 'Cancel their place'
+        confirmLabel: 'Release their spot'
       }).then(function (ok) {
         if (!ok) return;
         post('/api/registration/' + btn.dataset.cancel + '/cancel', { reason: '' })
@@ -419,8 +420,10 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
         </td>
         <td data-label="Message">${msg ? esc(msg.send_state) : '<span style="color:var(--muted)">—</span>'}</td>
         <td data-label="Admin">
-          <button class="dbtn" data-cancel="${r.id}" data-name="${esc(r.player_name)}"${lock}>Cancel</button>
-          <button class="dbtn danger" data-delete="${r.id}" data-name="${esc(r.player_name)}"${lock}>Delete</button>
+          <button class="dbtn" data-cancel="${r.id}" data-name="${esc(r.player_name)}"
+            aria-label="Cancel ${esc(r.player_name)}'s spot"${lock}>Cancel spot</button>
+          <button class="dbtn danger" data-delete="${r.id}" data-name="${esc(r.player_name)}"
+            aria-label="Permanently delete ${esc(r.player_name)}"${lock}>Delete</button>
         </td>
       </tr>`;
     })
