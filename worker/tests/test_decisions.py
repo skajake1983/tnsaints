@@ -458,6 +458,45 @@ C = reg_id("Csp Check")
 ok, detail = csp_matches(f"{ADMIN}/eval/{C}")
 check("evaluation form script hash matches its CSP", ok, detail)
 
+
+def script_parses(path):
+    """Is the script the page actually serves valid JavaScript?
+
+    The CSP check above compares hashes and passes happily on a script with a
+    syntax error -- the hash of broken text matches the hash of broken text. A
+    single unescaped apostrophe in a JS string killed the entire eval page
+    script this way: every handler failed to attach, so the form fell back to a
+    NATIVE submit, the browser navigated to /api/eval/2, and the Worker replied
+    "Could not read that submission" because it received form encoding instead
+    of JSON. Nothing anywhere reported a script error.
+    """
+    req = urllib.request.Request(BASE + path)
+    req.add_header("Origin", ORIGIN)
+    with urllib.request.urlopen(req) as r:
+        html = r.read().decode()
+    scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+    if not scripts:
+        return False, "no inline script"
+    tmp = os.path.join(WORKER_DIR, ".script-check.js")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(scripts[-1])
+    try:
+        res = subprocess.run(["node", "--check", tmp], capture_output=True,
+                             shell=(os.name == "nt"), cwd=WORKER_DIR)
+        detail = (res.stderr or b"").decode("utf-8", errors="replace")
+        return res.returncode == 0, detail[:300]
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+ok, detail = script_parses(ADMIN + "/decisions")
+check("decisions page script is valid JavaScript", ok, detail)
+ok, detail = script_parses(f"{ADMIN}/eval/{C}")
+check("evaluation form script is valid JavaScript", ok, detail)
+
 print("\n=== 25. confirmations are in-page, not browser prompts ===")
 _, body = call("GET", ADMIN + "/decisions")
 b = str(body)

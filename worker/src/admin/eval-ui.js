@@ -125,7 +125,7 @@ const BODY_SCRIPT = `
         title: 'Remove ' + label + "'s evaluation of this player?",
         lines: [
           'This deletes their ratings, their parent-facing feedback and their staff-only note for this player.',
-          'You cannot edit or rewrite another coach's evaluation - only remove it. The audit log records that you did.',
+          "You cannot edit or rewrite another coach's evaluation - only remove it. The audit log records that you did.",
           label + ' can enter a new one themselves afterwards.'
         ],
         word: 'REMOVE',
