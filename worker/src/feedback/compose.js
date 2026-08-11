@@ -336,7 +336,22 @@ function mentionsPlayer(body, playerName) {
   const name = firstName(playerName);
   if (!name) return true;
 
-  const withoutSignature = body.split('Tennessee Saints Basketball Academy')[0] || '';
+  // The signature block is excluded so a name hiding inside it does not count
+  // as mentioning the child. Splitting on a literal academy name was fragile:
+  // a bulk replace changing that wording -- exactly the kind of global edit the
+  // footer tooling exists for -- would silently stop excluding the signature,
+  // and this check would start passing on messages that never name the child.
+  //
+  // The em-dash sign-off is the real boundary and is not something anyone edits
+  // to fix a footer. Falling back to the academy name, then to the whole body,
+  // keeps it working whatever the sign-off looks like.
+  const signatureAt = (() => {
+    const dash = body.lastIndexOf('\u2014 ');
+    if (dash > 0) return dash;
+    const academy = body.indexOf('Tennessee Saints Basketball Academy');
+    return academy > 0 ? academy : body.length;
+  })();
+  const withoutSignature = body.slice(0, signatureAt) || '';
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`\\b${escaped}\\b`, 'i').test(withoutSignature);
 }

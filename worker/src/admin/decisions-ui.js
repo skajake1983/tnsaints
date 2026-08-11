@@ -250,6 +250,107 @@ const PAGE_SCRIPT = `
     });
   });
 
+  var bulkBtn = document.getElementById('bulkBtn');
+  var bulkBackdrop = document.getElementById('bulkBackdrop');
+  var bulkFind = document.getElementById('bulkFind');
+  var bulkReplace = document.getElementById('bulkReplace');
+  var bulkResult = document.getElementById('bulkResult');
+  var bulkPreview = document.getElementById('bulkPreview');
+  var bulkApply = document.getElementById('bulkApply');
+  var bulkClose = document.getElementById('bulkClose');
+
+  function bulkUrl() {
+    var meta = document.getElementById('batchMeta');
+    return meta ? meta.dataset.replaceUrl : null;
+  }
+
+  function closeBulk() {
+    if (!bulkBackdrop) return;
+    bulkBackdrop.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  if (bulkBtn) bulkBtn.addEventListener('click', function () {
+    bulkResult.textContent = '';
+    bulkApply.disabled = true;
+    document.body.style.overflow = 'hidden';
+    bulkBackdrop.hidden = false;
+    bulkFind.focus();
+  });
+
+  if (bulkClose) bulkClose.addEventListener('click', closeBulk);
+  if (bulkBackdrop) bulkBackdrop.addEventListener('mousedown', function (e) {
+    if (e.target === bulkBackdrop) closeBulk();
+  });
+
+  // Preview before apply. A find string that matches more than intended is the
+  // main way this goes wrong, and the count is what reveals it.
+  if (bulkPreview) bulkPreview.addEventListener('click', function () {
+    bulkResult.textContent = 'Checking...';
+    bulkApply.disabled = true;
+    post(bulkUrl(), { find: bulkFind.value, replace: bulkReplace.value, preview: true })
+      .then(function (b) {
+        // Built with DOM nodes and textContent, never innerHTML. These excerpts
+        // are message content: coach prose and children's names, which is
+        // exactly the kind of text that must never be interpreted as markup.
+        bulkResult.textContent = '';
+        var head = document.createElement('div');
+        head.textContent = b.matched + ' of ' + b.of + ' drafts contain that text.';
+        head.style.fontWeight = '700';
+        bulkResult.appendChild(head);
+
+        if (b.missed && b.missed.length) {
+          var miss = document.createElement('div');
+          miss.style.cssText = 'margin-top:8px;padding:8px;background:#fdf0dd;border-radius:6px';
+          miss.textContent = 'These ' + b.missed.length + ' will NOT change, because their text ' +
+            'differs (someone edited them): ' + b.missed.join(', ');
+          bulkResult.appendChild(miss);
+        }
+
+        (b.samples || []).forEach(function (sm) {
+          var wrap = document.createElement('div');
+          wrap.style.marginTop = '10px';
+          var who = document.createElement('div');
+          who.style.cssText = 'color:var(--muted);font-size:12px';
+          who.textContent = sm.player_name;
+          var before = document.createElement('div');
+          before.style.cssText = 'margin-top:3px;padding:7px;background:#f9e9e9;border-radius:6px;white-space:pre-wrap';
+          before.textContent = sm.before;
+          var after = document.createElement('div');
+          after.style.cssText = 'margin-top:3px;padding:7px;background:#e4f3ea;border-radius:6px;white-space:pre-wrap';
+          after.textContent = sm.after;
+          wrap.appendChild(who); wrap.appendChild(before); wrap.appendChild(after);
+          bulkResult.appendChild(wrap);
+        });
+
+        bulkApply.disabled = false;
+        bulkApply.textContent = 'Apply to all ' + b.matched;
+      })
+      .catch(function (err) {
+        bulkResult.textContent = err.message;
+        bulkApply.disabled = true;
+      });
+  });
+
+  if (bulkApply) bulkApply.addEventListener('click', function () {
+    bulkApply.disabled = true;
+    bulkResult.textContent = 'Applying...';
+    post(bulkUrl(), { find: bulkFind.value, replace: bulkReplace.value })
+      .then(function (b) {
+        closeBulk();
+        var note = 'Changed ' + b.changed + ' message(s). They must all be read again before approving.';
+        if (b.missed && b.missed.length) {
+          note += ' NOT changed (their text differs): ' + b.missed.join(', ') + '.';
+        }
+        say(note, b.missed && b.missed.length ? 'bad' : 'good');
+        setTimeout(function () { location.reload(); }, 1500);
+      })
+      .catch(function (err) {
+        bulkResult.textContent = err.message;
+        bulkApply.disabled = false;
+      });
+  });
+
   var sendBtn = document.getElementById('sendBtn');
   if (sendBtn) confirmWord(sendBtn, 'SEND', sendBtn.dataset.url, function (body) {
     say('Sent ' + body.sent + '. Remaining: ' + body.queued +
@@ -568,7 +669,8 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   three separate actions.</p>
 
   <div id="flash" class="flash" hidden></div>
-  ${batch ? `<div id="batchMeta" hidden data-reopen-url="/api/batch/${esc(batch.id)}/reopen"></div>` : ''}
+  ${batch ? `<div id="batchMeta" hidden data-reopen-url="/api/batch/${esc(batch.id)}/reopen"
+       data-replace-url="/api/batch/${esc(batch.id)}/replace"></div>` : ''}
 
   <div class="steps">${steps}</div>
 
@@ -621,7 +723,13 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   ${
     drafts.length
       ? `<div class="panel"><h2>Read every message before approving —
-         ${unread} of ${drafts.length} still unread</h2></div>${reviewCards}`
+           ${unread} of ${drafts.length} still unread</h2>
+           <div style="padding:12px 16px;border-top:1px solid var(--line)">
+             <button class="dbtn" id="bulkBtn">Change the same text in every draft…</button>
+             <span style="font-size:13px;color:var(--muted);margin-left:8px">For a wrong footer,
+             signature or reply-to address — anything that is the same in all of them.</span>
+           </div>
+         </div>${reviewCards}`
       : built && !queuedMsgs.length
         ? '<div class="panel"><div class="empty">No drafts. Every player is either blocked above or already sent.</div></div>'
         : ''
@@ -646,6 +754,26 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
       <thead><tr><th>Player</th><th>Coaches</th><th>Decision</th><th>Message</th><th>Admin</th></tr></thead>
       <tbody>${rowsHtml || '<tr><td colspan="5" class="empty">No confirmed players yet.</td></tr>'}</tbody>
     </table></div>
+  </div>
+
+  <div class="dlg-backdrop" id="bulkBackdrop" hidden>
+    <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="bulkTitle">
+      <h2 id="bulkTitle">Change the same text in every draft</h2>
+      <div class="body">
+        <p>Type the exact text as it appears now, and what it should say instead.
+        Nothing changes until you have seen how many messages match.</p>
+        <label for="bulkFind" style="display:block;font-size:13px;font-weight:600;margin:12px 0 5px">Find this text</label>
+        <textarea id="bulkFind" style="width:100%;min-height:70px;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:15px"></textarea>
+        <label for="bulkReplace" style="display:block;font-size:13px;font-weight:600;margin:12px 0 5px">Replace it with</label>
+        <textarea id="bulkReplace" style="width:100%;min-height:70px;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:15px"></textarea>
+        <div id="bulkResult" style="margin-top:12px;font-size:13px"></div>
+      </div>
+      <div class="actions">
+        <button type="button" id="bulkClose">Go back</button>
+        <button type="button" id="bulkPreview">Show me what changes</button>
+        <button type="button" class="go" id="bulkApply" disabled>Apply to all matches</button>
+      </div>
+    </div>
   </div>
 
   ${DIALOG_MARKUP}

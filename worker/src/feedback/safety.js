@@ -82,21 +82,85 @@ function containsPassageFrom(body, sources) {
 }
 
 /**
+ * Load everything the checks need, ONCE.
+ *
+ * checkEditedBody runs two queries per call, which is fine for one message and
+ * ruinous for fifty: a bulk edit was issuing 3N+1 D1 calls, and D1 calls count
+ * against the Workers per-request subrequest cap (50 on the free plan). The
+ * operation would have died partway through writing, leaving some messages
+ * changed and some not — while its own documentation promised the opposite.
+ */
+export async function loadSafetySources(env) {
+  const [internal, players] = await Promise.all([
+    env.DB.prepare(
+      `SELECT n.registration_id, n.body
+         FROM eval_notes_internal n
+         JOIN registrations r ON r.id = n.registration_id
+        WHERE r.event_id = ?1`
+    )
+      .bind(env.EVENT_ID)
+      .all(),
+    env.DB.prepare(
+      `SELECT id, player_name FROM registrations
+        WHERE event_id = ?1 AND status = 'confirmed'`
+    )
+      .bind(env.EVENT_ID)
+      .all(),
+  ]);
+
+  const internalByRegistration = new Map();
+  for (const row of internal.results || []) {
+    const key = Number(row.registration_id);
+    if (!internalByRegistration.has(key)) internalByRegistration.set(key, []);
+    internalByRegistration.get(key).push(row.body);
+  }
+
+  return {
+    internalByRegistration,
+    allInternal: (internal.results || []).map((r) => r.body),
+    players: (players.results || []).map((r) => ({ id: Number(r.id), name: r.player_name })),
+  };
+}
+
+/**
+ * Does a string being inserted into MANY messages carry staff-only content?
+ *
+ * The per-recipient check is the wrong shape for a bulk edit. It compares each
+ * message against ITS OWN child's notes, so a paragraph lifted from one child's
+ * internal note — the compassionate closing line an admin just read on the
+ * evaluation page — passes for all the OTHER children, because it is not their
+ * note. One comparison against every internal note in the event closes that,
+ * and a bulk insertion is by definition not about one child.
+ */
+export function checkBulkInsertion(sources, replacementText) {
+  const leaked = containsPassageFrom(replacementText, sources.allInternal);
+  if (leaked) {
+    return {
+      ok: false,
+      error:
+        'That replacement contains text from a staff-only note, which families must never see. ' +
+        `The matching note begins: "${String(leaked).slice(0, 60)}…"`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Full safety check for one edited message body.
  *
  * @returns {Promise<{ok: true} | {ok: false, error: string}>}
  */
 export async function checkEditedBody(env, { registrationId, bodyText, playerName }) {
-  // --- 1. Staff-only notes must not appear ---------------------------------
-  const internal = await env.DB.prepare(
-    `SELECT body FROM eval_notes_internal WHERE registration_id = ?1`
-  )
-    .bind(registrationId)
-    .all();
+  const sources = await loadSafetySources(env);
+  return checkAgainstSources(sources, { registrationId, bodyText, playerName });
+}
 
+/** The same checks, against sources already in memory. */
+export function checkAgainstSources(sources, { registrationId, bodyText, playerName }) {
+  // --- 1. Staff-only notes must not appear ---------------------------------
   const leaked = containsPassageFrom(
     bodyText,
-    (internal.results || []).map((r) => r.body)
+    sources.internalByRegistration.get(Number(registrationId)) || []
   );
 
   if (leaked) {
@@ -113,14 +177,9 @@ export async function checkEditedBody(env, { registrationId, bodyText, playerNam
   // Only names that are unambiguous. If two children in the event share a first
   // name, that name cannot distinguish them, and refusing on it would block a
   // legitimate message to one of them. Full names are always checked.
-  const others = await env.DB.prepare(
-    `SELECT player_name FROM registrations
-      WHERE event_id = ?1 AND status = 'confirmed' AND id != ?2`
-  )
-    .bind(env.EVENT_ID, registrationId)
-    .all();
-
-  const otherNames = (others.results || []).map((r) => r.player_name);
+  const otherNames = sources.players
+    .filter((pl) => pl.id !== Number(registrationId))
+    .map((pl) => pl.name);
   const mineFirst = normalise(String(playerName || '').split(/\s+/)[0]);
 
   const firstCounts = new Map();

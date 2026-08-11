@@ -10,7 +10,7 @@
 
 import { composeDraft, defaultBodyText, textToHtml, subjectFor, gateMessage } from './compose.js';
 import { resolvePlayerId } from './players.js';
-import { checkEditedBody } from './safety.js';
+import { checkEditedBody, loadSafetySources, checkAgainstSources, checkBulkInsertion } from './safety.js';
 import { reserveSend, sendComposedMessage, emailConfigured } from '../email.js';
 
 /**
@@ -199,7 +199,15 @@ export async function buildBatch(env, actor) {
       WHERE m.batch_id = ?1
         AND m.send_state = 'draft'
         AND m.edited_at IS NOT NULL
-        AND m.composed_for_decision = COALESCE(d.decision, 'undecided')`
+        AND m.composed_for_decision = COALESCE(d.decision, 'undecided')
+        -- The notes must ALSO still match, or a preserved edit becomes a
+        -- deadlock: the screen tells the admin to rebuild, the rebuild
+        -- preserves the row unchanged, and approve then refuses the whole
+        -- batch on the fingerprint. Nobody finds the escape at 11pm, and every
+        -- family gets nothing.
+        AND m.composed_from_notes = (
+          SELECT COUNT(*) || ':' || COALESCE(MAX(f.updated_at), '')
+            FROM eval_feedback f WHERE f.registration_id = m.registration_id)`
   )
     .bind(id)
     .all();
@@ -622,6 +630,181 @@ export async function reopenMessages(env, { batchId, messageIds = null, actor })
   }
 
   return { ok: true, reopened };
+}
+
+/**
+ * Replace a run of text across many messages at once.
+ *
+ * The case this exists for: the footer is wrong on all fifty. Rebuilding cannot
+ * fix it, because buildBatch deliberately PRESERVES hand-edited drafts -- so
+ * after an admin has rewritten forty messages in their own voice, a global
+ * correction would mean editing forty footers by hand, at the exact hour when
+ * care is scarcest.
+ *
+ * Three properties make it safe enough to hand someone at 11pm:
+ *
+ *   1. PREVIEW FIRST. Nothing is written until the caller has been told how
+ *      many messages match and shown one before/after. A find string that
+ *      matches more than expected is the main way this could go wrong, and the
+ *      count is what reveals it.
+ *
+ *   2. ALL OR NOTHING. Every result is re-checked with the same gate and safety
+ *      rules an individual edit passes through. If any single message would
+ *      come out invalid -- a lost player name, a leaked internal note -- the
+ *      whole operation is refused rather than leaving the batch half-changed
+ *      and half-not, which nobody would notice.
+ *
+ *   3. DRAFTS ONLY. Approved messages are frozen by definition. Reopen them
+ *      first; that is a deliberate act with its own confirmation.
+ */
+export async function bulkReplace(env, { batchId, messageIds, find, replace, preview, actor }) {
+  const needle = typeof find === 'string' ? find : '';
+  const swap = typeof replace === 'string' ? replace : '';
+
+  // A short needle is the dangerous one: "a" or "he" would rewrite every
+  // message into nonsense, and the damage is only visible by reading fifty
+  // messages again. Long enough to be a deliberate phrase.
+  if (needle.trim().length < 8) {
+    return { ok: false, error: 'Enter at least 8 characters to find, so this cannot match by accident.' };
+  }
+
+  const selective = Array.isArray(messageIds) && messageIds.length > 0;
+
+  const { results } = selective
+    ? await env.DB.prepare(
+        `SELECT m.id, m.body_text, m.registration_id, r.player_name, r.parent_email,
+                COALESCE(d.decision, 'undecided') AS decision
+           FROM parent_messages m
+           JOIN registrations r ON r.id = m.registration_id
+           LEFT JOIN decisions d ON d.registration_id = m.registration_id
+          WHERE m.batch_id = ?1 AND m.send_state = 'draft'
+            AND m.id IN (SELECT value FROM json_each(?2))`
+      )
+        .bind(batchId, JSON.stringify(messageIds.map(Number)))
+        .all()
+    : await env.DB.prepare(
+        `SELECT m.id, m.body_text, m.registration_id, r.player_name, r.parent_email,
+                COALESCE(d.decision, 'undecided') AS decision
+           FROM parent_messages m
+           JOIN registrations r ON r.id = m.registration_id
+           LEFT JOIN decisions d ON d.registration_id = m.registration_id
+          WHERE m.batch_id = ?1 AND m.send_state = 'draft'`
+      )
+        .bind(batchId)
+        .all();
+
+  const rows = results || [];
+  const hits = rows.filter((r) => String(r.body_text).includes(needle));
+  const missed = rows.filter((r) => !String(r.body_text).includes(needle));
+
+  if (hits.length === 0) {
+    return { ok: false, error: 'No draft message contains that text.' };
+  }
+
+  // Sources fetched ONCE. Two queries, not two per message.
+  const sources = await loadSafetySources(env);
+
+  // A string being inserted into many messages is checked against EVERY
+  // internal note in the event, not just each recipient's own — see
+  // checkBulkInsertion.
+  const bulkSafe = checkBulkInsertion(sources, swap);
+  if (!bulkSafe.ok) return { ok: false, error: bulkSafe.error };
+
+  // Validate every result BEFORE writing any of them.
+  const problems = [];
+  const updates = [];
+
+  for (const row of hits) {
+    const next = String(row.body_text).split(needle).join(swap);
+
+    const gate = gateMessage({
+      decision: row.decision,
+      bodyText: next,
+      parentEmail: row.parent_email,
+      playerName: row.player_name,
+    });
+    if (!gate.ok) {
+      problems.push({ player_name: row.player_name, problems: gate.problems });
+      continue;
+    }
+
+    const safe = checkAgainstSources(sources, {
+      registrationId: row.registration_id,
+      bodyText: next,
+      playerName: row.player_name,
+    });
+    if (!safe.ok) {
+      problems.push({ player_name: row.player_name, problems: [safe.error] });
+      continue;
+    }
+
+    updates.push({ id: row.id, next, player_name: row.player_name });
+  }
+
+  if (problems.length) {
+    return {
+      ok: false,
+      error: `That replacement would break ${problems.length} message(s), so nothing was changed.`,
+      problems,
+    };
+  }
+
+  if (preview) {
+    // A window around the match, not the head of the body.
+    //
+    // Truncating at 400 characters made the preview useless for the exact case
+    // it was built for: the footer sits at roughly character 843 of a "not yet"
+    // message, so before and after rendered byte-identical and the admin had
+    // nothing to check but a count.
+    const excerpt = (text) => {
+      const at = text.indexOf(needle);
+      const from = Math.max(0, at - 90);
+      const to = Math.min(text.length, at + needle.length + 90);
+      return (from > 0 ? '…' : '') + text.slice(from, to) + (to < text.length ? '…' : '');
+    };
+
+    return {
+      ok: true,
+      preview: true,
+      matched: hits.length,
+      of: rows.length,
+      // Named, so a partial match is visible. Someone who reflowed the sign-off
+      // has a body the needle does not match, and a bare count would let their
+      // family keep the wrong footer with nobody the wiser.
+      missed: missed.map((r) => r.player_name),
+      samples: hits.slice(0, 8).map((r) => ({
+        player_name: r.player_name,
+        before: excerpt(String(r.body_text)),
+        after: excerpt(String(r.body_text).split(needle).join(swap)),
+      })),
+    };
+  }
+
+  const now = new Date().toISOString();
+
+  // ONE batch, not N awaited statements. Fifty separate UPDATEs would blow the
+  // subrequest ceiling and leave the batch half-changed, which is the opposite
+  // of what this function claims to guarantee.
+  //
+  // reviewed_at is cleared on purpose: fifty messages just changed, and a read
+  // recorded before the change describes text that no longer exists.
+  await env.DB.batch(
+    updates.map((u) =>
+      env.DB.prepare(
+        `UPDATE parent_messages
+            SET body_text = ?2, body_html = ?3, edited_by = ?4, edited_at = ?5,
+                reviewed_at = NULL, reviewed_by = NULL
+          WHERE id = ?1 AND send_state = 'draft'`
+      ).bind(u.id, u.next, textToHtml(u.next), actor, now)
+    )
+  );
+
+  return {
+    ok: true,
+    changed: updates.length,
+    of: rows.length,
+    missed: missed.map((r) => r.player_name),
+  };
 }
 
 /**

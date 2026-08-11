@@ -44,6 +44,7 @@ import {
 import { gateMessage, textToHtml } from '../feedback/compose.js';
 import { checkEditedBody } from '../feedback/safety.js';
 import {
+  bulkReplace,
   reopenMessages,
   setDecision,
   decisionGrid,
@@ -311,6 +312,49 @@ export async function handleAdmin(request, env, ctx, path) {
           subjectType: 'batch',
           subjectId: reopen[1],
           detail: { reopened: result.reopened, selective: Boolean(ids) },
+        })
+      );
+    }
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  // Replace a run of text across many drafts at once — the "wrong footer on
+  // every message" case, which rebuilding cannot fix because buildBatch
+  // deliberately preserves hand-edited drafts.
+  const bulk = pathname.match(/^\/api\/batch\/([\w.-]+)\/replace$/);
+  if (bulk && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Only academy admins can edit messages.' }, { status: 403 });
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+    }
+    const result = await bulkReplace(env, {
+      batchId: bulk[1],
+      messageIds: Array.isArray(body.message_ids) ? body.message_ids : null,
+      find: body.find,
+      replace: body.replace,
+      preview: Boolean(body.preview),
+      actor: principal.email,
+    });
+    if (result.ok && !result.preview) {
+      // Lengths and counts only. The find and replace strings are message
+      // content and can carry a child's name; audit_log holds identifiers.
+      ctx.waitUntil(
+        audit(env, {
+          actor: principal.email,
+          action: 'messages.bulk_replace',
+          subjectType: 'batch',
+          subjectId: bulk[1],
+          detail: {
+            changed: result.changed,
+            of: result.of,
+            find_len: String(body.find || '').length,
+            replace_len: String(body.replace || '').length,
+          },
         })
       );
     }

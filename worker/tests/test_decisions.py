@@ -758,6 +758,140 @@ check("an ordinary rewrite is accepted", st == 200 and r.get("ok"), str(r)[:200]
 out = _wrangler(f"SELECT body_text FROM parent_messages WHERE id={m1}")
 check("and it is stored", "competed hard on every possession" in out.lower(), out[-200:])
 
+
+print("\n=== 36. bulk replace: fix the same wrong text in every message ===")
+# buildBatch deliberately preserves hand-edited drafts, so a global correction
+# like a wrong footer cannot be applied by rebuilding. Editing forty footers by
+# hand at 11pm is the failure this exists to prevent.
+for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+             "DELETE FROM decision_batches", "DELETE FROM eval_notes_internal",
+             "DELETE FROM eval_feedback", "DELETE FROM registrations",
+             "DELETE FROM players"]:
+    sql(stmt)
+
+for i, nm in enumerate(["Bulk One", "Bulk Two", "Bulk Three"]):
+    register(nm, 30 + i)
+    rid = reg_id(nm)
+    call("POST", f"{ADMIN}/api/eval/{rid}", {
+        "strengths": f"{nm} competed hard on every possession all morning.",
+        "growth_area": f"{nm} should use the left hand far more often.",
+    })
+    call("POST", f"{ADMIN}/api/decision/{rid}", {"decision": "accept"})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+BULK = r.get("batchId")
+check("three drafts composed", r.get("composed") == 3, str(r)[:200])
+
+# Hand-edit one, to prove a rebuild could not fix it but this can.
+one = reg_id("Bulk One")
+m_one = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={one}")).group(1))
+call("POST", f"{ADMIN}/api/message/{m_one}/edit", {
+    "body_text": "Dear family, Bulk played really well and we would love to have them. "
+                 "Please reply with any questions.\\n\\n- Coach Adams\\n"
+                 "Tennessee Saints Basketball Academy - info@tnsaints.com"})
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace", {"find": "short", "replace": "x"})
+check("a dangerously short find string is refused", st == 400, f"got {st} {str(r)[:160]}")
+check("and it says why", "8 characters" in str(r), str(r)[:200])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "Tennessee Saints Basketball Academy", "replace": "TN Saints Academy",
+              "preview": True})
+check("preview reports how many match", st == 200 and r.get("matched") == 3, str(r)[:250])
+check("preview does not change anything",
+      "Tennessee Saints Basketball Academy" in _wrangler("SELECT body_text FROM parent_messages"))
+check("preview shows a before and after for each match",
+      bool(r.get("samples")) and r["samples"][0]["before"] != r["samples"][0]["after"],
+      str(r)[:250])
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "Tennessee Saints Basketball Academy", "replace": "TN Saints Academy"})
+check("applying changes every match", st == 200 and r.get("changed") == 3, str(r)[:200])
+out = _wrangler("SELECT body_text FROM parent_messages")
+check("the old text is gone everywhere", "Tennessee Saints Basketball Academy" not in out)
+check("the new text is there", "TN Saints Academy" in out)
+check("the HAND-EDITED message was fixed too, which a rebuild could not do",
+      out.count("TN Saints Academy") == 3, out[-200:])
+
+out = _wrangler(f"SELECT reviewed_at FROM parent_messages WHERE batch_id='{BULK}'")
+check("everything must be read again", out.count('"reviewed_at": null') == 3, out[-250:])
+
+print("\n=== 37. a replacement that would break a message changes nothing ===")
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "competed hard on every possession", "replace": "x"})
+# Not fatal by itself; what must hold is that a refusal leaves nothing changed.
+before = _wrangler("SELECT body_text FROM parent_messages")
+st2, r2 = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+               {"find": "Dear family, Bulk played really well", "replace": "Hello there"})
+after = _wrangler("SELECT body_text FROM parent_messages")
+check("removing the player name from a message is refused", st2 == 400, f"got {st2} {str(r2)[:200]}")
+check("and nothing was written", before == after)
+
+print("\n=== 38. only admins can bulk edit ===")
+sql(f"UPDATE staff SET role='coach' WHERE email_norm='{ME}'")
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "TN Saints Academy", "replace": "Something Else"})
+check("a coach cannot bulk edit", st == 403, f"got {st}")
+sql(f"UPDATE staff SET role='admin' WHERE email_norm='{ME}'")
+
+log = _wrangler("SELECT actor, action, detail FROM audit_log ORDER BY id DESC LIMIT 8")
+check("the bulk edit is audited", "messages.bulk_replace" in log, log[-300:])
+check("but the audit holds no message content",
+      "TN Saints Academy" not in log and "competed hard" not in log, log[-300:])
+
+
+print("\n=== 39. bulk replace: the audit fixes ===")
+# A replacement string is checked against EVERY internal note in the event, not
+# just each recipient's own. Otherwise a paragraph lifted from one child's note
+# passes for all the others, because it is not their note.
+secret2 = "mum told me at the door that things have been very hard at home lately"
+sql("DELETE FROM eval_notes_internal")
+one = reg_id("Bulk One")
+call("POST", f"{ADMIN}/api/eval/{one}", {"internal_note": secret2})
+
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "TN Saints Academy",
+              "replace": "TN Saints Academy. " + secret2, "preview": True})
+check("a replacement carrying ANY child's staff-only note is refused",
+      st == 400, f"got {st} {str(r)[:200]}")
+check("and it says it is a staff-only note", "staff-only" in str(r).lower(), str(r)[:200])
+
+print("\n=== 40. messages the replace could not match are NAMED ===")
+# Someone who reflowed a sign-off has a body the needle no longer matches. A
+# bare count would let their family keep the wrong footer with nobody the wiser.
+two = reg_id("Bulk Two")
+m_two = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={two}")).group(1))
+call("POST", f"{ADMIN}/api/message/{m_two}/edit", {
+    "body_text": "Dear family, Bulk competed hard on Saturday and we would love to have them "
+                 "join us. Please reply to this email with any questions at all."})
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "TN Saints Academy", "replace": "Tennessee Saints", "preview": True})
+check("preview names the messages it cannot change", len(r.get("missed", [])) >= 1, str(r)[:300])
+check("and shows a window around the actual match, not the start of the body",
+      r.get("samples") and "Saints" in r["samples"][0]["before"], str(r)[:300])
+check("before and after genuinely differ",
+      r["samples"][0]["before"] != r["samples"][0]["after"], str(r.get("samples"))[:300])
+
+print("\n=== 41. a rebuild after a bulk edit is not a deadlock ===")
+# bulkReplace stamps edited_at on every message it touches. buildBatch preserves
+# edited drafts -- so without also requiring the notes fingerprint to match, one
+# later coach note would leave a message that cannot be edited (UI disables it),
+# cannot be rebuilt (preserved), and blocks approval for the WHOLE batch.
+st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
+             {"find": "TN Saints Academy", "replace": "Tennessee Saints Academy"})
+check("the bulk edit applies", st == 200 and r.get("ok"), str(r)[:200])
+
+three = reg_id("Bulk Three")
+call("POST", f"{ADMIN}/api/eval/{three}", {
+    "strengths": "A later correction from a coach, after the bulk edit.",
+    "growth_area": "Also corrected afterwards."})
+st, r = call("POST", f"{ADMIN}/api/batch/build")
+check("rebuilding regenerates the note-stale message rather than preserving it",
+      st == 200 and r.get("ok"), str(r)[:250])
+out = _wrangler(f"SELECT body_text FROM parent_messages WHERE registration_id={three}")
+check("it picked up the corrected note", "later correction from a coach" in out, out[-250:])
+
 print("\n" + "=" * 62)
 print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
 if failed:
