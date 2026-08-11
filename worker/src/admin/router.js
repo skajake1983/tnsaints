@@ -44,6 +44,7 @@ import {
 import { gateMessage, textToHtml } from '../feedback/compose.js';
 import { checkEditedBody } from '../feedback/safety.js';
 import {
+  reopenMessages,
   setDecision,
   decisionGrid,
   buildBatch,
@@ -276,6 +277,40 @@ export async function handleAdmin(request, env, ctx, path) {
           subjectType: 'batch',
           subjectId: approve[1],
           detail: { queued: result.queued },
+        })
+      );
+    }
+    return json(result, { status: result.ok ? 200 : 400 });
+  }
+
+  // Send messages back a step so they can be edited again. Whole batch, or a
+  // selection — "the signature is wrong on all of them" and "this one message
+  // reads badly" are both real, and they need different sized answers.
+  const reopen = pathname.match(/^\/api\/batch\/([\w.-]+)\/reopen$/);
+  if (reopen && request.method === 'POST') {
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Only academy admins can reopen messages.' }, { status: 403 });
+    }
+    let body = {};
+    try {
+      body = await request.json();
+    } catch {
+      /* whole-batch reopen sends no body */
+    }
+    const ids = Array.isArray(body.message_ids) ? body.message_ids : null;
+    const result = await reopenMessages(env, {
+      batchId: reopen[1],
+      messageIds: ids,
+      actor: principal.email,
+    });
+    if (result.ok) {
+      ctx.waitUntil(
+        audit(env, {
+          actor: principal.email,
+          action: 'batch.reopen',
+          subjectType: 'batch',
+          subjectId: reopen[1],
+          detail: { reopened: result.reopened, selective: Boolean(ids) },
         })
       );
     }

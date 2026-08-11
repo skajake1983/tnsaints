@@ -365,7 +365,14 @@ export async function approveBatch(env, id, actor) {
     .first();
 
   if (!batch) return { ok: false, error: 'No such batch.' };
-  if (batch.state !== 'draft') return { ok: false, error: `Batch is already ${batch.state}.` };
+
+  // 'approved' is allowed as well as 'draft', so that reopening ONE message to
+  // fix it can be followed by approving just that one. Without this, a
+  // selective reopen left the batch approved, approveBatch refused, and the
+  // reopened message could never be sent -- the fix made the problem permanent.
+  if (!['draft', 'approved'].includes(batch.state)) {
+    return { ok: false, error: `Batch is already ${batch.state}.` };
+  }
 
   const undecided = await env.DB.prepare(
     `SELECT COUNT(*) AS n
@@ -511,22 +518,110 @@ export async function approveBatch(env, id, actor) {
 
   const now = new Date().toISOString();
 
-  await env.DB.prepare(
-    `UPDATE parent_messages
-        SET send_state = 'queued', approved_by = ?2, approved_at = ?3
-      WHERE batch_id = ?1 AND send_state = 'draft'`
-  )
-    .bind(id, actor, now)
-    .run();
+  // BATCH ROW FIRST, MESSAGES SECOND.
+  //
+  // These were two independent auto-committed statements in the opposite order,
+  // and the second ignored meta.changes. If another batch was already approved,
+  // the messages flipped to 'queued' and then the batch UPDATE violated
+  // idx_batch_one_active and threw - leaving fifty messages queued under a
+  // batch still marked 'draft': undrainable, un-approvable, and repairable only
+  // by hand on the night it matters.
+  //
+  // Claiming the batch first means the unique index rejects the attempt before
+  // a single message moves.
+  const [batchUpdate] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE decision_batches SET state = 'approved', approved_by = ?2, approved_at = ?3
+        WHERE id = ?1 AND state IN ('draft', 'approved')`
+    ).bind(id, actor, now),
+    env.DB.prepare(
+      `UPDATE parent_messages
+          SET send_state = 'queued', approved_by = ?2, approved_at = ?3
+        WHERE batch_id = ?1 AND send_state = 'draft'`
+    ).bind(id, actor, now),
+  ]);
 
-  await env.DB.prepare(
-    `UPDATE decision_batches SET state = 'approved', approved_by = ?2, approved_at = ?3
-      WHERE id = ?1 AND state = 'draft'`
-  )
-    .bind(id, actor, now)
-    .run();
+  if (batchUpdate.meta.changes === 0) {
+    return {
+      ok: false,
+      error: 'This batch was approved or reopened by someone else. Reload and try again.',
+    };
+  }
 
   return { ok: true, queued: messages.length };
+}
+
+/**
+ * Send approved messages back to draft so they can be edited again.
+ *
+ * Approval freezes the text, which is what makes "what you read is what sends"
+ * true - but frozen with no way back meant that spotting one bad message after
+ * approving left two options: send it anyway, or delete the child's
+ * registration and every coach note about them. That is not a choice anyone
+ * should be offered at 11pm.
+ *
+ * Only 'queued' messages can come back. Anything already sent is gone, and
+ * anything mid-send is left alone rather than raced.
+ *
+ * reviewed_at is cleared, because a message being reopened in order to change
+ * it is a message whose earlier reading no longer describes what will send.
+ *
+ * @param {number[]|null} messageIds specific messages, or null for the whole batch
+ */
+export async function reopenMessages(env, { batchId, messageIds = null, actor }) {
+  const batch = await env.DB.prepare(`SELECT id, state FROM decision_batches WHERE id = ?1`)
+    .bind(batchId)
+    .first();
+
+  if (!batch) return { ok: false, error: 'No such batch.' };
+  if (batch.state === 'draft') return { ok: false, error: 'This batch is already open for editing.' };
+
+  const selective = Array.isArray(messageIds) && messageIds.length > 0;
+
+  const res = selective
+    ? await env.DB.prepare(
+        `UPDATE parent_messages
+            SET send_state = 'draft', reviewed_at = NULL, reviewed_by = NULL,
+                approved_by = NULL, approved_at = NULL
+          WHERE batch_id = ?1 AND send_state = 'queued'
+            AND id IN (SELECT value FROM json_each(?2))`
+      )
+        .bind(batchId, JSON.stringify(messageIds.map(Number)))
+        .run()
+    : await env.DB.prepare(
+        `UPDATE parent_messages
+            SET send_state = 'draft', reviewed_at = NULL, reviewed_by = NULL,
+                approved_by = NULL, approved_at = NULL
+          WHERE batch_id = ?1 AND send_state = 'queued'`
+      )
+        .bind(batchId)
+        .run();
+
+  const reopened = res.meta.changes;
+  if (reopened === 0) {
+    return { ok: false, error: 'Nothing to reopen - those messages have already been sent.' };
+  }
+
+  // The batch reopens only if nothing is still committed. A partially sent
+  // batch stays where it is so the remaining queue can still drain.
+  const stillCommitted = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM parent_messages
+      WHERE batch_id = ?1 AND send_state IN ('queued', 'sending')`
+  )
+    .bind(batchId)
+    .first();
+
+  if (Number(stillCommitted?.n || 0) === 0) {
+    await env.DB.prepare(
+      `UPDATE decision_batches
+          SET state = 'draft', approved_by = NULL, approved_at = NULL, finished_at = NULL
+        WHERE id = ?1 AND state IN ('approved', 'sending', 'partial', 'sent')`
+    )
+      .bind(batchId)
+      .run();
+  }
+
+  return { ok: true, reopened };
 }
 
 /**
@@ -576,7 +671,7 @@ export async function preflight(env, id) {
  * proceed only if meta.changes > 0. Two concurrent drains cannot double-send,
  * and a family cannot receive two copies.
  */
-export async function drainBatch(env, id, { max = 10 } = {}) {
+export async function drainBatch(env, id, { max = 5 } = {}) {
   const batch = await env.DB.prepare(`SELECT id, state FROM decision_batches WHERE id = ?1`)
     .bind(id)
     .first();
@@ -594,6 +689,30 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
   }
 
   await env.DB.prepare(`UPDATE decision_batches SET state = 'sending' WHERE id = ?1 AND state = 'approved'`)
+    .bind(id)
+    .run();
+
+  // Reclaim anything stranded in 'sending'.
+  //
+  // A tab closed mid-drain, or a request that hit the subrequest ceiling,
+  // leaves a row claimed but never resolved. The pending query only looked at
+  // 'queued' and the completion count only summed 'queued' and 'failed', so a
+  // stranded row was invisible AND let the batch report itself finished - that
+  // family's outcome becoming unknowable, which is worse than a visible
+  // failure. send_attempts still bounds how often this can repeat.
+  await env.DB.prepare(
+    `UPDATE parent_messages
+        SET send_state = 'queued', last_error = 'Reclaimed after an interrupted send.'
+      WHERE batch_id = ?1 AND send_state = 'sending' AND send_attempts < 3`
+  )
+    .bind(id)
+    .run();
+
+  await env.DB.prepare(
+    `UPDATE parent_messages
+        SET send_state = 'failed', last_error = 'Interrupted repeatedly; needs attention.'
+      WHERE batch_id = ?1 AND send_state = 'sending' AND send_attempts >= 3`
+  )
     .bind(id)
     .run();
 
@@ -620,7 +739,12 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
        FROM parent_messages m
        JOIN registrations r ON r.id = m.registration_id
        LEFT JOIN decisions d ON d.registration_id = m.registration_id
-      WHERE m.batch_id = ?1 AND m.send_state = 'queued'
+      WHERE m.batch_id = ?1
+        -- 'failed' is retried up to three attempts rather than being terminal.
+        -- Resend rate-limiting three of fifty near-identical messages used to
+        -- mean three families never heard anything, with the only trace being
+        -- one word in a fifty-row table.
+        AND (m.send_state = 'queued' OR (m.send_state = 'failed' AND m.send_attempts < 3))
         -- A family who withdrew must not receive their child's decision. Cancel
         -- flips registrations.status but leaves any queued message live and
         -- invisible, because decisionGrid filters cancelled players out of the
@@ -641,7 +765,7 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
     const claim = await env.DB.prepare(
       `UPDATE parent_messages
           SET send_state = 'sending', send_attempts = send_attempts + 1
-        WHERE id = ?1 AND send_state = 'queued'`
+        WHERE id = ?1 AND send_state IN ('queued', 'failed')`
     )
       .bind(message.id)
       .run();
@@ -726,7 +850,7 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
 
   const remaining = await env.DB.prepare(
     `SELECT
-       SUM(CASE WHEN send_state = 'queued' THEN 1 ELSE 0 END) AS queued,
+       SUM(CASE WHEN send_state IN ('queued', 'sending', 'draft') THEN 1 ELSE 0 END) AS queued,
        SUM(CASE WHEN send_state = 'failed' THEN 1 ELSE 0 END) AS failed
      FROM parent_messages WHERE batch_id = ?1`
   )

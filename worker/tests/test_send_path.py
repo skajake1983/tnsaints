@@ -311,6 +311,103 @@ try:
           '"send_state": "failed"' in out, out[-300:])
     check("and the reason names the change", "changed after approval" in out, out[-300:])
 
+    print("\n=== 9. reopening: send messages back a step ===")
+    for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+                 "DELETE FROM decision_batches", "DELETE FROM eval_feedback",
+                 "DELETE FROM registrations", "DELETE FROM players", "DELETE FROM email_budget"]:
+        sql(stmt)
+    register("Echo Player", "echo-parent@example.com", "10.65.0.1")
+    register("Fox Player", "fox-parent@example.com", "10.66.0.1")
+    E, F = reg_id("Echo Player"), reg_id("Fox Player")
+    for rid, mark in ((E, "ECHOMARK"), (F, "FOXMARK")):
+        call("POST", f"{ADMIN}/api/eval/{rid}", {
+            "strengths": f"{mark} competed hard on every possession all morning.",
+            "growth_area": f"{mark} should use the left hand far more often.",
+        })
+        call("POST", f"{ADMIN}/api/decision/{rid}", {"decision": "accept"})
+    st, r = call("POST", f"{ADMIN}/api/batch/build")
+    RB = r.get("batchId")
+    for rid in (E, F):
+        call("POST", f"{ADMIN}/api/message/{msg_id(rid)}/review")
+    call("POST", f"{ADMIN}/api/batch/{RB}/approve")
+
+    out = _wrangler(f"SELECT send_state FROM parent_messages WHERE batch_id='{RB}'")
+    check("both are queued after approval", out.count('"send_state": "queued"') == 2, out[-250:])
+
+    # The whole point: something came up and the text has to change.
+    st, r = call("POST", f"{ADMIN}/api/batch/{RB}/reopen")
+    check("reopening the whole batch succeeds", st == 200 and r.get("ok"), str(r)[:200])
+    check("it reports how many came back", r.get("reopened") == 2, str(r))
+
+    out = _wrangler(f"SELECT send_state, reviewed_at FROM parent_messages WHERE batch_id='{RB}'")
+    check("both are drafts again", out.count('"send_state": "draft"') == 2, out[-250:])
+    check("and must be read again", out.count('"reviewed_at": null') == 2, out[-250:])
+    out = _wrangler(f"SELECT state FROM decision_batches WHERE id='{RB}'")
+    check("the batch reopened too", '"state": "draft"' in out, out[-200:])
+
+    st, r = call("POST", f"{ADMIN}/api/batch/{RB}/send")
+    check("a reopened batch cannot send", st == 400 and not r.get("ok"), str(r)[:200])
+
+    print("\n=== 10. reopening a SELECTION, not everyone ===")
+    for rid in (E, F):
+        call("POST", f"{ADMIN}/api/message/{msg_id(rid)}/review")
+    call("POST", f"{ADMIN}/api/batch/{RB}/approve")
+    only = int(re.search(r'"id":\s*(\d+)', _wrangler(
+        f"SELECT id FROM parent_messages WHERE registration_id={E}")).group(1))
+    st, r = call("POST", f"{ADMIN}/api/batch/{RB}/reopen", {"message_ids": [only]})
+    check("only the selected message reopens", st == 200 and r.get("reopened") == 1, str(r)[:200])
+    out = _wrangler(f"SELECT registration_id, send_state FROM parent_messages WHERE batch_id='{RB}'")
+    check("the other stays approved", '"send_state": "queued"' in out, out[-300:])
+    check("and the reopened one is a draft", '"send_state": "draft"' in out, out[-300:])
+
+    print("\n=== 11. a sent message can never be reopened ===")
+    for rid in (E,):
+        call("POST", f"{ADMIN}/api/message/{msg_id(rid)}/review")
+    call("POST", f"{ADMIN}/api/batch/{RB}/approve")
+    captured.clear()
+    call("POST", f"{ADMIN}/api/batch/{RB}/send")
+    check("they sent", len(captured) == 2, f"sink got {len(captured)}")
+    st, r = call("POST", f"{ADMIN}/api/batch/{RB}/reopen")
+    check("reopening after sending is refused", st == 400 and not r.get("ok"), str(r)[:220])
+    check("and it says they are already sent", "sent" in str(r).lower(), str(r)[:220])
+
+    print("\n=== 12. a failed send is retried, not abandoned ===")
+    for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+                 "DELETE FROM decision_batches", "DELETE FROM eval_feedback",
+                 "DELETE FROM registrations", "DELETE FROM players", "DELETE FROM email_budget"]:
+        sql(stmt)
+    register("Golf Player", "golf-parent@example.com", "10.67.0.1")
+    G = reg_id("Golf Player")
+    call("POST", f"{ADMIN}/api/eval/{G}", {
+        "strengths": "GOLFMARK competed hard on every possession.",
+        "growth_area": "GOLFMARK should use the left more.",
+    })
+    call("POST", f"{ADMIN}/api/decision/{G}", {"decision": "accept"})
+    st, r = call("POST", f"{ADMIN}/api/batch/build")
+    FB = r.get("batchId")
+    call("POST", f"{ADMIN}/api/message/{msg_id(G)}/review")
+    call("POST", f"{ADMIN}/api/batch/{FB}/approve")
+
+    # Simulate a provider failure that already happened, e.g. a rate limit.
+    sql(f"UPDATE parent_messages SET send_state='failed', send_attempts=1, "
+        f"last_error='rate limited' WHERE registration_id={G}")
+    captured.clear()
+    st, r = call("POST", f"{ADMIN}/api/batch/{FB}/send")
+    check("a failed message is retried on the next send", len(captured) == 1, f"sink got {len(captured)}")
+    out = _wrangler(f"SELECT send_state FROM parent_messages WHERE registration_id={G}")
+    check("and it lands as sent", '"send_state": "sent"' in out, out[-200:])
+
+    print("\n=== 13. a message stranded mid-send is reclaimed, not lost ===")
+    sql(f"UPDATE parent_messages SET send_state='sending', send_attempts=1 WHERE registration_id={G}")
+    sql(f"UPDATE decision_batches SET state='sending' WHERE id='{FB}'")
+    captured.clear()
+    st, r = call("POST", f"{ADMIN}/api/batch/{FB}/send")
+    # A tab closed mid-drain used to leave this row invisible forever while the
+    # batch reported itself finished.
+    check("the stranded message is picked back up", len(captured) == 1, f"sink got {len(captured)}")
+    out = _wrangler(f"SELECT send_state FROM parent_messages WHERE registration_id={G}")
+    check("and resolves", '"send_state": "sent"' in out, out[-200:])
+
 finally:
     server.shutdown()
 

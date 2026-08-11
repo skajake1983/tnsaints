@@ -35,6 +35,9 @@ import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
 const PAGE_SCRIPT = `
 (function () {
   var flash = document.getElementById('flash');
+  var REOPEN_URL = (document.getElementById('reopenAllBtn') || {}).dataset
+    ? document.getElementById('reopenAllBtn').dataset.url
+    : ((document.getElementById('batchMeta') || {}).dataset || {}).reopenUrl;
 
   function say(msg, cls) {
     if (!flash) return;
@@ -202,6 +205,51 @@ const PAGE_SCRIPT = `
     location.reload();
   });
 
+  var reopenAllBtn = document.getElementById('reopenAllBtn');
+  if (reopenAllBtn) confirmWord(reopenAllBtn, 'REOPEN', reopenAllBtn.dataset.url, function () {
+    location.reload();
+  });
+
+  var picks = document.querySelectorAll('[data-pick]');
+  var reopenPicked = document.getElementById('reopenPicked');
+
+  function syncPicks() {
+    var n = document.querySelectorAll('[data-pick]:checked').length;
+    if (reopenPicked) {
+      reopenPicked.disabled = n === 0;
+      reopenPicked.textContent = n ? ('Reopen ' + n + ' selected for editing') : 'Reopen selected for editing';
+    }
+  }
+
+  picks.forEach(function (cb) { cb.addEventListener('change', syncPicks); });
+
+  var pickAll = document.getElementById('pickAll');
+  if (pickAll) pickAll.addEventListener('click', function () {
+    var all = document.querySelectorAll('[data-pick]');
+    var target = document.querySelectorAll('[data-pick]:checked').length !== all.length;
+    all.forEach(function (cb) { cb.checked = target; });
+    syncPicks();
+  });
+
+  if (reopenPicked) reopenPicked.addEventListener('click', function () {
+    var ids = Array.prototype.map.call(
+      document.querySelectorAll('[data-pick]:checked'), function (cb) { return Number(cb.dataset.pick); });
+    if (!ids.length) return;
+    window.tnConfirm({
+      title: 'Reopen ' + ids.length + ' message(s) for editing?',
+      lines: [
+        'They go back to draft so you can change them.',
+        'Nothing has been sent, and they cannot send again until they are read and approved.'
+      ],
+      confirmLabel: 'Reopen them'
+    }).then(function (ok) {
+      if (!ok) return;
+      post(REOPEN_URL, { message_ids: ids })
+        .then(function () { location.reload(); })
+        .catch(function (err) { fail('Could not reopen those', err.message); });
+    });
+  });
+
   var sendBtn = document.getElementById('sendBtn');
   if (sendBtn) confirmWord(sendBtn, 'SEND', sendBtn.dataset.url, function (body) {
     say('Sent ' + body.sent + '. Remaining: ' + body.queued +
@@ -312,6 +360,11 @@ export const DECISION_STYLES = DIALOG_STYLES + `
              border-radius: 10px; margin-bottom: 14px; }
   .msgcard.reviewed { border-left-color: var(--ok); }
   .msgcard.stale { border-left-color: var(--danger); }
+  .msgcard.queued { border-left-color: var(--navy-soft); }
+  .msgcard.queued textarea { background: #f7f9fc; color: var(--muted); }
+  .pick { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+          text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .pick input { width: 18px; height: 18px; }
   .msgcard.stale textarea { background: #fdf7f7; color: var(--muted); }
   .stalebar { background: #f9e9e9; border-bottom: 1px solid #e5b9b9; color: var(--danger);
               padding: 11px 15px; font-size: 13px; font-weight: 600; }
@@ -346,6 +399,7 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   const built = Boolean(batch);
   const approved = batch && ['approved', 'sending', 'sent', 'partial'].includes(batch.state);
   const drafts = messages.filter((m) => m.send_state === 'draft');
+  const queuedMsgs = messages.filter((m) => m.send_state === 'queued');
   const skipped = messages.filter((m) => m.send_state === 'skipped');
   const queued = messages.filter((m) => m.send_state === 'queued').length;
   const sentCount = messages.filter((m) => m.send_state === 'sent').length;
@@ -409,6 +463,25 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
     : '';
 
   // The review column: every draft, in full, editable.
+  // Queued messages were invisible once approved: the review column only
+  // rendered drafts, so after approving, the screen showed "No drafts" and
+  // there was no way to look at, let alone change, what was about to be sent.
+  const queuedCards = queuedMsgs
+    .map((m) => {
+      const row = rows.find((r) => Number(r.id) === Number(m.registration_id));
+      return `<div class="msgcard queued" id="msg-${m.id}">
+        <div class="head">
+          <label class="pick"><input type="checkbox" data-pick="${m.id}"> select</label>
+          <span class="who">${esc(row ? row.player_name : '')}</span>
+          <span class="to">to ${esc(row ? row.parent_email : '')}</span>
+          <span class="rbadge on">approved — waiting to send</span>
+        </div>
+        <div class="subj">Subject: ${esc(m.subject)}</div>
+        <textarea readonly>${esc(m.body_text)}</textarea>
+      </div>`;
+    })
+    .join('');
+
   const reviewCards = drafts
     .map((m) => {
       const row = rows.find((r) => Number(r.id) === Number(m.registration_id));
@@ -495,6 +568,7 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
   three separate actions.</p>
 
   <div id="flash" class="flash" hidden></div>
+  ${batch ? `<div id="batchMeta" hidden data-reopen-url="/api/batch/${esc(batch.id)}/reopen"></div>` : ''}
 
   <div class="steps">${steps}</div>
 
@@ -521,6 +595,14 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
         : ''
     }
     ${
+      approved && queued
+        ? `<button class="bigbtn" id="reopenAllBtn" data-url="/api/batch/${esc(batch.id)}/reopen"
+             data-title="Reopen all ${queued} message(s) for editing?"
+             data-lines='["Every approved message goes back to draft so you can change it.", "Nothing has been sent, and nothing will be until you approve and send again.", "Anything already sent stays sent."]'
+             data-confirm-label="Reopen all" style="background:var(--navy-soft)">Reopen all</button>`
+        : ''
+    }
+    ${
       approved && queued && canSend
         ? `<button class="bigbtn send" id="sendBtn" data-url="/api/batch/${esc(batch.id)}/send"
              data-title="Send ${Math.min(queued, 10)} message(s) now?"
@@ -540,9 +622,22 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
     drafts.length
       ? `<div class="panel"><h2>Read every message before approving —
          ${unread} of ${drafts.length} still unread</h2></div>${reviewCards}`
-      : built
+      : built && !queuedMsgs.length
         ? '<div class="panel"><div class="empty">No drafts. Every player is either blocked above or already sent.</div></div>'
         : ''
+  }
+
+  ${
+    queuedMsgs.length
+      ? `<div class="panel"><h2>Approved and waiting to send — ${queuedMsgs.length}</h2>
+           <div style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+             <button class="dbtn" id="pickAll">Select all</button>
+             <button class="dbtn" id="reopenPicked" disabled>Reopen selected for editing</button>
+             <span style="font-size:13px;color:var(--muted)">Reopening returns a message to draft so you
+             can change it. It must be read and approved again before it can send.</span>
+           </div>
+         </div>${queuedCards}`
+      : ''
   }
 
   <div class="panel">
