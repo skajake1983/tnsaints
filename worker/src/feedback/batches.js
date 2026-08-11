@@ -10,6 +10,7 @@
 
 import { composeDraft, defaultBodyText, textToHtml, subjectFor, gateMessage } from './compose.js';
 import { resolvePlayerId } from './players.js';
+import { checkEditedBody } from './safety.js';
 import { reserveSend, sendComposedMessage, emailConfigured } from '../email.js';
 
 /**
@@ -467,6 +468,15 @@ export async function approveBatch(env, id, actor) {
       playerName: m.player_name,
     });
     if (!gate.ok) problems.push({ player_name: m.player_name, problems: gate.problems });
+
+    // Edit is not the last writer, so the content checks run again here.
+    const safe = await checkEditedBody(env, {
+      registrationId: m.registration_id,
+      bodyText: m.body_text,
+      playerName: m.player_name,
+    });
+    if (!safe.ok) problems.push({ player_name: m.player_name, problems: [safe.error] });
+
     if (!m.reviewed_at) unread.push(m.player_name);
   }
 
@@ -606,7 +616,7 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
     `SELECT m.id, m.subject, m.body_html, m.body_text, m.registration_id,
             m.composed_for_decision, m.composed_from_notes,
             COALESCE(d.decision, 'undecided') AS decision,
-            r.parent_email, r.parent_name
+            r.parent_email, r.parent_name, r.player_name
        FROM parent_messages m
        JOIN registrations r ON r.id = m.registration_id
        LEFT JOIN decisions d ON d.registration_id = m.registration_id
@@ -646,17 +656,28 @@ export async function drainBatch(env, id, { max = 10 } = {}) {
     // here becomes a visible failure rather than a silent skip, because a
     // message that quietly never sends is the failure nobody notices.
     const currentNotes = await notesFingerprint(env, message.registration_id);
+    const safe = await checkEditedBody(env, {
+      registrationId: message.registration_id,
+      bodyText: message.body_text,
+      playerName: message.player_name,
+    });
     if (
       message.composed_for_decision !== message.decision ||
-      message.composed_from_notes !== currentNotes
+      message.composed_from_notes !== currentNotes ||
+      !safe.ok
     ) {
       await env.DB.prepare(
         `UPDATE parent_messages
             SET send_state = 'failed',
-                last_error = 'The decision or the coach notes changed after approval. Rebuild and re-approve.'
+                last_error = ?2
           WHERE id = ?1`
       )
-        .bind(message.id)
+        .bind(
+          message.id,
+          safe.ok
+            ? 'The decision or the coach notes changed after approval. Rebuild and re-approve.'
+            : safe.error
+        )
         .run();
       continue;
     }

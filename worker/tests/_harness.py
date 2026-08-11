@@ -59,17 +59,33 @@ def require_email_disabled():
             settings[k.strip()] = v.strip()
 
     has_key = bool(settings.get("RESEND_API_KEY", "").startswith("re_"))
+    endpoint = settings.get("RESEND_ENDPOINT", "")
+    local_endpoint = bool(endpoint) and urlparse(endpoint).hostname in LOCAL_HOSTS
+
+    # A loopback endpoint is the real guard, and it is the one to check first.
+    #
+    # This used to key on EMAIL_DAILY_LIMIT=0, which it described as switching
+    # sending off. It never did: reserveSend read the limit as
+    # `parseInt(value) || 100`, and zero is falsy, so 0 meant 100. The guard was
+    # inert, and anyone who pasted a real key while trusting it would have sent
+    # roughly eighty real emails from the academy's domain to invented
+    # addresses. The bug is fixed, but the check now rests on something that
+    # cannot be undone by an arithmetic slip: if mail is pointed at localhost,
+    # it physically cannot reach Resend regardless of key or budget.
+    if local_endpoint:
+        return
+
     disabled = settings.get("EMAIL_DAILY_LIMIT") == "0"
 
     if has_key and not disabled:
         sys.exit(
             "\nREFUSING TO RUN.\n"
-            "  worker/.dev.vars holds a real RESEND_API_KEY and\n"
-            "  EMAIL_DAILY_LIMIT is not 0.\n"
-            "  A full run would send ~80 real emails and exhaust the daily\n"
-            "  free-tier budget, so genuine registrations would notify nobody.\n"
-            "  Add this line to worker/.dev.vars:\n"
-            "      EMAIL_DAILY_LIMIT=0\n"
+            "  worker/.dev.vars holds a RESEND_API_KEY, RESEND_ENDPOINT does not\n"
+            "  point at localhost, and EMAIL_DAILY_LIMIT is not 0.\n"
+            "  A full run would send ~80 real emails from the academy's domain\n"
+            "  to invented addresses.\n"
+            "  Point sending at the local sink instead:\n"
+            "      RESEND_ENDPOINT=http://127.0.0.1:8799/emails\n"
         )
 
 

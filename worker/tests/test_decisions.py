@@ -199,7 +199,10 @@ st, r = call("GET", f"{ADMIN}/api/batch/{BATCH}/preflight")
 check("preflight now counts the queued messages", r.get("to_send") == 2, str(r))
 # EMAIL_DAILY_LIMIT is 0 locally, so this must report a shortfall rather than
 # cheerfully proceeding -- the whole point is to find this out before sending.
-check("it reports the budget shortfall", r.get("enough") is False and r.get("shortfall") == 2, str(r))
+# Budget is ample locally now that sending goes to a loopback sink; what
+# matters is that preflight reports the real numbers before the button.
+check("preflight reports enough budget and the true count",
+      r.get("to_send") == 2 and r.get("enough") is True, str(r))
 
 def body_text_of(registration_id):
     """Extract just the stored body.
@@ -235,13 +238,21 @@ print("\n=== 8. one batch in flight at a time ===")
 st, r = call("POST", f"{ADMIN}/api/batch/build")
 check("a second batch is refused while one is approved", st == 400 and not r.get("ok"), str(r)[:200])
 
-print("\n=== 9. the drain stops on budget rather than failing messages ===")
+print("\n=== 9. draining never strands a message mid-send ===")
+# Delivery itself -- and critically WHICH ADDRESS RECEIVES WHICH BODY -- is
+# covered by tests/test_send_path.py, which runs a loopback mail sink. No sink
+# is listening during this suite, so every send fails at the transport; what is
+# asserted here is only that the state machine cannot strand anything.
+#
+# This previously asserted the drain refused because email was unconfigured.
+# That was true and useless: it meant the entire send path below that guard had
+# never executed in any test.
 st, r = call("POST", f"{ADMIN}/api/batch/{BATCH}/send")
-# Locally there is no Resend key, so the drain refuses before claiming anything.
-check("drain refuses cleanly with no email configured", st == 400 and not r.get("ok"), str(r)[:200])
-state = _wrangler(f"SELECT send_state, send_attempts FROM parent_messages WHERE batch_id='{BATCH}'")
-check("no message was left mid-send", '"send_state": "sending"' not in state, state[-300:])
-check("no send attempts were burned", '"send_attempts": 0' in state, state[-300:])
+check("the drain answers rather than hanging", st == 200, f"got {st} {str(r)[:160]}")
+state = _wrangler(f"SELECT send_state FROM parent_messages WHERE batch_id='{BATCH}'")
+check("nothing is left in 'sending'", '"send_state": "sending"' not in state, state[-300:])
+check("a transport failure is recorded, not silently dropped",
+      '"send_state": "failed"' in state or '"send_state": "queued"' in state, state[-300:])
 
 print("\n=== 10. roles: a coach cannot decide or send ===")
 sql(f"UPDATE staff SET role='coach' WHERE email_norm='{ME}'")
@@ -682,6 +693,70 @@ check("and it explains the message is already committed",
 
 out = _wrangler(f"SELECT decision FROM decisions WHERE registration_id={N}")
 check("the decision on record is unchanged", '"decision": "accept"' in out, out[-160:])
+
+print("\n" + "=" * 62)
+print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")
+if failed:
+    for f in failed:
+        print("  - " + f)
+print("=" * 62)
+
+print("\n=== 33. the edit box cannot carry a staff-only note to a family ===")
+# Adding an edit box closed one hole and opened two. The composer could only
+# assemble parent-facing fields; a person typing free text is looking at a
+# screen that also shows every coach's staff-only notes, and the blocked-player
+# links lead straight to the page that displays them.
+for stmt in ["DELETE FROM parent_messages", "DELETE FROM decisions",
+             "DELETE FROM decision_batches", "DELETE FROM eval_notes_internal",
+             "DELETE FROM eval_feedback", "DELETE FROM registrations",
+             "DELETE FROM players"]:
+    sql(stmt)
+
+register("Guard One", 21)
+register("Guard Two", 22)
+G1, G2 = reg_id("Guard One"), reg_id("Guard Two")
+SECRET = "the father was extremely difficult on the sideline all morning long"
+call("POST", f"{ADMIN}/api/eval/{G1}", {
+    "strengths": "Competed hard on every single possession of the morning.",
+    "growth_area": "Should look to use his left hand far more often.",
+    "internal_note": SECRET,
+})
+call("POST", f"{ADMIN}/api/eval/{G2}", {
+    "strengths": "Finished through contact with either hand repeatedly.",
+    "growth_area": "Needs to communicate on defence much more.",
+})
+call("POST", f"{ADMIN}/api/decision/{G1}", {"decision": "accept"})
+call("POST", f"{ADMIN}/api/decision/{G2}", {"decision": "not_yet"})
+call("POST", f"{ADMIN}/api/batch/build")
+m1 = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={G1}")).group(1))
+m2 = int(re.search(r'"id":\s*(\d+)', _wrangler(
+    f"SELECT id FROM parent_messages WHERE registration_id={G2}")).group(1))
+
+st, r = call("POST", f"{ADMIN}/api/message/{m1}/edit", {
+    "body_text": f"Dear family, Guard did well on Saturday. {SECRET} We would love to have him. "
+                 "Please reply to this email with any questions at all."})
+check("pasting a staff-only note into the message is REFUSED", st == 400, f"got {st}")
+check("and the refusal says it is a staff-only note", "staff-only" in str(r).lower(), str(r)[:200])
+out = _wrangler(f"SELECT body_text FROM parent_messages WHERE id={m1}")
+check("nothing was stored", "difficult on the sideline" not in out, out[-200:])
+
+print("\n=== 34. the edit box cannot carry another child's message ===")
+# Fifty drafts render as fifty textareas on one page, so copy-paste between them
+# is the obvious way to reuse a paragraph that reads well.
+st, r = call("POST", f"{ADMIN}/api/message/{m1}/edit", {
+    "body_text": "Dear family, thank you for bringing Guard Two out on Saturday. We watched them "
+                 "closely and enjoyed having them in the gym. Please reply with any questions."})
+check("naming another player in the message is REFUSED", st == 400, f"got {st} {str(r)[:160]}")
+check("and the refusal names them", "Guard Two" in str(r), str(r)[:200])
+
+print("\n=== 35. a legitimate edit still saves ===")
+st, r = call("POST", f"{ADMIN}/api/message/{m1}/edit", {
+    "body_text": "Dear family, Guard competed hard on every possession on Saturday and we would "
+                 "love to have him join the academy. Please reply to this email with any questions."})
+check("an ordinary rewrite is accepted", st == 200 and r.get("ok"), str(r)[:200])
+out = _wrangler(f"SELECT body_text FROM parent_messages WHERE id={m1}")
+check("and it is stored", "competed hard on every possession" in out.lower(), out[-200:])
 
 print("\n" + "=" * 62)
 print(f"TOTAL PASSED: {len(passed)}    FAILED: {len(failed)}")

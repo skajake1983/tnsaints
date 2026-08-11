@@ -42,6 +42,7 @@ import {
   deleteCoachEvaluation,
 } from '../feedback/notes.js';
 import { gateMessage, textToHtml } from '../feedback/compose.js';
+import { checkEditedBody } from '../feedback/safety.js';
 import {
   setDecision,
   decisionGrid,
@@ -616,7 +617,7 @@ async function handleMessageEdit(env, ctx, principal, messageId, bodyText) {
   }
 
   const m = await env.DB.prepare(
-    `SELECT m.id, m.send_state, r.player_name, r.parent_email,
+    `SELECT m.id, m.send_state, m.registration_id, r.player_name, r.parent_email,
             COALESCE(d.decision, 'undecided') AS decision,
             SUM(CASE WHEN TRIM(COALESCE(f.strengths,   '')) != '' THEN 1 ELSE 0 END) AS with_strengths,
             SUM(CASE WHEN TRIM(COALESCE(f.growth_area, '')) != '' THEN 1 ELSE 0 END) AS with_growth
@@ -651,6 +652,17 @@ async function handleMessageEdit(env, ctx, principal, messageId, bodyText) {
 
   if (!gate.ok) {
     return json({ ok: false, error: gate.problems.join(' ') }, { status: 400 });
+  }
+
+  // Free text from a human, on a screen that also shows staff-only notes and
+  // forty-nine other children's messages. See feedback/safety.js.
+  const safe = await checkEditedBody(env, {
+    registrationId: m.registration_id,
+    bodyText: text,
+    playerName: m.player_name,
+  });
+  if (!safe.ok) {
+    return json({ ok: false, error: safe.error }, { status: 400 });
   }
 
   const now = new Date().toISOString();

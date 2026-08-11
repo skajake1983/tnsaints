@@ -1,0 +1,157 @@
+/**
+ * Content safety checks for a message body a HUMAN has edited.
+ *
+ * WHY THIS FILE EXISTS SEPARATELY FROM compose.js
+ *
+ * compose.js is forbidden from being able to read eval_notes_internal — that is
+ * asserted by a committed test against its source, and it is what makes the
+ * two-table split a structural guarantee rather than a convention. These checks
+ * genuinely need to read internal notes in order to detect them, so they live
+ * here instead. Nothing in compose.js imports this module.
+ *
+ * WHAT THESE GUARD AGAINST
+ *
+ * Adding an edit box closed one hole and opened two. The composer can only
+ * assemble parent-facing fields, so before editing existed, an internal note
+ * physically could not reach a message. Now a person types free text into the
+ * body, and the same person is looking at a page that displays every coach's
+ * staff-only notes.
+ *
+ *   1. INTERNAL CONTENT. The workflow actively invites it: the blocked-player
+ *      links on /decisions lead to /eval/:id, which renders other coaches'
+ *      internal notes verbatim under "Staff-only notes". Copying a coach's
+ *      blunter phrasing because it says the thing well is a natural act, and
+ *      nothing was checking.
+ *
+ *   2. ANOTHER CHILD'S MESSAGE. Fifty drafts render as fifty textareas on one
+ *      page, so copy-paste between them is the obvious way to reuse a paragraph
+ *      that reads well. Paste Marcus's message into Ava's box, change the
+ *      greeting, and every existing check passes: the decision still matches,
+ *      the notes fingerprint is untouched, the child's name appears. Ava's
+ *      family receives Marcus's evaluation.
+ *
+ * Both are checked on edit, again at approve, and again at the drain — the same
+ * belt-and-braces as the staleness checks, because edit is not the last writer
+ * and approve can be days before the send.
+ */
+
+/** Normalise for comparison: collapse whitespace, drop case and punctuation. */
+function normalise(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Length of the shingle used to detect a copied passage.
+ *
+ * Long enough that ordinary shared phrasing does not trip it — "he needs to
+ * work on his left hand" is 30 characters and could legitimately appear in both
+ * an internal note and a parent message, because a coach often says the same
+ * thing twice. Short enough that a genuinely copied sentence cannot slip under
+ * it.
+ */
+const SHINGLE = 45;
+
+/**
+ * Does `body` contain a substantial verbatim run from any of `sources`?
+ *
+ * Compared on the normalised forms, so retyping with different punctuation or
+ * capitalisation does not evade it. Returns the offending source text so the
+ * refusal can quote it back — an error that says only "this looks like an
+ * internal note" sends someone hunting through five coaches' notes.
+ */
+function containsPassageFrom(body, sources) {
+  const haystack = normalise(body);
+  if (!haystack) return null;
+
+  for (const source of sources) {
+    const needle = normalise(source);
+    if (needle.length < SHINGLE) continue;
+
+    for (let i = 0; i + SHINGLE <= needle.length; i += 1) {
+      if (haystack.includes(needle.slice(i, i + SHINGLE))) {
+        return source;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Full safety check for one edited message body.
+ *
+ * @returns {Promise<{ok: true} | {ok: false, error: string}>}
+ */
+export async function checkEditedBody(env, { registrationId, bodyText, playerName }) {
+  // --- 1. Staff-only notes must not appear ---------------------------------
+  const internal = await env.DB.prepare(
+    `SELECT body FROM eval_notes_internal WHERE registration_id = ?1`
+  )
+    .bind(registrationId)
+    .all();
+
+  const leaked = containsPassageFrom(
+    bodyText,
+    (internal.results || []).map((r) => r.body)
+  );
+
+  if (leaked) {
+    return {
+      ok: false,
+      error:
+        'This message contains text from a staff-only note, which families must never see. ' +
+        `The matching note begins: "${String(leaked).slice(0, 60)}…"`,
+    };
+  }
+
+  // --- 2. No other child may be named --------------------------------------
+  //
+  // Only names that are unambiguous. If two children in the event share a first
+  // name, that name cannot distinguish them, and refusing on it would block a
+  // legitimate message to one of them. Full names are always checked.
+  const others = await env.DB.prepare(
+    `SELECT player_name FROM registrations
+      WHERE event_id = ?1 AND status = 'confirmed' AND id != ?2`
+  )
+    .bind(env.EVENT_ID, registrationId)
+    .all();
+
+  const otherNames = (others.results || []).map((r) => r.player_name);
+  const mineFirst = normalise(String(playerName || '').split(/\s+/)[0]);
+
+  const firstCounts = new Map();
+  for (const name of otherNames) {
+    const first = normalise(String(name).split(/\s+/)[0]);
+    firstCounts.set(first, (firstCounts.get(first) || 0) + 1);
+  }
+
+  const haystack = ` ${normalise(bodyText)} `;
+
+  for (const name of otherNames) {
+    const full = normalise(name);
+    if (full && haystack.includes(` ${full} `)) {
+      return {
+        ok: false,
+        error: `This message names another player (${name}). Check you have not pasted the wrong child's message.`,
+      };
+    }
+
+    const first = normalise(String(name).split(/\s+/)[0]);
+    // Skip a first name that is shared with the recipient or with another
+    // player — it cannot identify anyone on its own.
+    if (!first || first === mineFirst || firstCounts.get(first) > 1) continue;
+
+    if (haystack.includes(` ${first} `)) {
+      return {
+        ok: false,
+        error: `This message names another player (${name}). Check you have not pasted the wrong child's message.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}

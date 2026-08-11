@@ -16,6 +16,22 @@ import { toCsv, toBase64 } from './http.js';
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 /**
+ * Where mail actually goes.
+ *
+ * Overridable ONLY from .dev.vars, which is gitignored and never uploaded by
+ * `wrangler deploy`. Pointed at a local sink, the whole send path — claim,
+ * final gate, recipient resolution, state writes — runs end to end in tests
+ * without a byte leaving the machine.
+ *
+ * That path was previously unreachable under test: with no API key configured
+ * the drain returned before any of it, so the code deciding WHICH ADDRESS
+ * RECEIVES WHICH BODY had no coverage at all.
+ */
+function endpointFor(env) {
+  return env.RESEND_ENDPOINT || RESEND_ENDPOINT;
+}
+
+/**
  * Logo is referenced by absolute URL rather than embedded.
  *
  * Data URIs are not an option — Gmail strips them from img src entirely. A
@@ -57,7 +73,15 @@ export function emailConfigured(env) {
  * @returns {Promise<boolean>} true if this send is within budget
  */
 export async function reserveSend(env, { reserveFloor = 0 } = {}) {
-  const limit = parseInt(env.EMAIL_DAILY_LIMIT, 10) || 100;
+  // NOT `parseInt(...) || 100`. Zero is falsy, so that expression turned
+  // EMAIL_DAILY_LIMIT=0 into a limit of 100 — the exact opposite of what it
+  // says. Every test suite and the local harness documented 0 as "sending is
+  // switched off", so a developer who pasted a real key while trusting that
+  // guard would have sent roughly eighty real emails to invented addresses
+  // from the academy's domain. Nothing was disabled; only the missing API key
+  // was holding it.
+  const parsed = parseInt(env.EMAIL_DAILY_LIMIT, 10);
+  const limit = Number.isFinite(parsed) ? parsed : 100;
   // Resend's counter is UTC-based, so key the budget the same way.
   const day = new Date().toISOString().slice(0, 10);
 
@@ -98,7 +122,7 @@ async function send(env, { to, subject, html, text, replyTo, attachments }) {
   if (replyTo) payload.reply_to = replyTo;
   if (attachments) payload.attachments = attachments;
 
-  const res = await fetch(RESEND_ENDPOINT, {
+  const res = await fetch(endpointFor(env), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
