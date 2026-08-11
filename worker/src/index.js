@@ -81,7 +81,7 @@ export default {
       }
 
       if (url.pathname === '/api/admin/registrations' && request.method === 'GET') {
-        return await handleAdminExport(request, env, cors);
+        return await handleAdminExport(request, env, ctx, cors);
       }
 
       // Once [assets] is enabled in wrangler.toml, static files are served
@@ -351,7 +351,7 @@ async function handleCancel(request, env, ctx, cors) {
  * Roster export. Without this the registrations would be trapped in D1 —
  * owning the data only matters if you can get it out.
  */
-async function handleAdminExport(request, env, cors) {
+async function handleAdminExport(request, env, ctx, cors) {
   const auth = request.headers.get('Authorization') || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
 
@@ -360,18 +360,33 @@ async function handleAdminExport(request, env, cors) {
   }
 
   const url = new URL(request.url);
+  const include = url.searchParams.get('include') || '';
 
   // A cancel token is a capability, not data: holding one cancels that
   // family's place with no other credential. Once this export is shared with
   // coaches, including it by default hands out one capability per family.
   // Opt in explicitly when a token is genuinely needed.
-  const includeTokens = url.searchParams.get('include') === 'cancel_token';
+  const includeTokens = include === 'cancel_token';
   const tokenColumn = includeTokens ? 'cancel_token,' : '';
+
+  // Medical-note TEXT is withheld from this path by default, matching the
+  // capability model: token:automation is granted roster:view/contact/export
+  // but NOT roster:medical, precisely because the note text belongs behind the
+  // audited, admin-only endpoint. The shared bearer token is human-less and may
+  // be dropped into a runbook, so it must not silently carry every child's
+  // medical history. A boolean flag ships instead; the full text is an explicit
+  // opt-in for the rare case it is genuinely needed, and either way the export
+  // is audited so a bulk read of sensitive data leaves a trace like every other.
+  const includeMedical = include === 'medical_notes';
+  const medicalColumn = includeMedical
+    ? 'medical_notes,'
+    : `CASE WHEN medical_notes IS NOT NULL AND TRIM(medical_notes) != ''
+            THEN 1 ELSE 0 END AS has_medical_notes,`;
 
   const { results } = await env.DB.prepare(
     `SELECT id, session_time, status, player_name, grade, years_experience,
             parent_name, parent_email, phone, school,
-            emergency_contact_name, emergency_contact_phone, medical_notes,
+            emergency_contact_name, emergency_contact_phone, ${medicalColumn}
             assumption_of_risk, medical_release, photo_release,
             signature, signed_at,
             highlight_link, player_notes, created_at,
@@ -382,6 +397,24 @@ async function handleAdminExport(request, env, cors) {
   )
     .bind(env.EVENT_ID)
     .all();
+
+  // The most sensitive bulk read in the system, previously the one action with
+  // no record. Identifiers and flags only — never the exported data itself.
+  ctx.waitUntil(
+    audit(env, {
+      actor: 'token:automation',
+      action: 'roster.export',
+      subjectType: 'event',
+      subjectId: env.EVENT_ID,
+      detail: {
+        count: (results || []).length,
+        format: url.searchParams.get('format') === 'csv' ? 'csv' : 'json',
+        included_medical: includeMedical,
+        included_cancel_token: includeTokens,
+      },
+    })
+  );
+
   if (url.searchParams.get('format') === 'csv') {
     return new Response(toCsv(results || []), {
       headers: {

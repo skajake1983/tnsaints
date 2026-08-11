@@ -109,6 +109,28 @@ export async function reserveSend(env, { reserveFloor = 0 } = {}) {
   }
 }
 
+/**
+ * Give back a credit reserved by reserveSend() when the send did not happen.
+ *
+ * reserveSend increments before the network call, so a transient Resend 429
+ * during a decision batch burns a credit for a message that never went out.
+ * Across fifty near-identical messages that can defer genuinely-deliverable
+ * families to the next day for no reason. Refunding on a real failure keeps the
+ * counter honest. Floored at zero so it can never go negative.
+ */
+export async function refundSend(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  try {
+    await env.DB.prepare(
+      `UPDATE email_budget SET sent = MAX(0, sent - 1) WHERE day = ?1`
+    )
+      .bind(day)
+      .run();
+  } catch (err) {
+    console.error('Email budget refund failed:', err?.message);
+  }
+}
+
 async function send(env, { to, subject, html, text, replyTo, attachments }) {
   const payload = {
     from: env.NOTIFY_EMAIL_FROM,
@@ -132,9 +154,16 @@ async function send(env, { to, subject, html, text, replyTo, attachments }) {
   });
 
   if (!res.ok) {
-    // Body may contain the address; log status and provider message only.
-    const detail = await res.text();
-    throw new Error(`Resend responded ${res.status}: ${detail.slice(0, 300)}`);
+    // A rejected-address error from Resend echoes the address in its body, and
+    // this string is both logged (observability, full sampling) and stored in
+    // parent_messages.last_error, which the decisions screen displays. Redact
+    // anything email-shaped before it leaves this line, so a parent's address
+    // never lands in logs or on a shared screen. The comment used to claim this
+    // was safe; it was not.
+    const detail = (await res.text())
+      .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[redacted-email]')
+      .slice(0, 300);
+    throw new Error(`Resend responded ${res.status}: ${detail}`);
   }
 
   // The provider id is worth keeping: it is what turns "we sent it" into
@@ -318,11 +347,22 @@ function parentHtml(env, data, result) {
 export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
   let rows;
   try {
+    // Deliberately NOT medical_notes or signature.
+    //
+    // This CSV is emailed daily, all year, to a shared inbox — forwardable,
+    // device-cached, long-retained, and outside the audited least-privilege
+    // boundary the rest of the system keeps. A child's medical history and
+    // typed liability signature have no business in a routine "are seats
+    // filling" email. A has_medical_notes flag carries the one thing the gym
+    // printout needs (which children have a note to ask Jacob about); the note
+    // text stays behind the audited endpoint.
     const res = await env.DB.prepare(
       `SELECT session_time, status, player_name, grade, years_experience,
               parent_name, parent_email, phone, school,
-              emergency_contact_name, emergency_contact_phone, medical_notes,
-              photo_release, signature, highlight_link, player_notes, created_at
+              emergency_contact_name, emergency_contact_phone,
+              CASE WHEN medical_notes IS NOT NULL AND TRIM(medical_notes) != ''
+                   THEN 'yes' ELSE '' END AS has_medical_notes,
+              photo_release, highlight_link, player_notes, created_at
          FROM registrations
         WHERE event_id = ?1
         ORDER BY session_time, status DESC, id`
@@ -624,7 +664,10 @@ export async function sendRegistrationEmails(env, data, result) {
   // losing an alert means a family signs up and nobody ever contacts them.
   const reserveFloor = parseInt(env.EMAIL_ALERT_RESERVE, 10) || 25;
   if (!(await reserveSend(env, { reserveFloor }))) {
-    console.warn(`Skipped parent receipt for ${data.parent_email} to protect alert budget.`);
+    // No address in the log. Constitution: PII never in logs. The player name
+    // is enough for staff to know which receipt was deferred, and a first name
+    // is far less linkable than an email.
+    console.warn(`Skipped parent receipt for ${data.player_name} to protect alert budget.`);
     return;
   }
 

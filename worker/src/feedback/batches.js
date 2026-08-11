@@ -11,7 +11,7 @@
 import { composeDraft, defaultBodyText, textToHtml, subjectFor, gateMessage } from './compose.js';
 import { resolvePlayerId } from './players.js';
 import { checkEditedBody, loadSafetySources, checkAgainstSources, checkBulkInsertion } from './safety.js';
-import { reserveSend, sendComposedMessage, emailConfigured } from '../email.js';
+import { reserveSend, refundSend, sendComposedMessage, emailConfigured } from '../email.js';
 
 /**
  * Fingerprint of the coach notes behind one player's draft.
@@ -1023,6 +1023,10 @@ export async function drainBatch(env, id, { max = 5 } = {}) {
         .run();
       sent += 1;
     } else {
+      // The credit was reserved above but nothing went out. Give it back, so a
+      // transient provider error does not quietly shrink the day's budget and
+      // defer other families' decisions.
+      await refundSend(env);
       await env.DB.prepare(
         `UPDATE parent_messages SET send_state = 'failed', last_error = ?2 WHERE id = ?1`
       )

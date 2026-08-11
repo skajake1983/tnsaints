@@ -161,6 +161,26 @@ export async function handleAdmin(request, env, ctx, path) {
     return await handleMedicalRead(env, ctx, principal, Number(medical[1]));
   }
 
+  // The evaluation surface shows eval_notes_internal — coaches' candid,
+  // staff-only assessments. The SAVE path is gated on notes:write; the READ
+  // side was not, so a viewer (roster:view only) could read every internal note
+  // through the form. No viewer is provisioned today, but the gap bites the
+  // moment a read-only staffer is added. Gate the read on the same capability
+  // that lets someone participate in evaluation at all.
+  if ((pathname === '/eval' || /^\/eval\/\d+$/.test(pathname)) && request.method === 'GET') {
+    if (!can(principal, 'notes:write')) {
+      return htmlResponse(
+        page({
+          title: 'Not permitted',
+          principal,
+          nav: NAV,
+          body: '<h1>Not permitted</h1><p class="sub">Evaluations are limited to coaches and admins.</p>',
+        }),
+        { status: 403 }
+      );
+    }
+  }
+
   if (pathname === '/eval' && request.method === 'GET') {
     return await renderEvalList(env, principal);
   }
@@ -363,6 +383,12 @@ export async function handleAdmin(request, env, ctx, path) {
 
   const pre = pathname.match(/^\/api\/batch\/([\w.-]+)\/preflight$/);
   if (pre && request.method === 'GET') {
+    // Every other batch verb is admin-gated; this one was open, leaking
+    // operational metadata (queued count, email budget) to any staffer. No
+    // child PII, but it should match its siblings.
+    if (!can(principal, 'messages:approve')) {
+      return json({ ok: false, error: 'Not permitted.' }, { status: 403 });
+    }
     return json({ ok: true, ...(await preflight(env, pre[1])) });
   }
 

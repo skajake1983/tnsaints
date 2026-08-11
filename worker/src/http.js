@@ -54,7 +54,17 @@ export function errorResponse(message, status, cors, extra = {}) {
  * requests, but storing raw addresses would put PII in the database.
  */
 export async function hashIp(ip, salt) {
-  const bytes = new TextEncoder().encode(`${salt || 'unsalted'}:${ip || 'unknown'}`);
+  // A missing salt is a hard error, never a silent fallback.
+  //
+  // `${salt || 'unsalted'}` used to hash every visitor with a globally-known
+  // constant the moment IP_HASH_SALT was unset or mistyped — the opposite of
+  // fail-closed, and invisible. If the salt is public, a hashed IP is
+  // reversible for any small address space. Refuse to hash rather than hash
+  // insecurely; the caller aborts the request instead of writing a weak hash.
+  if (!salt) {
+    throw new Error('IP_HASH_SALT is not configured; refusing to hash with a known constant.');
+  }
+  const bytes = new TextEncoder().encode(`${salt}:${ip || 'unknown'}`);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)]
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -72,10 +82,27 @@ export function clientIp(request) {
 export function toCsv(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
+
   const escape = (v) => {
-    const s = v === null || v === undefined ? '' : String(v);
+    let s = v === null || v === undefined ? '' : String(v);
+
+    // Neutralise spreadsheet formula injection.
+    //
+    // A registration field (player_notes, medical_notes) is validated by length
+    // only, so an anonymous POST can store a value beginning with = + - @. This
+    // CSV is emailed to staff daily with the instruction "open in Excel or
+    // Google Sheets", and in Sheets a leading =IMPORTDATA(...) auto-executes on
+    // open and can exfiltrate adjacent cells — every child's medical notes and
+    // contacts — to an attacker URL. Quote-wrapping does NOT stop it; the cell
+    // must not START with a trigger. A leading apostrophe forces the cell to
+    // text in every spreadsheet and is invisible to a normal reader.
+    if (/^[=+\-@]/.test(s)) {
+      s = `'${s}`;
+    }
+
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
+
   return [
     headers.join(','),
     ...rows.map((r) => headers.map((h) => escape(r[h])).join(',')),

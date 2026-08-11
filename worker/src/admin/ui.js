@@ -219,6 +219,11 @@ export function adminHeaders(extra = {}) {
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer',
     'X-Frame-Options': 'DENY',
+    // Version-controlled transport security rather than dashboard-dependent.
+    // The zone almost certainly forces HTTPS already, but pinning it here means
+    // the admin surface's transport guarantee travels with the code and cannot
+    // be lost to a Cloudflare setting someone toggles.
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     ...extra,
   };
 }

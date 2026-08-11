@@ -820,10 +820,16 @@ print("\n=== 37. a replacement that would break a message changes nothing ===")
 st, r = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
              {"find": "competed hard on every possession", "replace": "x"})
 # Not fatal by itself; what must hold is that a refusal leaves nothing changed.
-before = _wrangler("SELECT body_text FROM parent_messages")
+# Compare the extracted body values, not raw wrangler output — the latter
+# carries a per-query "duration" that varies between two calls and would flake.
+def _bodies():
+    out = _wrangler("SELECT body_text FROM parent_messages ORDER BY id")
+    return re.findall(r'"body_text":\s*"((?:[^"\\]|\\.)*)"', out)
+
+before = _bodies()
 st2, r2 = call("POST", f"{ADMIN}/api/batch/{BULK}/replace",
                {"find": "Dear family, Bulk played really well", "replace": "Hello there"})
-after = _wrangler("SELECT body_text FROM parent_messages")
+after = _bodies()
 check("removing the player name from a message is refused", st2 == 400, f"got {st2} {str(r2)[:200]}")
 check("and nothing was written", before == after)
 

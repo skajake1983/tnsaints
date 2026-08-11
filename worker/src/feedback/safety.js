@@ -69,7 +69,18 @@ function containsPassageFrom(body, sources) {
 
   for (const source of sources) {
     const needle = normalise(source);
-    if (needle.length < SHINGLE) continue;
+    if (!needle) continue;
+
+    // A note shorter than the shingle window used to be skipped ENTIRELY, which
+    // missed exactly the class that matters most: candid internal notes are
+    // often blunt and short — "mom is a problem, keep her at arm's length" is
+    // ~40 characters. For a short source, require the whole thing to appear
+    // verbatim (with a small floor so a two-word note cannot false-positive on
+    // ordinary prose). For a long source, slide the window as before.
+    if (needle.length < SHINGLE) {
+      if (needle.length >= 15 && haystack.includes(needle)) return source;
+      continue;
+    }
 
     for (let i = 0; i + SHINGLE <= needle.length; i += 1) {
       if (haystack.includes(needle.slice(i, i + SHINGLE))) {
