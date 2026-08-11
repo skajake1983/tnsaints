@@ -26,7 +26,16 @@ const CAPABILITIES = {
     'roster:medical', // the medical note text itself, audited per read
     'roster:export',
     'notes:write',
-    'notes:write_on_behalf',
+    // Deliberately NO capability to write as another coach. An evaluation is
+    // attributable to the person who typed it or it is not evidence of
+    // anything, and the owner chose non-repudiation over the convenience of
+    // transcribing for someone.
+    //
+    // An admin may REMOVE another coach's evaluation — for something entered
+    // about the wrong child, or written in a way that should not stand — but
+    // cannot alter it and cannot author one in their name. Delete leaves an
+    // audit row; a silent edit under someone else's name would not.
+    'feedback:delete',
     'decisions:set',
     'messages:approve',
     'messages:send',

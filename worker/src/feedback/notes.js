@@ -156,6 +156,61 @@ export async function saveEvaluation(env, { registrationId, authorEmail, authorL
 }
 
 /**
+ * Remove one coach's entire evaluation of one player.
+ *
+ * Admin-only, and deliberately the ONLY thing an admin may do to someone else's
+ * evaluation. They cannot edit it and cannot write one under that coach's name:
+ * an evaluation is attributable to whoever typed it, or it is not evidence of
+ * anything. Removal leaves an audit row naming who removed whose; a silent edit
+ * under another person's name would leave a record that reads as their words.
+ *
+ * Takes the parent-facing feedback and the internal note together — they are
+ * one coach's account of one child, and leaving half behind would attribute a
+ * candid internal remark to an evaluation that no longer exists.
+ */
+export async function deleteCoachEvaluation(env, registrationId, authorEmail) {
+  const existing = await env.DB.prepare(
+    `SELECT author_label FROM eval_feedback
+      WHERE registration_id = ?1 AND author_email = ?2`
+  )
+    .bind(registrationId, authorEmail)
+    .first();
+
+  const internal = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM eval_notes_internal
+      WHERE registration_id = ?1 AND author_email = ?2`
+  )
+    .bind(registrationId, authorEmail)
+    .first();
+
+  const hadInternal = Number(internal?.n || 0) > 0;
+  if (!existing && !hadInternal) return { ok: false, code: 'not-found' };
+
+  await env.DB.prepare(
+    `DELETE FROM eval_feedback WHERE registration_id = ?1 AND author_email = ?2`
+  )
+    .bind(registrationId, authorEmail)
+    .run();
+  await env.DB.prepare(
+    `DELETE FROM eval_notes_internal WHERE registration_id = ?1 AND author_email = ?2`
+  )
+    .bind(registrationId, authorEmail)
+    .run();
+
+  // Removing a note changes what any composed draft was built from, so the
+  // draft must be read again. The fingerprint check catches this too; this
+  // makes the screen agree immediately rather than after a rebuild.
+  await env.DB.prepare(
+    `UPDATE parent_messages SET reviewed_at = NULL, reviewed_by = NULL
+      WHERE registration_id = ?1 AND send_state = 'draft'`
+  )
+    .bind(registrationId)
+    .run();
+
+  return { ok: true, authorLabel: existing?.author_label || authorEmail, hadInternal };
+}
+
+/**
  * Everything staff may see about one player's evaluation: this coach's own
  * entry, plus every other coach's, plus the internal notes.
  *

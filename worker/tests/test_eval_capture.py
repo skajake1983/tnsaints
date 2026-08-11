@@ -220,28 +220,46 @@ call("POST", f"{ADMIN}/api/eval/{RID}", {"internal_note": "", "strengths": "Stil
 out = _wrangler(f"SELECT COUNT(*) AS n FROM eval_notes_internal WHERE registration_id={RID}")
 check("cleared internal note is removed, not left empty", '"n": 0' in out, out[-200:])
 
-print("\n=== 6. on_behalf_of is admin-only ===")
+print("\n=== 6. attribution cannot be forged ===")
 set_role("admin")
+# The on_behalf_of path was removed on the owner's instruction. An evaluation
+# has to be attributable to whoever typed it, or it is not evidence of anything;
+# an admin transcribing under a coach's name destroys exactly that. Non-
+# repudiation was chosen over the convenience of entering notes for someone.
 st, r = call("POST", f"{ADMIN}/api/eval/{RID}", {
-    "on_behalf_of": COACH, "rating_skill": 3, "strengths": "Transcribed from paper.",
+    "on_behalf_of": COACH, "author_email": COACH, "author": COACH,
+    "strengths": "Attempted to write this under another coach's name.",
+    "growth_area": "Should still be attributed to the caller.",
 })
-check("admin may attribute to another coach", st == 200 and r.get("saved_as") == "Coach Turner", str(r))
+check("the request is accepted", st == 200 and r.get("ok"), str(r))
+check("but attribution is the CALLER, never what the request claimed",
+      r.get("saved_as") == "Coach Adams", str(r))
 
-out = _wrangler(f"SELECT author_email FROM eval_feedback WHERE registration_id={RID} ORDER BY author_email")
-check("the note is attributed to the coach who watched", COACH in out, out[-200:])
+out = _wrangler(f"SELECT author_email FROM eval_feedback WHERE registration_id={RID}")
+check("nothing is attributed to the coach named in the request", COACH not in out, out[-200:])
+check("it is attributed to the signed-in admin", ME in out, out[-200:])
 
-log = _wrangler("SELECT actor, detail FROM audit_log WHERE action='eval.save' ORDER BY id DESC LIMIT 1")
-check("but the audit records who actually typed it", ME in log, log[-300:])
-check("and flags it as delegated", '\\"delegated\\":true' in log or '"delegated":true' in log, log[-300:])
+print("\n=== 6b. an admin may REMOVE another coach's evaluation, never rewrite it ===")
+sql("INSERT INTO eval_feedback (player_id, registration_id, event_id, author_email, author_label, "
+    "strengths, growth_area, created_at, updated_at) SELECT player_id, id, event_id, "
+    f"'{COACH}', 'Coach Turner', 'Their own observation.', 'Their own growth note.', "
+    f"datetime('now'), datetime('now') FROM registrations WHERE id={RID}")
+out = _wrangler(f"SELECT author_email FROM eval_feedback WHERE registration_id={RID}")
+check("the other coach has an entry of their own", COACH in out, out[-200:])
 
 set_role("coach")
-st, r = call("POST", f"{ADMIN}/api/eval/{RID}", {
-    "on_behalf_of": COACH, "strengths": "A coach should not be able to do this.",
-})
-check("a coach may NOT write under another name", st == 403, f"got {st} {r}")
+st, r = call("POST", f"{ADMIN}/api/eval/{RID}/author/delete", {"author_email": COACH})
+check("a coach cannot remove another coach's evaluation", st == 403, f"got {st}")
 
-st, r = call("POST", f"{ADMIN}/api/eval/{RID}", {"strengths": "Own note is fine."})
-check("a coach may still write their own", st == 200 and r.get("ok"), str(r))
+set_role("admin")
+st, r = call("POST", f"{ADMIN}/api/eval/{RID}/author/delete", {"author_email": COACH})
+check("an admin can remove it", st == 200 and r.get("ok"), str(r)[:200])
+out = _wrangler(f"SELECT author_email FROM eval_feedback WHERE registration_id={RID}")
+check("it is gone", COACH not in out, out[-200:])
+
+log = _wrangler("SELECT actor, action, detail FROM audit_log ORDER BY id DESC LIMIT 3")
+check("the removal is audited, naming who removed whose",
+      "eval.delete" in log and ME in log, log[-300:])
 
 print("\n=== 7. a viewer cannot write at all ===")
 set_role("viewer")

@@ -377,13 +377,22 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
 
   // Blocked players are named with a link straight to the form that fixes them.
   // "3 players are blocked" without saying who is a puzzle, not a warning.
+  // Name what is missing per player, not just that something is.
+  // "no coach has written both" reads as "neither exists" when usually only one
+  // is absent, which sends someone to the form looking for the wrong thing.
   const blockBar = blocked.length
-    ? `<div class="blockbar"><strong>${blocked.length} player(s) cannot be sent anything yet</strong> —
-       no coach has written both a strength and a growth area:
+    ? `<div class="blockbar"><strong>${blocked.length} player(s) cannot be sent anything yet.</strong>
+       Every player needs a strength AND a growth area from at least one coach.
+       <ul style="margin:8px 0 0;padding-left:20px">
        ${blocked
-         .map((b) => `<a href="/eval/${b.id}">${esc(b.player_name)}</a>`)
-         .join(', ')}.
-       Nothing can be approved until every player has both.</div>`
+         .map((b) => {
+           const missing = [];
+           if (!(Number(b.with_strengths) > 0)) missing.push('a strength');
+           if (!(Number(b.with_growth) > 0)) missing.push('a growth area');
+           return `<li><a href="/eval/${b.id}">${esc(b.player_name)}</a> — needs ${missing.join(' and ')}</li>`;
+         })
+         .join('')}
+       </ul></div>`
     : '';
 
   const budgetWarning =
@@ -449,7 +458,17 @@ export function decisionsBody({ rows, batch, messages, pre, canSend }) {
       return `<tr>
         <td data-label="Player"><strong>${esc(r.player_name)}</strong><br>
           <span style="font-size:12px;color:var(--muted)">${esc(r.session_time)} · ${esc(r.grade)}</span>
-          ${incomplete ? `<br><a class="needs" href="/eval/${r.id}">needs a strength &amp; growth area →</a>` : ''}</td>
+          ${
+            incomplete
+              ? `<br><a class="needs" href="/eval/${r.id}">needs ${
+                  !(Number(r.with_strengths) > 0) && !(Number(r.with_growth) > 0)
+                    ? 'a strength &amp; a growth area'
+                    : !(Number(r.with_strengths) > 0)
+                      ? 'a strength'
+                      : 'a growth area'
+                } →</a>`
+              : ''
+          }</td>
         <td data-label="Coaches">${Number(r.coach_count)}</td>
         <td data-label="Decision">
           <button class="dbtn${r.decision === 'accept' ? ' on' : ''}" data-rid="${r.id}" data-decide="accept"${lock}>Accept</button>

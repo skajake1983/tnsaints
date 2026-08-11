@@ -21,6 +21,7 @@
  */
 
 import { esc } from './ui.js';
+import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
 
 /**
  * The inline script, hashed for CSP rather than allowed with 'unsafe-inline'.
@@ -31,7 +32,7 @@ import { esc } from './ui.js';
  * few lines and removes that escalation entirely: even a successful injection
  * cannot execute, because its hash will not match.
  */
-const PAGE_SCRIPT = `
+const BODY_SCRIPT = `
 (function () {
   var form = document.getElementById('evalForm');
   if (!form) return;
@@ -117,6 +118,33 @@ const PAGE_SCRIPT = `
     saveDraft();
   });
 
+  document.querySelectorAll('[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var label = btn.dataset.label;
+      window.tnConfirm({
+        title: 'Remove ' + label + "'s evaluation of this player?",
+        lines: [
+          'This deletes their ratings, their parent-facing feedback and their staff-only note for this player.',
+          'You cannot edit or rewrite another coach's evaluation - only remove it. The audit log records that you did.',
+          label + ' can enter a new one themselves afterwards.'
+        ],
+        word: 'REMOVE',
+        confirmLabel: 'Remove it',
+        danger: true
+      }).then(function (ok) {
+        if (!ok) return;
+        fetch('/api/eval/' + form.dataset.registrationId + '/author/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author_email: btn.dataset.remove })
+        }).then(function (r) { return r.json(); }).then(function (b) {
+          if (!b.ok) { setStatus(b.error || 'Could not remove it', 'warn'); return; }
+          location.reload();
+        }).catch(function () { setStatus('Could not remove it - no signal?', 'warn'); });
+      });
+    });
+  });
+
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     setStatus('Saving...', '');
@@ -140,6 +168,9 @@ const PAGE_SCRIPT = `
 })();
 `;
 
+/** Dialog first: the body script calls window.tnConfirm. */
+const PAGE_SCRIPT = DIALOG_SCRIPT + BODY_SCRIPT;
+
 let cachedHash = null;
 
 /** SHA-256 of the inline script, base64, for the CSP script-src directive. */
@@ -162,7 +193,7 @@ export async function evalCsp() {
   );
 }
 
-export const EVAL_STYLES = `
+export const EVAL_STYLES = DIALOG_STYLES + `
   .backlink { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-size: 14px; }
   .backlink:hover { color: var(--ink); }
   .playerhead { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
@@ -203,6 +234,9 @@ export const EVAL_STYLES = `
   .savestate.warn { color: var(--warn); font-weight: 600; }
   .draftbar { background: #fdf0dd; border: 1px solid #e8c893; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
   .draftbar button { margin-right: 8px; margin-top: 8px; border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .removebtn { margin-top: 10px; border: 1px solid #e5b9b9; background: #fff; color: var(--danger);
+               border-radius: 7px; padding: 8px 12px; font: inherit; font-size: 13px;
+               font-weight: 600; cursor: pointer; }
   .others { margin-top: 26px; }
   .others h2 { font-size: 15px; margin: 0 0 10px; }
   .other { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; font-size: 14px; }
@@ -246,7 +280,7 @@ function scaleRow(name, label, hint, value) {
 }
 
 /** The evaluation form for one player. */
-export function evalFormBody({ registration, mine, others, internalOthers, canDelegate, staffList, actingAs }) {
+export function evalFormBody({ registration, mine, others, internalOthers, canDelete }) {
   const ratings = SCALES.map(([name, label, hint]) => scaleRow(name, label, hint, mine?.[name])).join('');
 
   const otherBlocks = others.length
@@ -257,8 +291,12 @@ export function evalFormBody({ registration, mine, others, internalOthers, canDe
           if (o.strengths) parts.push(`<div><strong>Strengths:</strong> ${esc(o.strengths)}</div>`);
           if (o.growth_area) parts.push(`<div><strong>Growth:</strong> ${esc(o.growth_area)}</div>`);
           if (o.parent_note) parts.push(`<div><strong>To family:</strong> ${esc(o.parent_note)}</div>`);
+          const remove = canDelete
+            ? `<button type="button" class="removebtn" data-remove="${esc(o.author_email)}"
+                 data-label="${esc(o.author_label)}">Remove this evaluation</button>`
+            : '';
           return `<div class="other"><div class="who">${esc(o.author_label)}</div>
-            <div class="r">${r}</div>${parts.join('')}</div>`;
+            <div class="r">${r}</div>${parts.join('')}${remove}</div>`;
         })
         .join('')
     : '<p class="sub">No other coach has written about this player yet.</p>';
@@ -273,26 +311,14 @@ export function evalFormBody({ registration, mine, others, internalOthers, canDe
         .join('')
     : '';
 
-  // Admin-only. This is the paper-fallback path from the plan: if the phone UI
-  // is unusable on the day, notes go on paper and get transcribed afterwards
-  // with the right coach's name on them. It is also how a note typed into the
-  // wrong player gets fixed.
-  const delegate = canDelegate
-    ? `<div class="field">
-         <label for="on_behalf_of">Entering on behalf of
-           <span class="help">Admin only. Attributes this evaluation to another coach — use when
-           transcribing from paper. The audit log still records that you typed it.</span></label>
-         <select id="on_behalf_of" name="on_behalf_of" style="width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:16px;background:#fff">
-           <option value="">Myself</option>
-           ${staffList
-             .map(
-               (s) =>
-                 `<option value="${esc(s.email_norm)}"${s.email_norm === actingAs ? ' selected' : ''}>${esc(s.display_name)} (${esc(s.author_label)})</option>`
-             )
-             .join('')}
-         </select>
-       </div>`
-    : '';
+  // There is deliberately no "entering on behalf of" control here.
+  //
+  // It existed as a paper-transcription fallback and was removed on the owner's
+  // instruction: an evaluation has to be attributable to the person who typed
+  // it, or it is not evidence of anything. A coach who writes on paper types it
+  // in themselves later. An admin who needs to act on someone else's entry can
+  // REMOVE it — which leaves an audit row — but can never author or alter one
+  // under their name.
 
   return `
   <a class="backlink" href="/eval">← All players</a>
@@ -316,8 +342,6 @@ export function evalFormBody({ registration, mine, others, internalOthers, canDe
 
   <form id="evalForm" action="/api/eval/${registration.id}" method="post"
         data-registration-id="${registration.id}">
-
-    ${delegate}
 
     <div class="ratings">${ratings}</div>
 
@@ -356,6 +380,8 @@ export function evalFormBody({ registration, mine, others, internalOthers, canDe
     ${otherBlocks}
     ${internalBlocks ? `<h2 style="margin-top:18px">Staff-only notes</h2>${internalBlocks}` : ''}
   </div>
+
+  ${DIALOG_MARKUP}
 
   <script>${PAGE_SCRIPT}</script>`;
 }

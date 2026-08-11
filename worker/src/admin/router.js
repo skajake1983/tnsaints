@@ -35,7 +35,12 @@ import {
   adminDeleteRegistration,
 } from '../registration.js';
 import { page, esc, htmlResponse, notAuthorisedPage, adminHeaders } from './ui.js';
-import { saveEvaluation, evaluationForStaff, completeness } from '../feedback/notes.js';
+import {
+  saveEvaluation,
+  evaluationForStaff,
+  completeness,
+  deleteCoachEvaluation,
+} from '../feedback/notes.js';
 import { gateMessage, textToHtml } from '../feedback/compose.js';
 import {
   setDecision,
@@ -165,6 +170,42 @@ export async function handleAdmin(request, env, ctx, path) {
   const evalSave = pathname.match(/^\/api\/eval\/(\d+)$/);
   if (evalSave && request.method === 'POST') {
     return await handleEvalSave(request, env, ctx, principal, Number(evalSave[1]));
+  }
+
+  // Remove another coach's evaluation. An admin may delete, never overwrite —
+  // see the capability comment in auth/staff.js.
+  const evalDelete = pathname.match(/^\/api\/eval\/(\d+)\/author\/delete$/);
+  if (evalDelete && request.method === 'POST') {
+    if (!can(principal, 'feedback:delete')) {
+      return json(
+        { ok: false, error: 'Only academy admins can remove another coach’s evaluation.' },
+        { status: 403 }
+      );
+    }
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+    }
+    const target = String(body.author_email || '').trim().toLowerCase();
+    if (!target) {
+      return json({ ok: false, error: 'No coach specified.' }, { status: 400 });
+    }
+    const result = await deleteCoachEvaluation(env, Number(evalDelete[1]), target);
+    if (!result.ok) {
+      return json({ ok: false, error: 'That coach has no evaluation for this player.' }, { status: 404 });
+    }
+    ctx.waitUntil(
+      audit(env, {
+        actor: principal.email,
+        action: 'eval.delete',
+        subjectType: 'registration',
+        subjectId: Number(evalDelete[1]),
+        detail: { removed_author: target, had_internal: result.hadInternal },
+      })
+    );
+    return json({ ok: true, removed: result.authorLabel });
   }
 
   // --- Decisions and the outbound batch ------------------------------------
@@ -477,44 +518,6 @@ async function handleMedicalRead(env, ctx, principal, registrationId) {
   });
 }
 
-/**
- * Who this evaluation is attributed to.
- *
- * Normally the signed-in coach. An admin may set `on_behalf_of` to another
- * staff member — the paper-transcription path, and the fix for a note typed
- * into the wrong player.
- *
- * ATTRIBUTION AND AUTHORSHIP ARE DELIBERATELY DIFFERENT THINGS. The note is
- * attributed to the coach who watched the child, because that is what makes it
- * true and useful. The audit row records who actually typed it, because that is
- * what makes it accountable. Collapsing the two would mean either losing the
- * real observer's name or being unable to answer "who entered this".
- *
- * Never taken from the request for a non-admin: a coach cannot write a note
- * under someone else's name.
- */
-async function resolveAuthor(env, principal, requestedOnBehalfOf) {
-  const wants = String(requestedOnBehalfOf || '').trim().toLowerCase();
-
-  if (!wants || wants === principal.email) {
-    return { email: principal.email, label: principal.authorLabel, delegated: false };
-  }
-
-  if (!can(principal, 'notes:write_on_behalf')) {
-    return { error: 'Only academy admins can enter notes on behalf of another coach.' };
-  }
-
-  const target = await env.DB.prepare(
-    `SELECT email_norm, author_label FROM staff WHERE email_norm = ?1 AND active = 1`
-  )
-    .bind(wants)
-    .first();
-
-  if (!target) return { error: 'That coach is not on the staff list.' };
-
-  return { email: target.email_norm, label: target.author_label, delegated: true };
-}
-
 async function handleEvalSave(request, env, ctx, principal, registrationId) {
   if (!can(principal, 'notes:write')) {
     return json({ ok: false, error: 'This role cannot write evaluations.' }, { status: 403 });
@@ -527,15 +530,13 @@ async function handleEvalSave(request, env, ctx, principal, registrationId) {
     return json({ ok: false, error: 'Could not read that submission.' }, { status: 400 });
   }
 
-  const author = await resolveAuthor(env, principal, body.on_behalf_of);
-  if (author.error) {
-    return json({ ok: false, error: author.error }, { status: 403 });
-  }
-
+  // The author is ALWAYS the authenticated principal, never anything the
+  // request supplies. An evaluation whose attribution can be set by its sender
+  // is not evidence of who observed the child; it is only a claim.
   const result = await saveEvaluation(env, {
     registrationId,
-    authorEmail: author.email,
-    authorLabel: author.label,
+    authorEmail: principal.email,
+    authorLabel: principal.authorLabel,
     data: body,
   });
 
@@ -552,15 +553,11 @@ async function handleEvalSave(request, env, ctx, principal, registrationId) {
       action: 'eval.save',
       subjectType: 'registration',
       subjectId: registrationId,
-      detail: {
-        attributed_to: author.email,
-        delegated: author.delegated,
-        has_internal: Boolean(String(body.internal_note || '').trim()),
-      },
+      detail: { has_internal: Boolean(String(body.internal_note || '').trim()) },
     })
   );
 
-  return json({ ok: true, saved_as: author.label });
+  return json({ ok: true, saved_as: principal.authorLabel });
 }
 
 /**
@@ -795,19 +792,7 @@ async function renderEvalForm(env, principal, registrationId) {
       ? { internal_note: mineInternal.body }
       : null;
 
-  const canDelegate = can(principal, 'notes:write_on_behalf');
-  let staffList = [];
-  if (canDelegate) {
-    const res = await env.DB.prepare(
-      `SELECT email_norm, display_name, author_label
-         FROM staff
-        WHERE active = 1 AND email_norm != ?1
-        ORDER BY display_name`
-    )
-      .bind(principal.email)
-      .all();
-    staffList = res.results || [];
-  }
+  const canDelete = can(principal, 'feedback:delete');
 
   const html = page({
     title: registration.player_name,
@@ -820,9 +805,7 @@ async function renderEvalForm(env, principal, registrationId) {
       mine,
       others: feedback.filter((f) => f.author_email !== principal.email),
       internalOthers: internal.filter((n) => n.author_email !== principal.email),
-      canDelegate,
-      staffList,
-      actingAs: '',
+      canDelete,
     }),
   });
 
