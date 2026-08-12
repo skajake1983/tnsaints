@@ -25,7 +25,16 @@
 
 import { json } from '../http.js';
 import { verifyAccessJwt, devPrincipalEmail } from '../auth/access.js';
-import { loadStaff, can, audit, rosterView } from '../auth/staff.js';
+import {
+  loadStaff,
+  can,
+  audit,
+  rosterView,
+  listStaff,
+  addOrUpdateStaff,
+  setStaffStatus,
+  getStaff,
+} from '../auth/staff.js';
 import {
   getAvailability,
   registrationWindow,
@@ -56,11 +65,14 @@ import {
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 import { logoResponse } from './logo.js';
 import { decisionsBody, DECISION_STYLES, decisionsCsp } from './decisions-ui.js';
+import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
+import { sendStaffInvite } from '../email.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
   { href: '/eval', label: 'Evaluations' },
   { href: '/decisions', label: 'Decisions' },
+  { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
 
@@ -134,6 +146,35 @@ export async function handleAdmin(request, env, ctx, path) {
 
   if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
+  }
+
+  // --- User management (admin only) ----------------------------------------
+  if (pathname === '/users' && request.method === 'GET') {
+    if (!can(principal, 'staff:manage')) {
+      return htmlResponse(
+        page({
+          title: 'Users',
+          principal,
+          nav: NAV,
+          body: '<h1>Not permitted</h1><p class="sub">Only academy admins can manage users.</p>',
+        }),
+        { status: 403 }
+      );
+    }
+    return await renderUsers(env, principal);
+  }
+
+  if (pathname === '/api/staff' && request.method === 'POST') {
+    return await handleStaffUpsert(request, env, ctx, principal);
+  }
+
+  const staffStatus = pathname.match(/^\/api\/staff\/(deactivate|activate)$/);
+  if (staffStatus && request.method === 'POST') {
+    return await handleStaffStatus(request, env, ctx, principal, staffStatus[1] === 'activate');
+  }
+
+  if (pathname === '/api/staff/reinvite' && request.method === 'POST') {
+    return await handleStaffReinvite(request, env, ctx, principal);
   }
 
   // JSON sibling of the roster page, same projection. Useful for a quick pull
@@ -931,6 +972,132 @@ async function renderEvalForm(env, principal, registrationId) {
   return new Response(html, {
     headers: adminHeaders({ 'Content-Security-Policy': await evalCsp() }),
   });
+}
+
+async function renderUsers(env, principal) {
+  const staff = await listStaff(env);
+  // The Access model is not something the Worker can read from Cloudflare, so
+  // it is a declared config value. Set ACCESS_EMAIL_MODE=domain once the Access
+  // policy admits the whole @tnsaints.com domain; until then the screen tells
+  // the admin to also touch the dashboard for each person.
+  const accessMode = String(env.ACCESS_EMAIL_MODE || '').trim() === 'domain' ? 'domain' : 'individual';
+
+  return new Response(
+    page({
+      title: 'Users',
+      principal,
+      nav: NAV,
+      current: '/users',
+      extraStyles: USERS_STYLES,
+      body: usersBody({ staff, me: principal.email, accessMode }),
+    }),
+    { headers: adminHeaders({ 'Content-Security-Policy': await usersCsp() }) }
+  );
+}
+
+async function handleStaffUpsert(request, env, ctx, principal) {
+  if (!can(principal, 'staff:manage')) {
+    return json({ ok: false, error: 'Only academy admins can manage users.' }, { status: 403 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+  }
+
+  const result = await addOrUpdateStaff(env, {
+    email: body.email,
+    displayName: body.display_name,
+    authorLabel: body.author_label,
+    role: body.role,
+  });
+  if (!result.ok) {
+    return json(result, { status: 400 });
+  }
+
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: result.created ? 'staff.add' : 'staff.update',
+      subjectType: 'staff',
+      subjectId: result.email,
+      detail: { role: result.role, reactivated: Boolean(result.reactivated) },
+    })
+  );
+
+  // Welcome email, best-effort, on create (or when explicitly asked). Never
+  // blocks the add — the row is what grants access; the email is a courtesy.
+  let invited;
+  if (body.send_invite && (result.created || body.send_invite === true)) {
+    const sent = await sendStaffInvite(env, {
+      to: result.email,
+      displayName: String(body.display_name || '').trim(),
+      role: result.role,
+    });
+    invited = Boolean(sent.ok);
+  }
+
+  return json({ ...result, invited });
+}
+
+async function handleStaffStatus(request, env, ctx, principal, activate) {
+  if (!can(principal, 'staff:manage')) {
+    return json({ ok: false, error: 'Only academy admins can manage users.' }, { status: 403 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+  }
+
+  const result = await setStaffStatus(env, { email: body.email, active: activate });
+  if (!result.ok) {
+    return json(result, { status: 400 });
+  }
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: activate ? 'staff.activate' : 'staff.deactivate',
+      subjectType: 'staff',
+      subjectId: result.email,
+    })
+  );
+  return json(result);
+}
+
+async function handleStaffReinvite(request, env, ctx, principal) {
+  if (!can(principal, 'staff:manage')) {
+    return json({ ok: false, error: 'Only academy admins can manage users.' }, { status: 403 });
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: 'Could not read that request.' }, { status: 400 });
+  }
+  const target = await getStaff(env, body.email);
+  if (!target) {
+    return json({ ok: false, error: 'That person is not on the staff list.' }, { status: 404 });
+  }
+  const sent = await sendStaffInvite(env, {
+    to: target.email_norm,
+    displayName: target.display_name,
+    role: target.role,
+  });
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: 'staff.reinvite',
+      subjectType: 'staff',
+      subjectId: target.email_norm,
+    })
+  );
+  if (!sent.ok) {
+    return json({ ok: false, error: 'Email could not be sent right now. Tell them the site address directly.' }, { status: 502 });
+  }
+  return json({ ok: true });
 }
 
 function renderWhoami(principal) {

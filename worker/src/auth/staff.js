@@ -92,6 +92,122 @@ export async function loadStaff(env, email) {
   };
 }
 
+/** Every staff row, active and inactive, for the management screen. */
+export async function listStaff(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT email_norm, display_name, author_label, role, active, created_at, updated_at
+       FROM staff
+      ORDER BY active DESC, role, email_norm`
+  ).all();
+  return results || [];
+}
+
+/** How many admins can currently sign in. Backs the last-admin guard. */
+export async function countActiveAdmins(env) {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM staff WHERE role = 'admin' AND active = 1`
+  ).first();
+  return Number(row?.n || 0);
+}
+
+const ROLES = new Set(['admin', 'coach', 'viewer']);
+
+/**
+ * Create or update a staff member.
+ *
+ * Upserts on the normalised email, so re-adding an existing person edits them
+ * rather than erroring. Returns whether the row was newly created, so the
+ * caller knows whether to send a welcome email.
+ *
+ * THE LAST-ADMIN GUARD lives here and in setStaffStatus: demoting or
+ * deactivating the final active admin would lock the whole staff out of user
+ * management from the UI, and the person doing it is usually the one who would
+ * then need to fix it. Refused rather than allowed-then-regretted.
+ */
+export async function addOrUpdateStaff(env, { email, displayName, authorLabel, role }) {
+  const norm = normEmail(email);
+  if (!norm || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(norm)) {
+    return { ok: false, error: 'Enter a valid email address.' };
+  }
+  if (!ROLES.has(role)) {
+    return { ok: false, error: 'Role must be admin, coach, or viewer.' };
+  }
+  const name = String(displayName || '').trim();
+  const label = String(authorLabel || '').trim();
+  if (!name) return { ok: false, error: 'A name is required.' };
+  if (!label) return { ok: false, error: 'A parent-facing label (e.g. "Coach Adams") is required.' };
+
+  const existing = await env.DB.prepare(
+    `SELECT role, active FROM staff WHERE email_norm = ?1`
+  )
+    .bind(norm)
+    .first();
+
+  // Guard: do not demote the last active admin.
+  if (existing && existing.role === 'admin' && existing.active === 1 && role !== 'admin') {
+    if ((await countActiveAdmins(env)) <= 1) {
+      return { ok: false, error: 'This is the only active admin. Add another admin before changing this role.' };
+    }
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5)
+     ON CONFLICT (email_norm) DO UPDATE SET
+       display_name = excluded.display_name,
+       author_label = excluded.author_label,
+       role         = excluded.role,
+       active       = 1,
+       updated_at   = excluded.updated_at`
+  )
+    .bind(norm, name, label, role, now)
+    .run();
+
+  return { ok: true, email: norm, role, created: !existing, reactivated: Boolean(existing && existing.active === 0) };
+}
+
+/**
+ * Activate or deactivate a staff member.
+ *
+ * Deactivate rather than delete: deleting orphans the notes they authored,
+ * while active=0 ends access immediately and keeps attribution intact.
+ */
+export async function setStaffStatus(env, { email, active }) {
+  const norm = normEmail(email);
+  if (!norm) return { ok: false, error: 'Unknown staff member.' };
+
+  const existing = await env.DB.prepare(`SELECT role, active FROM staff WHERE email_norm = ?1`)
+    .bind(norm)
+    .first();
+  if (!existing) return { ok: false, error: 'That person is not on the staff list.' };
+
+  if (!active && existing.role === 'admin' && existing.active === 1) {
+    if ((await countActiveAdmins(env)) <= 1) {
+      return { ok: false, error: 'This is the only active admin. Add another admin before deactivating this one.' };
+    }
+  }
+
+  await env.DB.prepare(
+    `UPDATE staff SET active = ?2, updated_at = ?3 WHERE email_norm = ?1`
+  )
+    .bind(norm, active ? 1 : 0, new Date().toISOString())
+    .run();
+
+  return { ok: true, email: norm, active: Boolean(active) };
+}
+
+/** The display fields for one staff member — used when re-sending an invite. */
+export async function getStaff(env, email) {
+  const norm = normEmail(email);
+  if (!norm) return null;
+  return await env.DB.prepare(
+    `SELECT email_norm, display_name, author_label, role, active FROM staff WHERE email_norm = ?1`
+  )
+    .bind(norm)
+    .first();
+}
+
 /**
  * Append an audit row.
  *

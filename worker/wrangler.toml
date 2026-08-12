@@ -66,6 +66,18 @@ ADMIN_HOSTNAME = "admin.tnsaints.com"
 ACCESS_TEAM_DOMAIN = "tnsaints.cloudflareaccess.com"
 ACCESS_AUD = "7f3323d37c62e2fcf6006d924b9ecdd3c0a2a8671e56a1cb3ba65f4413064875"
 
+# How the Cloudflare Access policy admits people, so the Users screen can tell
+# the truth about whether adding a staff row is enough on its own.
+#   "individual" — the Access policy lists specific emails. Adding someone in
+#                  the Users screen is NOT enough; their email must also be added
+#                  to the Access app in the dashboard. (Safe default.)
+#   "domain"     — the Access policy admits anyone @tnsaints.com. The staff table
+#                  is then the sole authority and the Users screen fully
+#                  self-serves; a non-staff @tnsaints.com person still gets a
+#                  clean 403 from the staff gate.
+# Set this to match the Access policy you actually configured.
+ACCESS_EMAIL_MODE = "individual"
+
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links
 # generated during local development pointed at the live site.

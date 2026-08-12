@@ -198,6 +198,81 @@ export async function sendComposedMessage(env, { to, subject, html, text, replyT
   }
 }
 
+/**
+ * Welcome email for a newly-added staff member.
+ *
+ * Deliberately NOT a magic link. There is no token in it, no way to sign in
+ * that bypasses Microsoft — it points at the plain admin URL and tells the
+ * person to sign in with the same @tnsaints.com email and password they already
+ * use for Microsoft 365. Two reasons: the security model puts Cloudflare Access
+ * and Entra in front of that URL, so a link that skipped them would be a
+ * backdoor; and the person is already provisioned in the staff table, so the
+ * only thing they need is the address and the instruction.
+ *
+ * Best-effort: returns {ok} and never throws, so adding a user succeeds even if
+ * the mail provider is momentarily down. The row is what grants access; the
+ * email is a courtesy.
+ */
+export async function sendStaffInvite(env, { to, displayName, role }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+
+  const host = String(env.ADMIN_HOSTNAME || 'admin.tnsaints.com');
+  const url = `https://${host}`;
+  const contact = env.NOTIFY_EMAIL_TO || 'info@tnsaints.com';
+  const roleWord =
+    role === 'admin' ? 'an academy admin' : role === 'coach' ? 'a coach' : 'a viewer';
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">Tennessee Saints — staff access</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">
+      <p style="margin-top:0;">Hi ${escapeHtml(displayName || 'there')},</p>
+      <p>You have been added as <strong>${escapeHtml(roleWord)}</strong> on the Tennessee Saints
+      staff site.</p>
+      <p style="margin:18px 0;">
+        <a href="${url}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Open the staff site</a>
+      </p>
+      <p>Sign in with your <strong>@tnsaints.com Microsoft 365 email and password</strong> — the same
+      login you use for Outlook. There is no separate password to set up.</p>
+      <p style="color:#536277;font-size:14px;">The first time you sign in from a browser, Microsoft
+      may ask you to confirm your identity (the same multi-factor step it uses elsewhere). That is
+      normal. If anything does not work, reply to this email or contact ${escapeHtml(contact)}.</p>
+    </div>
+    <p style="color:#8a94a6;font-size:12px;text-align:center;margin-top:14px;">
+      Tennessee Saints Basketball Academy · staff only</p>
+  </div>`;
+
+  const text = [
+    `Hi ${displayName || 'there'},`,
+    '',
+    `You have been added as ${roleWord} on the Tennessee Saints staff site.`,
+    '',
+    `Open ${url} and sign in with your @tnsaints.com Microsoft 365 email and password`,
+    `— the same login you use for Outlook. There is no separate password.`,
+    '',
+    `The first time you sign in from a browser, Microsoft may ask you to confirm your`,
+    `identity; that is normal. Questions: ${contact}.`,
+  ].join('\n');
+
+  try {
+    const id = await send(env, {
+      to,
+      subject: 'Your Tennessee Saints staff access',
+      html,
+      text,
+      replyTo: contact,
+    });
+    return { ok: true, id };
+  } catch (err) {
+    return { ok: false, error: err?.message || 'send failed' };
+  }
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>
