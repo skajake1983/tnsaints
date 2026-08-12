@@ -20,7 +20,7 @@
  *     write nothing useful in either.
  */
 
-import { esc } from './ui.js';
+import { esc, backButton } from './ui.js';
 import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
 
 /**
@@ -194,8 +194,6 @@ export async function evalCsp() {
 }
 
 export const EVAL_STYLES = DIALOG_STYLES + `
-  .backlink { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-size: 14px; }
-  .backlink:hover { color: var(--ink); }
   .playerhead { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
   .playerhead h1 { margin: 0 0 4px; }
   .playerhead .meta { color: var(--muted); font-size: 14px; }
@@ -321,7 +319,7 @@ export function evalFormBody({ registration, mine, others, internalOthers, canDe
   // under their name.
 
   return `
-  <a class="backlink" href="/eval">← All players</a>
+  ${backButton('/eval', 'All players')}
 
   <div class="playerhead">
     <h1>${esc(registration.player_name)}</h1>

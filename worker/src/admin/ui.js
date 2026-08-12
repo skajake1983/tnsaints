@@ -21,6 +21,26 @@ export function esc(value) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * The one back button used across the admin.
+ *
+ * A rounded, clearly tappable control with a left arrow, placed at the top of a
+ * detail page to return to its list — not a faint text link that is easy to
+ * miss. Defined once here (with .backbtn in the shared styles) so a page just
+ * calls backButton(href, label); change the look in one place and every page
+ * follows. The arrow is an inline SVG using currentColor, so it flips to white
+ * on hover with the text and needs no image request.
+ */
+export function backButton(href, label) {
+  return (
+    `<a class="backbtn" href="${esc(href)}">` +
+    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">` +
+    `<path d="M19 12H6M12 6l-6 6 6 6" stroke="currentColor" stroke-width="2" ` +
+    `stroke-linecap="round" stroke-linejoin="round"/></svg>` +
+    `<span>${esc(label)}</span></a>`
+  );
+}
+
 const STYLES = `
   /*
    * Lifted verbatim from index.html's custom properties so the dashboard and
@@ -122,6 +142,18 @@ const STYLES = `
   .empty { padding: 28px 16px; color: var(--muted); text-align: center; font-size: 14px; }
   .notice { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--gold);
             border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; font-size: 14px; }
+  /* Back button — a rounded, clearly tappable control at the top of a detail
+   * page, rather than a faint text link. Defined here so every page shares one
+   * look: change it once and it changes everywhere. */
+  .backbtn { display: inline-flex; align-items: center; gap: 7px;
+             margin-bottom: 16px; padding: 8px 15px 8px 11px;
+             background: #fff; border: 1px solid var(--line); border-radius: 999px;
+             color: var(--navy); font-size: 14px; font-weight: 600; text-decoration: none;
+             box-shadow: 0 1px 2px rgba(6, 37, 92, .06);
+             transition: background .15s ease, border-color .15s ease, color .15s ease; }
+  .backbtn:hover { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .backbtn:focus-visible { outline: 2px solid var(--navy-soft); outline-offset: 2px; }
+  .backbtn svg { display: block; }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 18px 30px; }
   /* ---------------------------------------------------------------------
    * Narrow screens.
