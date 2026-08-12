@@ -213,7 +213,7 @@ for role, may_see_contact in [("coach", False), ("viewer", False), ("admin", Tru
         check(f"{role}: gets the static flag and NO reveal button",
               "see Jacob" in str(html) and "data-medical=" not in str(html))
 
-    # The wide columns are gone; everything else is behind "View registration",
+    # The wide columns are gone; everything else is behind the "Registration"
     # which opens a vertical detail modal. The detail is server-rendered into a
     # hidden <template> from the SAME minimised projection, so a coach's page
     # carries the button but the template holds no contact fields (already

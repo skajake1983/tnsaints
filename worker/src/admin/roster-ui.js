@@ -217,7 +217,7 @@ function cap(s) {
 export function medicalFlag(row, canReadMedical) {
   if (!row.has_medical_notes) return '';
   if (canReadMedical) {
-    return `<button class="medbtn" data-medical="${row.id}" data-name="${esc(row.player_name)}">medical note — view</button>`;
+    return `<button class="medbtn" data-medical="${row.id}" data-name="${esc(row.player_name)}">Medical Note</button>`;
   }
   return '<span class="med">medical note — see Jacob</span>';
 }
@@ -225,7 +225,7 @@ export function medicalFlag(row, canReadMedical) {
 /** The Actions cell: the medical flag (if any) plus the View-registration button. */
 export function rowActions(row, canReadMedical) {
   const med = medicalFlag(row, canReadMedical);
-  const view = `<button class="viewbtn" data-detail="${row.id}" data-name="${esc(row.player_name)}">View registration</button>`;
+  const view = `<button class="viewbtn" data-detail="${row.id}" data-name="${esc(row.player_name)}">Registration</button>`;
   return `<div class="rowacts">${med}${view}</div>`;
 }
 
@@ -271,7 +271,7 @@ export function registrationTemplate(row, showsContact, canReadMedical) {
       'Medical note',
       row.has_medical_notes
         ? canReadMedical
-          ? 'On file — use the "medical note — view" button'
+          ? 'On file — use the "Medical Note" button'
           : 'On file — see Jacob'
         : 'None on file'
     ),
