@@ -65,7 +65,15 @@ import {
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 import { logoResponse } from './logo.js';
 import { decisionsBody, DECISION_STYLES, decisionsCsp } from './decisions-ui.js';
-import { medicalFlag, ROSTER_STYLES, ROSTER_MARKUP, ROSTER_SCRIPT, rosterCsp } from './roster-ui.js';
+import {
+  rowActions,
+  registrationTemplate,
+  fmtRegDate,
+  ROSTER_STYLES,
+  ROSTER_MARKUP,
+  ROSTER_SCRIPT,
+  rosterCsp,
+} from './roster-ui.js';
 import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
 
@@ -1168,37 +1176,46 @@ async function renderRoster(env, principal) {
     })
     .join('');
 
-  const headers = ['Player', 'Grade', 'Yrs', 'Session', 'Status', 'School']
-    .concat(showsContact ? ['Parent', 'Email', 'Phone'] : [])
-    .concat(['Flags'])
+  const canReadMedical = can(principal, 'roster:medical');
+
+  // A deliberately narrow set of columns: enough to find a player at a glance,
+  // and nothing so wide that the table needs a horizontal scrollbar. Everything
+  // else about a registration is one "View registration" click away, in a
+  // vertical detail modal. Parent name is contact-gated, so a coach never sees
+  // that column at all.
+  const headers = ['Player', 'Grade', 'Session']
+    .concat(showsContact ? ['Parent'] : [])
+    .concat(['Registered', 'Status', ''])
     .map((h) => `<th>${esc(h)}</th>`)
     .join('');
 
   const body = rows.length
     ? rows
         .map((r) => {
-          const contact = showsContact
-            ? `<td data-label="Parent">${esc(r.parent_name)}</td><td data-label="Email">${esc(r.parent_email)}</td><td data-label="Phone">${esc(r.phone)}</td>`
+          const parent = showsContact
+            ? `<td data-label="Parent">${esc(r.parent_name)}</td>`
             : '';
-          // An admin gets a button that reveals the note through the audited
-          // endpoint; a coach gets the static flag and nothing more.
-          const flag = medicalFlag(r, can(principal, 'roster:medical'));
           return `<tr>
         <td data-label="Player"><strong>${esc(r.player_name)}</strong></td>
         <td data-label="Grade">${esc(r.grade)}</td>
-        <td data-label="Yrs">${esc(r.years_experience ?? '')}</td>
         <td data-label="Session">${esc(r.session_time)}</td>
+        ${parent}
+        <td data-label="Registered">${esc(fmtRegDate(r.created_at))}</td>
         <td data-label="Status"><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
-        <td data-label="School">${esc(r.school)}</td>
-        ${contact}
-        <td data-label="Flags">${flag}</td>
+        <td data-label="">${rowActions(r, canReadMedical)}</td>
       </tr>`;
         })
         .join('')
     : '';
 
+  // One hidden <template> per row holding the full, role-appropriate detail; the
+  // View button clones the matching one into the modal.
+  const detailTemplates = rows
+    .map((r) => registrationTemplate(r, showsContact, canReadMedical))
+    .join('');
+
   const table = rows.length
-    ? `<div class="scroll"><table class="stack"><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table></div>`
+    ? `<div class="scroll"><table class="stack"><thead><tr>${headers}</tr></thead><tbody>${body}</tbody></table></div>${detailTemplates}`
     : `<div class="empty">No registrations yet for this event.</div>`;
 
   const windowNote = window.open

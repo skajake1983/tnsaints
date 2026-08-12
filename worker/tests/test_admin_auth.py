@@ -208,6 +208,20 @@ for role, may_see_contact in [("coach", False), ("viewer", False), ("admin", Tru
         check(f"{role}: gets the static flag and NO reveal button",
               "see Jacob" in str(html) and "data-medical=" not in str(html))
 
+    # The wide columns are gone; everything else is behind "View registration",
+    # which opens a vertical detail modal. The detail is server-rendered into a
+    # hidden <template> from the SAME minimised projection, so a coach's page
+    # carries the button but the template holds no contact fields (already
+    # asserted absent above).
+    check(f"{role}: has a View-registration button and the detail modal",
+          "data-detail=" in str(html) and 'id="regBackdrop"' in str(html))
+    check(f"{role}: the vertical detail rendered", "<template id=\"reg-" in str(html)
+          and "Player notes" in str(html))
+    # The narrow table must not carry the long free-text columns that forced the
+    # horizontal scrollbar — those live in the detail now.
+    check(f"{role}: the wide Email/Phone columns are gone from the table",
+          "<th>Email</th>" not in str(html) and "<th>Phone</th>" not in str(html))
+
 print("\n=== 4b. the reveal button actually runs: script parses and its CSP hash matches ===")
 # The button does nothing unless the browser runs the inline script, and the
 # browser refuses to run it unless the served bytes hash to the value declared
