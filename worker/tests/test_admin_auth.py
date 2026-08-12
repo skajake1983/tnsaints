@@ -193,9 +193,62 @@ for role, may_see_contact in [("coach", False), ("viewer", False), ("admin", Tru
             # bug to expose.
             check(f"{role}: {name} NOT in the response bytes", not present)
 
-    # Coaches still need to know a note exists so a child gets care.
-    check(f"{role}: sees the player and a medical flag",
-          "Marcus Canary" in str(html) and "medical note" in str(html).lower())
+    # Everyone still needs to know a note exists so a child gets care -- but the
+    # *shape* of that flag is the authorization boundary made visible. An admin
+    # gets a reveal button wired to the audited endpoint; a coach or viewer gets
+    # the static "see Jacob" text and no button at all. If a template change ever
+    # handed a coach the button, the note is one unaudited click away.
+    check(f"{role}: sees the player", "Marcus Canary" in str(html))
+    if role == "admin":
+        check("admin: gets a reveal button, not the static flag",
+              "data-medical=" in str(html) and "see Jacob" not in str(html))
+        check("admin: the reveal modal is present on the page",
+              'id="medBackdrop"' in str(html))
+    else:
+        check(f"{role}: gets the static flag and NO reveal button",
+              "see Jacob" in str(html) and "data-medical=" not in str(html))
+
+print("\n=== 4b. the reveal button actually runs: script parses and its CSP hash matches ===")
+# The button does nothing unless the browser runs the inline script, and the
+# browser refuses to run it unless the served bytes hash to the value declared
+# in script-src. A whitespace-level drift between the two silently disables the
+# reveal on the real site while every server-side test still passes -- so assert
+# the two agree, and that the script is valid JS in the first place.
+import base64, hashlib, re
+set_role("admin")
+req = urllib.request.Request(BASE + ADMIN + "/", method="GET")
+req.add_header("Origin", ORIGIN)
+csp, html = "", ""
+try:
+    with urllib.request.urlopen(req) as rsp:
+        csp = rsp.headers.get("Content-Security-Policy", "")
+        html = rsp.read().decode()
+except urllib.error.HTTPError as e:
+    check("the roster page is reachable as admin", False, f"got {e.code}")
+declared = re.search(r"script-src '(sha256-[^']+)'", csp)
+scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+check("the roster carries a hashed inline script", bool(declared) and bool(scripts),
+      f"csp={csp[:80]}")
+# The reveal fetch is a same-origin XHR, so connect-src must permit 'self' or the
+# button opens the modal and then fails to load the note.
+check("connect-src permits the same-origin reveal fetch", "connect-src 'self'" in csp,
+      f"csp={csp[:120]}")
+if declared and scripts:
+    actual = "sha256-" + base64.b64encode(
+        hashlib.sha256(scripts[-1].encode("utf-8")).digest()).decode()
+    check("the declared hash matches the served reveal script", declared.group(1) == actual,
+          f"{declared.group(1)} vs {actual}")
+    tmp = os.path.join(WORKER_DIR, ".roster-script-check.js")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(scripts[-1])
+    try:
+        res = subprocess.run(["node", "--check", tmp], capture_output=True,
+                             shell=(os.name == "nt"), cwd=WORKER_DIR)
+        check("the served reveal script is valid JavaScript", res.returncode == 0,
+              (res.stderr or b"").decode("utf-8", "replace")[:200])
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
 
 print("\n=== 5. medical notes: readable by admin, audited, refused to coaches ===")
 _, rows = call("GET", ADMIN + "/api/roster")

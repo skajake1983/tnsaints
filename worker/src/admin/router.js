@@ -65,6 +65,7 @@ import {
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from './eval-ui.js';
 import { logoResponse } from './logo.js';
 import { decisionsBody, DECISION_STYLES, decisionsCsp } from './decisions-ui.js';
+import { medicalFlag, ROSTER_STYLES, ROSTER_MARKUP, ROSTER_SCRIPT, rosterCsp } from './roster-ui.js';
 import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
 
@@ -1179,11 +1180,9 @@ async function renderRoster(env, principal) {
           const contact = showsContact
             ? `<td data-label="Parent">${esc(r.parent_name)}</td><td data-label="Email">${esc(r.parent_email)}</td><td data-label="Phone">${esc(r.phone)}</td>`
             : '';
-          // The flag, never the text. A coach needs to know the note exists;
-          // reading it goes through the audited admin endpoint.
-          const flag = r.has_medical_notes
-            ? '<span class="med">medical note — see Jacob</span>'
-            : '';
+          // An admin gets a button that reveals the note through the audited
+          // endpoint; a coach gets the static flag and nothing more.
+          const flag = medicalFlag(r, can(principal, 'roster:medical'));
           return `<tr>
         <td data-label="Player"><strong>${esc(r.player_name)}</strong></td>
         <td data-label="Grade">${esc(r.grade)}</td>
@@ -1206,13 +1205,13 @@ async function renderRoster(env, principal) {
     ? `Registration is open until ${esc(new Date(window.closesAt).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' }))} Central.`
     : 'Registration is closed.';
 
-  return htmlResponse(
-    page({
-      title: 'Roster',
-      principal,
-      nav: NAV,
-      current: '/',
-      body: `
+  const html = page({
+    title: 'Roster',
+    principal,
+    nav: NAV,
+    current: '/',
+    extraStyles: ROSTER_STYLES,
+    body: `
   <h1>${esc(env.EVENT_LABEL || env.EVENT_ID)}</h1>
   <p class="sub">${windowNote}</p>
 
@@ -1236,7 +1235,16 @@ async function renderRoster(env, principal) {
       ? ''
       : `<div class="notice">Contact details and medical notes are not shown to this role.
          If you need to reach a family, or a player has a medical note, ask Jacob.</div>`
-  }`,
-    })
-  );
+  }
+
+  ${ROSTER_MARKUP}
+
+  <script>${ROSTER_SCRIPT}</script>`,
+  });
+
+  // Served with the roster CSP so the reveal script (hash-pinned) can run. The
+  // medical-note read it triggers is audited server-side.
+  return new Response(html, {
+    headers: adminHeaders({ 'Content-Security-Policy': await rosterCsp() }),
+  });
 }
