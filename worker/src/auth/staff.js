@@ -278,13 +278,16 @@ const BASE_COLUMNS = [
   'grade',
   'years_experience',
   'school',
+  // The parent's NAME is shown to every role — a coach needs to know whose
+  // parent they are talking to on the day. The means of *reaching* the parent
+  // (email, phone, emergency contact) stays admin-only below.
+  'parent_name',
   'player_notes',
   'highlight_link',
   'created_at',
 ];
 
 const CONTACT_COLUMNS = [
-  'parent_name',
   'parent_email',
   'phone',
   'emergency_contact_name',

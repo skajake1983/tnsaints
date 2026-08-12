@@ -1181,25 +1181,20 @@ async function renderRoster(env, principal) {
   // A deliberately narrow set of columns: enough to find a player at a glance,
   // and nothing so wide that the table needs a horizontal scrollbar. Everything
   // else about a registration is one "View registration" click away, in a
-  // vertical detail modal. Parent name is contact-gated, so a coach never sees
-  // that column at all.
-  const headers = ['Player', 'Grade', 'Session']
-    .concat(showsContact ? ['Parent'] : [])
-    .concat(['Registered', 'Status', ''])
+  // vertical detail modal. Parent NAME is shown to every role; the means of
+  // reaching the parent (email, phone) stays admin-only, in the detail.
+  const headers = ['Player', 'Grade', 'Session', 'Parent', 'Registered', 'Status', '']
     .map((h) => `<th>${esc(h)}</th>`)
     .join('');
 
   const body = rows.length
     ? rows
         .map((r) => {
-          const parent = showsContact
-            ? `<td data-label="Parent">${esc(r.parent_name)}</td>`
-            : '';
           return `<tr>
         <td data-label="Player"><strong>${esc(r.player_name)}</strong></td>
         <td data-label="Grade">${esc(r.grade)}</td>
         <td data-label="Session">${esc(r.session_time)}</td>
-        ${parent}
+        <td data-label="Parent">${esc(r.parent_name)}</td>
         <td data-label="Registered">${esc(fmtRegDate(r.created_at))}</td>
         <td data-label="Status"><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
         <td data-label="">${rowActions(r, canReadMedical)}</td>

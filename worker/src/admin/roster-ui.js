@@ -264,6 +264,7 @@ export function registrationTemplate(row, showsContact, canReadMedical) {
     field('Grade', row.grade),
     field('Years playing', row.years_experience),
     field('School', row.school),
+    field('Parent', row.parent_name),
     field('Registered', fmtRegDateTime(row.created_at)),
     fieldHtml('Highlight link', linkOrText(row.highlight_link)),
     field(
@@ -278,7 +279,6 @@ export function registrationTemplate(row, showsContact, canReadMedical) {
 
   if (showsContact) {
     parts.push(
-      field('Parent', row.parent_name),
       field('Parent email', row.parent_email),
       field('Parent phone', row.phone),
       field(

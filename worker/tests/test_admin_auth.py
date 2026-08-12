@@ -109,6 +109,7 @@ def add_staff(role="admin"):
 # response that should not carry them is a leak, regardless of which field or
 # template put it there.
 CANARIES = {
+    "parent name": "CANARY-PARENT-NAME",
     "parent email": "CANARY-PARENT-EMAIL@example.com",
     "emergency contact": "CANARY-EMERGENCY-NAME",
     "medical note text": "CANARY-MEDICAL-SECRET",
@@ -121,7 +122,7 @@ def plant_registration():
     sql("DELETE FROM registrations; DELETE FROM email_budget;")
     st, r = call("POST", "/api/register", {
         "session_time": "9:00 AM", "player_name": "Marcus Canary", "grade": "5th",
-        "years_experience": 3, "parent_name": "Dana Canary",
+        "years_experience": 3, "parent_name": CANARIES["parent name"],
         "parent_email": CANARIES["parent email"], "phone": "(615) 555-7788",
         "school": "Franklin Elementary",
         "emergency_contact_name": CANARIES["emergency contact"],
@@ -199,6 +200,10 @@ for role, may_see_contact in [("coach", False), ("viewer", False), ("admin", Tru
     # the static "see Jacob" text and no button at all. If a template change ever
     # handed a coach the button, the note is one unaudited click away.
     check(f"{role}: sees the player", "Marcus Canary" in str(html))
+    # The parent's NAME is shown to every role — a coach needs to know whose
+    # parent they are speaking to. The means of reaching them (email, phone,
+    # emergency contact), asserted absent above for non-contact roles, is not.
+    check(f"{role}: sees the parent's name", CANARIES["parent name"] in str(html))
     if role == "admin":
         check("admin: gets a reveal button, not the static flag",
               "data-medical=" in str(html) and "see Jacob" not in str(html))
