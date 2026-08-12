@@ -219,6 +219,49 @@ if declared and scripts:
         try: os.remove(tmp)
         except OSError: pass
 
+print("\n=== 9. 'Re-send email' retires once someone has actually signed in ===")
+# The welcome email only matters until it has done its job. loadStaff stamps
+# first_seen_at on the first authenticated request, and the screen drops the
+# button once it is set -- so the button is present for the invited and absent
+# for the arrived.
+sql("DELETE FROM staff; DELETE FROM audit_log")
+sql("INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) "
+    f"VALUES ('{ME}', 'Jacob Adams', 'Coach Adams', 'admin', 1, datetime('now'), datetime('now'))")
+
+# (a) simply authenticating stamps first_seen_at, and does so exactly once.
+before = _wrangler(f"SELECT first_seen_at FROM staff WHERE email_norm='{ME}'")
+check("a freshly-seeded admin has never signed in", '"first_seen_at": null' in before, before[-160:])
+call("GET", ADMIN + "/users")                      # this authenticated request IS the sign-in
+row1 = _wrangler(f"SELECT first_seen_at FROM staff WHERE email_norm='{ME}'")
+stamp1 = re.search(r'"first_seen_at":\s*"([^"]+)"', row1)
+check("the first authenticated request stamps first_seen_at", bool(stamp1), row1[-160:])
+call("GET", ADMIN + "/users")                      # a later request must NOT move the stamp
+row2 = _wrangler(f"SELECT first_seen_at FROM staff WHERE email_norm='{ME}'")
+stamp2 = re.search(r'"first_seen_at":\s*"([^"]+)"', row2)
+check("a later request leaves the original stamp untouched",
+      bool(stamp1) and bool(stamp2) and stamp1.group(1) == stamp2.group(1),
+      f"{stamp1 and stamp1.group(1)} -> {stamp2 and stamp2.group(1)}")
+
+# (b) an invited coach who has NOT signed in still gets the button and reads 'invited'.
+call("POST", ADMIN + "/api/staff", {"email": "invitee@tnsaints.com", "display_name": "New Invitee",
+                            "author_label": "Coach Invitee", "role": "coach", "send_invite": False})
+_, html = call("GET", ADMIN + "/users")
+html = str(html)
+check("an invited-but-never-signed-in coach shows Re-send email",
+      'data-reinvite="invitee@tnsaints.com"' in html)
+check("and their status reads 'invited'", 'class="badge pending"' in html)
+
+# (c) once that coach signs in (first_seen_at set), the button is retired.
+sql("UPDATE staff SET first_seen_at=datetime('now') WHERE email_norm='invitee@tnsaints.com'")
+_, html = call("GET", ADMIN + "/users")
+html = str(html)
+check("after signing in, the coach no longer shows Re-send email",
+      'data-reinvite="invitee@tnsaints.com"' not in html)
+check("the already-signed-in admin has no Re-send button either",
+      f'data-reinvite="{ME}"' not in html)
+check("with everyone signed in, no 'invited' badge remains",
+      'class="badge pending"' not in html)
+
 print("\n" + "=" * 62)
 print(f"PASSED: {len(passed)}    FAILED: {len(failed)}")
 if failed:

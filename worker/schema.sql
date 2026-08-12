@@ -171,7 +171,12 @@ CREATE TABLE IF NOT EXISTS staff (
   -- attribution intact while ending access immediately.
   active       INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
   created_at   TEXT    NOT NULL,
-  updated_at   TEXT    NOT NULL
+  updated_at   TEXT    NOT NULL,
+  -- Timestamp of the first successful sign-in, stamped once by loadStaff and
+  -- never updated after. NULL means "invited but never signed in", which is the
+  -- only state where the Users screen still offers "Re-send email" — once
+  -- they are in, re-sending a welcome email is meaningless.
+  first_seen_at TEXT
 );
 
 -- ---------------------------------------------------------------------------

@@ -75,7 +75,7 @@ export async function loadStaff(env, email) {
   if (!norm) return null;
 
   const row = await env.DB.prepare(
-    `SELECT email_norm, display_name, author_label, role, active
+    `SELECT email_norm, display_name, author_label, role, active, first_seen_at
        FROM staff
       WHERE email_norm = ?1`
   )
@@ -83,6 +83,19 @@ export async function loadStaff(env, email) {
     .first();
 
   if (!row || row.active !== 1) return null;
+
+  // Stamp the first successful sign-in, exactly once. The guarded UPDATE means
+  // this writes at most once per person ever — every later request finds
+  // first_seen_at already set and skips the write entirely, so the hot auth
+  // path stays read-only after someone's first visit. The Users screen reads
+  // this to stop offering "Re-send email" to people already in.
+  if (!row.first_seen_at) {
+    await env.DB.prepare(
+      `UPDATE staff SET first_seen_at = ?2 WHERE email_norm = ?1 AND first_seen_at IS NULL`
+    )
+      .bind(norm, new Date().toISOString())
+      .run();
+  }
 
   return {
     email: row.email_norm,
@@ -95,7 +108,7 @@ export async function loadStaff(env, email) {
 /** Every staff row, active and inactive, for the management screen. */
 export async function listStaff(env) {
   const { results } = await env.DB.prepare(
-    `SELECT email_norm, display_name, author_label, role, active, created_at, updated_at
+    `SELECT email_norm, display_name, author_label, role, active, created_at, updated_at, first_seen_at
        FROM staff
       ORDER BY active DESC, role, email_norm`
   ).all();

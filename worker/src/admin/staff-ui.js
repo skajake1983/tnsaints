@@ -182,6 +182,7 @@ export const USERS_STYLES =
            padding: 2px 8px; border-radius: 99px; }
   .badge.on { background: #e4f3ea; color: var(--ok); }
   .badge.off { background: #f6e5e5; color: var(--danger); }
+  .badge.pending { background: #fdf1dd; color: #9a6a12; }
 `;
 
 function roleOptions(current) {
@@ -195,6 +196,7 @@ export function usersBody({ staff, me, accessMode }) {
     .map((s) => {
       const inactive = s.active !== 1;
       const isMe = s.email_norm === me;
+      const signedIn = Boolean(s.first_seen_at);
       return `<tr${inactive ? ' class="inactive"' : ''}>
         <td data-label="Person">
           <strong>${esc(s.display_name)}</strong>${isMe ? ' <span class="who2">(you)</span>' : ''}<br>
@@ -207,13 +209,17 @@ export function usersBody({ staff, me, accessMode }) {
           </select>
         </td>
         <td data-label="Status">
-          <span class="badge ${inactive ? 'off' : 'on'}">${inactive ? 'no access' : 'active'}</span>
+          <span class="badge ${inactive ? 'off' : signedIn ? 'on' : 'pending'}">${
+            inactive ? 'no access' : signedIn ? 'active' : 'invited'
+          }</span>
         </td>
         <td data-label="Actions">
           ${
             inactive
               ? `<button class="abtn" data-activate="${esc(s.email_norm)}">Restore access</button>`
-              : `<button class="abtn" data-reinvite="${esc(s.email_norm)}">Re-send email</button>
+              // "Re-send email" only makes sense until they are in. Once they
+              // have signed in once, the welcome email has done its job.
+              : `${signedIn ? '' : `<button class="abtn" data-reinvite="${esc(s.email_norm)}">Re-send email</button>`}
                  <button class="abtn danger" data-deactivate="${esc(s.email_norm)}">Remove access</button>`
           }
         </td>
