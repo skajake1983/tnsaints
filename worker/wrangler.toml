@@ -76,7 +76,7 @@ ACCESS_AUD = "7f3323d37c62e2fcf6006d924b9ecdd3c0a2a8671e56a1cb3ba65f4413064875"
 #                  self-serves; a non-staff @tnsaints.com person still gets a
 #                  clean 403 from the staff gate.
 # Set this to match the Access policy you actually configured.
-ACCESS_EMAIL_MODE = "individual"
+ACCESS_EMAIL_MODE = "domain"
 
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links

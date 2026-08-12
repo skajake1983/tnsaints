@@ -235,15 +235,30 @@ someone remembers to extend a rule.
 |---|---|
 | Policy name | `Academy staff` |
 | Action | `Allow` |
-| Include → selector | **Emails** |
-| Value | every staff address, **listed individually** |
+| Include → selector | **Emails ending in** |
+| Value | `@tnsaints.com` |
 
-List addresses individually — including Brandon's `@tnsaints.com` address —
-rather than using **Emails ending in** → `@tnsaints.com`. It is tempting, since
-every coach is now on the domain, but the domain rule silently admits every
-*future* mailbox on it: an assistant, a shared inbox, a departing coach whose
-account has not been closed yet. Since `staff` is a second gate anyway this is
-belt and braces, but the belt is free.
+**Why the domain rule, not an individual list.** Access is only the *door* — it
+proves someone is a real, authenticated person from the org. It grants no role.
+The `staff` table (managed from the in-app **Users** screen) decides what anyone
+can actually do, and someone authenticated but absent from `staff` gets a clean
+"signed in, but not yet authorised" page and can see nothing.
+
+So admitting the whole domain does **not** make everyone an admin — nobody is
+anything until an admin adds them in the Users screen and picks a role. What it
+buys is a self-serve Users menu: add a coach there, they get the welcome email,
+they sign in, done — no dashboard step per person. A stray `@tnsaints.com`
+employee who reaches the login just hits the dead-end page.
+
+This is paired with `ACCESS_EMAIL_MODE = "domain"` in `wrangler.toml`, which
+tells the Users screen it can promise instant access. If you ever switch the
+policy back to an individual list, set that var back to `"individual"` so the
+screen resumes reminding you to add each person here too.
+
+> The one thing the domain rule cannot admit is a guest coach or evaluator
+> *without* an `@tnsaints.com` mailbox. That is rare; handle it by adding their
+> address to this policy individually (a second Include rule) and enabling
+> One-time PIN, or by giving them a mailbox.
 
 Under **Login methods**, enable **Azure AD only**. Leave One-time PIN off — see
 Step 4 for why.
@@ -303,16 +318,27 @@ npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_no
 `author_label` is how you are credited to parents in feedback emails later —
 the label parents see, not the email address.
 
+You have to add the **first** admin by command like this, because there is no
+one signed in yet to use the UI. Everyone after that is added from the site.
+
 🌐 **BROWSER** — open <https://admin.tnsaints.com>. You should get the Microsoft
 login, then the roster.
 
-Add the other coaches — 💻 **TERMINAL**:
+### Add everyone else from the Users screen
 
-```powershell
-npx wrangler d1 execute tnsaints --remote --command "INSERT INTO staff (email_norm, display_name, author_label, role, active, created_at, updated_at) VALUES ('coach@tnsaints.com', 'Coach Name', 'Coach Lastname', 'coach', 1, datetime('now'), datetime('now'))"
-```
+Once you are signed in as an admin, add the other coaches from
+**<https://admin.tnsaints.com/users>** — not the command line. Enter their work
+email, name, the label parents see, and a role, and they get a welcome email
+telling them to sign in with their `@tnsaints.com` Microsoft 365 login. Because
+the Access policy admits the whole domain (Step 5), that is the only step — they
+can sign in immediately, with the role you gave them and nothing more.
 
-Check who is on the list at any time — 💻 **TERMINAL**:
+The same screen lets you change a role, remove someone's access (kept, not
+deleted, so their evaluations keep their name), and re-send the welcome email.
+The last active admin cannot be removed or demoted, so you cannot lock the whole
+staff out by accident.
+
+Check who is on the list any time — from the screen, or 💻 **TERMINAL**:
 
 ```powershell
 npm run staff:list
