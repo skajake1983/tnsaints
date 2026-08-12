@@ -19,12 +19,14 @@ import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
 const BODY_SCRIPT = `
 (function () {
   var flash = document.getElementById('flash');
+  // Tap to dismiss. The toast is position:fixed, so showing or hiding it never
+  // moves anything on the page — the form stays exactly where it was.
+  if (flash) flash.addEventListener('click', function () { flash.hidden = true; });
   function say(msg, cls) {
     if (!flash) return;
     flash.textContent = msg;
     flash.className = 'flash ' + (cls || '');
     flash.hidden = false;
-    if (cls === 'bad') flash.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function post(url, body) {
@@ -142,10 +144,21 @@ export async function usersCsp() {
 export const USERS_STYLES =
   DIALOG_STYLES +
   `
-  .flash { padding: 11px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;
-           background: #eef2f8; border: 1px solid var(--line); }
-  .flash.good { background: #e4f3ea; border-color: #b6ddc6; color: var(--ok); font-weight: 600; }
-  .flash.bad { background: #f9e9e9; border-color: #e5b9b9; color: var(--danger); font-weight: 600; }
+  /* Transient action feedback ("Added…", "Role updated…") is a FIXED toast, not
+     an in-flow element. It overlays the page and is removed from layout entirely,
+     so appearing or disappearing never resizes or pushes the form. */
+  .flash { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+           width: min(560px, calc(100% - 32px)); padding: 12px 16px; border-radius: 10px;
+           font-size: 14px; z-index: 200; background: #06255c; color: #fff; border: 0;
+           box-shadow: 0 12px 34px rgba(6, 37, 92, .3); cursor: pointer; }
+  .flash.good { background: #1c7c4a; }
+  .flash.bad { background: #a32020; }
+  /* The permanent access banner stays in normal flow — it is not feedback and
+     never appears or disappears, so it cannot cause a shift. */
+  .notice { padding: 12px 14px; border-radius: 8px; margin-bottom: 20px; font-size: 14px;
+            background: #eef2f8; border: 1px solid var(--line); }
+  .notice.good { background: #e4f3ea; border-color: #b6ddc6; }
+  .notice.warn { background: #fdf0dd; border-color: #e8c893; }
   .addcard { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 22px; }
   .addcard h2 { font-size: 15px; margin: 0 0 12px; }
   .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
@@ -212,9 +225,9 @@ export function usersBody({ staff, me, accessMode }) {
   // a row is enough, or whether the Cloudflare dashboard also needs a touch.
   const accessNote =
     accessMode === 'domain'
-      ? `<div class="flash good" style="margin-bottom:20px">Anyone you add here with an
+      ? `<div class="notice good">Anyone you add here with an
          <strong>@tnsaints.com</strong> address can sign in immediately — no Cloudflare step needed.</div>`
-      : `<div class="flash" style="margin-bottom:20px;background:#fdf0dd;border-color:#e8c893">
+      : `<div class="notice warn">
          <strong>One extra step per person:</strong> after adding someone here, also add their email to
          the Cloudflare Access policy (Zero Trust → Access → Applications → TN Saints Admin), or they will
          be turned away at the login before this list is ever consulted. Ask about switching to

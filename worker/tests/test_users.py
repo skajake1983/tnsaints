@@ -184,6 +184,41 @@ check("it tells them to use their M365 login", "Microsoft 365" in invite)
 check("it carries no token or magic-link parameter",
       "token" not in invite.lower() and "?t=" not in invite, "a token leaked into the invite")
 
+
+print("\n=== 8. the Users page script is valid JS and its CSP hash matches ===")
+# A syntax error in the inline script silently disables every button on the
+# page (the browser refuses to run a script whose hash matches broken text).
+# Assert both: the served script parses, and the declared hash matches it.
+import base64, hashlib, tempfile
+sql(f"UPDATE staff SET role='admin', active=1 WHERE email_norm='{ME}'")
+req = urllib.request.Request(BASE + ADMIN + "/users", method="GET")
+req.add_header("Origin", ORIGIN)
+try:
+    with urllib.request.urlopen(req) as rsp:
+        csp = rsp.headers.get("Content-Security-Policy", "")
+        html = rsp.read().decode()
+except urllib.error.HTTPError as e:
+    csp, html = "", ""
+    check("the Users page is reachable as admin", False, f"got {e.code}")
+declared = re.search(r"script-src '(sha256-[^']+)'", csp)
+scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+check("the page carries a hashed inline script", bool(declared) and bool(scripts), f"csp={csp[:80]}")
+if declared and scripts:
+    actual = "sha256-" + base64.b64encode(hashlib.sha256(scripts[-1].encode("utf-8")).digest()).decode()
+    check("the declared hash matches the served script", declared.group(1) == actual,
+          f"{declared.group(1)} vs {actual}")
+    tmp = os.path.join(WORKER_DIR, ".users-script-check.js")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(scripts[-1])
+    try:
+        res = subprocess.run(["node", "--check", tmp], capture_output=True,
+                             shell=(os.name == "nt"), cwd=WORKER_DIR)
+        check("the served script is valid JavaScript", res.returncode == 0,
+              (res.stderr or b"").decode("utf-8", "replace")[:200])
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
+
 print("\n" + "=" * 62)
 print(f"PASSED: {len(passed)}    FAILED: {len(failed)}")
 if failed:

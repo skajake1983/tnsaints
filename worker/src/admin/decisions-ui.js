@@ -39,12 +39,14 @@ const PAGE_SCRIPT = `
     ? document.getElementById('reopenAllBtn').dataset.url
     : ((document.getElementById('batchMeta') || {}).dataset || {}).reopenUrl;
 
+  // Tap to dismiss. Fixed toast, so it never shifts the page — no scroll-jump
+  // to reach it either, which is why the old scrollIntoView is gone.
+  if (flash) flash.addEventListener('click', function () { flash.hidden = true; });
   function say(msg, cls) {
     if (!flash) return;
     flash.textContent = msg;
     flash.className = 'flash ' + (cls || '');
     flash.hidden = false;
-    if (cls === 'bad') flash.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // Every failure path funnels through here. Errors used to be shown for 2.5
@@ -430,10 +432,14 @@ export async function decisionsCsp() {
 }
 
 export const DECISION_STYLES = DIALOG_STYLES + `
-  .flash { padding: 11px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;
-           background: #eef2f8; border: 1px solid var(--line); }
-  .flash.good { background: #e4f3ea; border-color: #b6ddc6; color: var(--ok); font-weight: 600; }
-  .flash.bad { background: #f9e9e9; border-color: #e5b9b9; color: var(--danger); font-weight: 600; }
+  /* Fixed toast, removed from flow — appearing never shifts the review column
+     or the player table underneath it. Tap to dismiss. */
+  .flash { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+           width: min(560px, calc(100% - 32px)); padding: 12px 16px; border-radius: 10px;
+           font-size: 14px; z-index: 200; background: #06255c; color: #fff; border: 0;
+           box-shadow: 0 12px 34px rgba(6, 37, 92, .3); cursor: pointer; }
+  .flash.good { background: #1c7c4a; }
+  .flash.bad { background: #a32020; }
   .steps { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px; }
   .step { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px; }
   .step .n { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
