@@ -65,21 +65,41 @@ const STYLES = `
     font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-text-size-adjust: 100%;
   }
+  /*
+   * The staff header mirrors the public site's navbar: a white bar under a gold
+   * rule, with navy pill links that fill in on hover and for the current page.
+   * The site's own header CSS lives in index.html — this matches its look
+   * without sharing a stylesheet, the same way the colour tokens are kept in
+   * sync by hand. (Gold is an accent here, never link text: gold on white fails
+   * WCAG, so the pills are navy — see the --gold note above.)
+   */
   header {
-    background: var(--navy); color: #fff; padding: 12px 18px;
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    border-bottom: 3px solid var(--gold);
+    background: #fff;
+    border-bottom: 4px solid var(--gold);
+    box-shadow: 0 6px 18px rgba(6, 37, 92, .06);
   }
-  header .brand { display: flex; align-items: center; gap: 10px; }
-  header .brand img { width: 34px; height: 34px; display: block; }
-  header .mark { font-weight: 700; letter-spacing: .02em; line-height: 1.15; }
-  header .mark span { color: var(--gold); }
-  header .mark small { display: block; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .1em; color: #9fb4d6; }
-  header nav { display: flex; gap: 14px; margin-left: auto; flex-wrap: wrap; }
-  header nav a { color: var(--gold-soft); text-decoration: none; font-size: 14px; }
-  header nav a[aria-current="page"] { color: #fff; text-decoration: underline; }
-  header .who { font-size: 13px; color: #b9c6d6; }
+  header .nav-inner {
+    max-width: 1100px; margin: 0 auto; padding: 10px 18px;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  header .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; }
+  header .brand img { width: 44px; height: 44px; object-fit: contain; display: block; }
+  header .mark { font-weight: 800; letter-spacing: .01em; line-height: 1.1;
+    font-size: 16px; color: var(--navy); }
+  header .mark small { display: block; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .12em; color: var(--gold-ink); margin-top: 2px; }
+  header nav { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+  header nav a {
+    padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 700;
+    color: var(--navy); text-decoration: none;
+    transition: background .15s ease, color .15s ease;
+  }
+  header nav a:hover, header nav a:focus-visible { background: var(--navy-soft); color: #fff; }
+  header nav a[aria-current="page"] { background: var(--navy); color: #fff; }
+  header .who {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    padding-left: 14px; border-left: 1px solid var(--line); white-space: nowrap;
+  }
   main { max-width: 1100px; margin: 0 auto; padding: 20px 18px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
@@ -145,9 +165,9 @@ const STYLES = `
 
     .cards { grid-template-columns: repeat(2, 1fr); }
     .card .n { font-size: 22px; }
-    header { padding: 10px 14px; }
-    header nav { width: 100%; margin-left: 0; order: 3; gap: 16px; }
-    header .who { font-size: 12px; margin-left: auto; }
+    header .nav-inner { padding: 10px 14px; gap: 10px; }
+    header nav { order: 3; flex-basis: 100%; width: 100%; margin-left: 0; gap: 8px; }
+    header .who { order: 2; margin-left: auto; padding-left: 0; border-left: 0; font-size: 12px; }
     .bigbtn { width: 100%; }
     .toolbar { gap: 10px; }
   }
@@ -183,12 +203,14 @@ export function page({ title, principal, nav = [], current = '', body, extraStyl
 </head>
 <body>
 <header>
-  <div class="brand">
-    <img src="/logo.png" width="34" height="34" alt="">
-    <div class="mark">TN <span>Saints</span><small>Staff</small></div>
+  <div class="nav-inner">
+    <a class="brand" href="/">
+      <img src="/logo.png" width="44" height="44" alt="Tennessee Saints">
+      <div class="mark">Tennessee Saints<small>Staff Portal</small></div>
+    </a>
+    <nav>${links}</nav>
+    ${principal ? `<div class="who">${esc(principal.displayName)} · ${esc(principal.role)}</div>` : ''}
   </div>
-  <nav>${links}</nav>
-  ${principal ? `<div class="who">${esc(principal.displayName)} · ${esc(principal.role)}</div>` : ''}
 </header>
 <main>
 ${body}
