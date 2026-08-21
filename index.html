@@ -22,7 +22,7 @@
                       Tennessee. We develop the whole player - mentally,
                       physically, and spiritually. -->
   <meta property="og:title" content="Free Academy Evaluation — Sat, Aug 29 | Tennessee Saints" />
-  <meta property="og:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th–6th grade, spots are limited, register by 8/22. A year-round Christian academy developing the whole player — mentally, physically, and spiritually." />
+  <meta property="og:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th–6th grade, spots are limited, register by 8/27. A year-round Christian academy developing the whole player — mentally, physically, and spiritually." />
   <!-- 1200x630 as Facebook and LinkedIn expect. The old value was a 500x500
        transparent PNG of the logo, which they letterbox and composite onto a
        flat colour — so every shared link showed a boxed logo instead of the
@@ -32,19 +32,19 @@
        the URL, separately from the page scrape, so re-running the Sharing
        Debugger will not replace an image at an unchanged path. If this card is
        ever re-cut, bump the -vN suffix rather than overwriting the file. -->
-  <meta property="og:image" content="https://tnsaints.com/social-card-v3.jpg" />
+  <meta property="og:image" content="https://tnsaints.com/social-card-v4.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 22 at tnsaints.com." />
+  <meta property="og:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 27 at tnsaints.com." />
   <meta property="og:url" content="https://tnsaints.com/" />
   <meta property="og:site_name" content="Tennessee Saints" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Free Academy Evaluation — Sat, Aug 29 | Tennessee Saints" />
-  <meta name="twitter:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th–6th grade, spots are limited, register by 8/22." />
-  <meta name="twitter:image" content="https://tnsaints.com/social-card-v3.jpg" />
-  <meta name="twitter:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 22 at tnsaints.com." />
+  <meta name="twitter:description" content="9–11 AM at Grassland Heights Baptist Church, Franklin TN. 4th–6th grade, spots are limited, register by 8/27." />
+  <meta name="twitter:image" content="https://tnsaints.com/social-card-v4.jpg" />
+  <meta name="twitter:image:alt" content="Free Academy Evaluation, Saturday August 29, 9 to 11 AM, Grassland Heights Baptist Church, Franklin TN. Register by August 27 at tnsaints.com." />
   <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
   <link rel="apple-touch-icon" href="Saints%20Logo%20Updated%20v2_transparent.png" />
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin />
@@ -1355,7 +1355,7 @@
       opacity: 0.85;
     }
 
-    /* --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. --- */
+    /* --- 8/29 evaluation banner. Auto-hides after the 8/27 deadline; safe to delete after. --- */
     .event-banner {
       display: none;
       position: relative;
@@ -1538,7 +1538,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
 <body>
-  <!-- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after.
+  <!-- 8/29 evaluation banner. Auto-hides after the 8/27 deadline; safe to delete after.
        Two presentations of the same announcement: the designed artwork on wide
        screens, and a text strip on narrow ones. A 6:1 banner scaled to a phone
        renders its headline about 8px tall, so the artwork is not a responsive
@@ -1554,7 +1554,7 @@
             <span class="ebc-date">8/29 &middot; 9&ndash;11 AM</span>
             <span class="ebc-pipe" aria-hidden="true"></span>
             <span>Franklin, TN</span>
-            <span class="ebc-badge">Register by 8/22</span>
+            <span class="ebc-badge">Register by 8/27</span>
             <span class="ebc-limited">Spots are limited</span>
             <span id="event-banner-countdown"></span>
           </p>
@@ -1831,7 +1831,7 @@
                 <select id="form-purpose" name="purpose" required>
                   <!-- Evaluation is first (and therefore the default) while
                        registration is open. initDefaultPurpose() falls back to
-                       General Contact once the 8/22 deadline passes. -->
+                       General Contact once the 8/27 deadline passes. -->
                   <option value="evaluation">Free Academy Evaluation Aug 2026</option>
                   <option value="general">General Contact</option>
                   <option value="player-interest">Academy Interest</option>
@@ -1879,7 +1879,7 @@
         <p>Spots are limited, so the fastest way to help is to pass it along.</p>
         <!-- Hand them the wording. Not knowing what to say is what actually
              stops people sharing, far more often than not finding a button. -->
-        <p class="share-copy-text" id="share-text">Tennessee Saints is hosting a FREE basketball evaluation for 4th&ndash;6th graders &mdash; Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration closes 8/22. https://tnsaints.com</p>
+        <p class="share-copy-text" id="share-text">Tennessee Saints is hosting a FREE basketball evaluation for 4th&ndash;6th graders &mdash; Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration closes 8/27. https://tnsaints.com</p>
         <div class="share-actions">
           <a class="share-btn share-fb" id="share-facebook" href="#" target="_blank" rel="noopener noreferrer">
             <i class="fab fa-facebook-f" aria-hidden="true"></i> Share on Facebook
@@ -1987,7 +1987,7 @@
     const TURNSTILE_SITE_KEY = IS_LOCAL
       ? '1x00000000000000000000AA'
       : '0x4AAAAAAEKmJntXjTbt2yuF';
-    const REGISTRATION_CLOSES_AT = new Date('2026-08-22T23:59:59-05:00');
+    const REGISTRATION_CLOSES_AT = new Date('2026-08-27T23:59:59-05:00');
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const evaluationGateMessage = 'Registration requires a completed free evaluation first. Please submit the "Free Player Evaluation Request" form and we will schedule your date.';
@@ -2840,16 +2840,16 @@
     const footerYear = document.getElementById('footer-year');
     if (footerYear) footerYear.textContent = new Date().getFullYear();
 
-    // --- 8/29 evaluation banner. Auto-hides after the 8/22 deadline; safe to delete after. ---
+    // --- 8/29 evaluation banner. Auto-hides after the 8/27 deadline; safe to delete after. ---
     (function initEventBanner() {
       const banner = document.getElementById('event-banner');
       const closeBtn = document.getElementById('event-banner-close');
       const countdown = document.getElementById('event-banner-countdown');
       if (!banner || !closeBtn || !countdown) return;
 
-      // 11:59:59 PM Central on 8/22/2026. Explicit offset so the cutoff is the
+      // 11:59:59 PM Central on 8/27/2026. Explicit offset so the cutoff is the
       // same moment for every visitor regardless of their local timezone.
-      const deadline = new Date('2026-08-22T23:59:59-05:00');
+      const deadline = new Date('2026-08-27T23:59:59-05:00');
       const now = new Date();
 
       if (now > deadline || sessionStorage.getItem('tns-eval-banner-dismissed') === '1') {
@@ -2859,7 +2859,7 @@
       const msLeft = deadline - now;
       const daysLeft = Math.ceil(msLeft / 86400000);
       countdown.textContent =
-        daysLeft > 1 ? `Register by Aug 22 — ${daysLeft} days left`
+        daysLeft > 1 ? `Register by Aug 27 — ${daysLeft} days left`
                      : 'Registration closes tonight';
 
       banner.classList.add('show');

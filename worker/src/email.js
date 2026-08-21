@@ -384,7 +384,7 @@ function parentHtml(env, data, result) {
         <div style="background:#fff;border:1px solid #dfe3ea;border-left:3px solid #f5cf00;border-radius:6px;padding:12px 14px;margin:0 0 14px;font-size:14px;line-height:1.55;color:#13233d;">
           Tennessee Saints is hosting a FREE basketball evaluation for 4th&ndash;6th graders &mdash;
           Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration
-          closes 8/22. https://tnsaints.com
+          closes 8/27. https://tnsaints.com
         </div>
         <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Ftnsaints.com%2F"
            style="display:inline-block;background:#1877f2;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Share on Facebook</a>
