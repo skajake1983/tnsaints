@@ -94,6 +94,11 @@ NOTIFY_EMAIL_TO = "info@tnsaints.com"
 NOTIFY_EMAIL_FROM = "Tennessee Saints <noreply@mail.tnsaints.com>"
 SEND_PARENT_CONFIRMATION = "true"
 
+# Daily roster digest to NOTIFY_EMAIL_TO. Turned OFF on 2026-09-08: the 8/29
+# evaluation is done, so the daily internal roster email is just noise now.
+# Set to "true" (or delete this line) to resume it for a future event.
+ROSTER_DIGEST_ENABLED = "false"
+
 # Resend free plan sends at most 100 emails/day. Two per registration means a
 # full 50-seat day sits exactly on the ceiling, so the Worker meters its own
 # spend. Alerts may use the whole budget; parent receipts stop once fewer than

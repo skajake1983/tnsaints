@@ -420,6 +420,17 @@ function parentHtml(env, data, result) {
  * Never throws — the cron handler passes it to ctx.waitUntil().
  */
 export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
+  // Kill switch. The 8/29 evaluation campaign is over, so the owner turned off
+  // the daily internal roster digest (2026-09-08) to stop the noise and free a
+  // Resend credit a day. The cron still fires; this makes it a no-op. Set
+  // ROSTER_DIGEST_ENABLED back to "true" (or remove it) to resume the digest,
+  // e.g. when a new evaluation event opens. Default when unset is enabled, so
+  // no other environment's behaviour changes.
+  if (String(env.ROSTER_DIGEST_ENABLED ?? 'true').toLowerCase() === 'false') {
+    console.log(JSON.stringify({ event: 'roster_digest_disabled', reason }));
+    return;
+  }
+
   let rows;
   try {
     // Deliberately NOT medical_notes or signature.
