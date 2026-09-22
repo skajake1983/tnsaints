@@ -1,0 +1,52 @@
+name: eval-preview
+
+# Keeps the shareable-link preview (Open Graph / Twitter tags in index.html)
+# correct for the current date. The site is GitHub Pages (static), so the tags
+# must physically be in the served HTML — this job rewrites them by date:
+# evergreen by default, the eval card only until eval.activeUntil in
+# eval-preview.json, then back to evergreen on its own.
+#
+# It commits ONLY when the preview actually changes (the generator is
+# idempotent), so a normal day produces no commit. The push filter deliberately
+# omits index.html so the job's own commit cannot retrigger it.
+
+on:
+  schedule:
+    - cron: '17 * * * *'          # hourly (offset to dodge top-of-hour delays)
+  push:
+    branches: [main]
+    paths:
+      - 'eval-preview.json'
+      - 'scripts/apply-eval-preview.py'
+      - '.github/workflows/eval-preview.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: eval-preview
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply the date-appropriate link preview
+        run: python scripts/apply-eval-preview.py
+      - name: Commit if the preview changed
+        run: |
+          if [ -n "$(git status --porcelain index.html)" ]; then
+            git config user.name  "tnsaints-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add index.html
+            git commit -m "chore: auto-update link preview by eval date [skip ci]"
+            git push
+            echo "Committed a preview change."
+          else
+            echo "Preview already correct for today; nothing to commit."
+          fi
