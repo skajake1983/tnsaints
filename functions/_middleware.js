@@ -48,7 +48,15 @@ export async function onRequest(context) {
       : null;
     const evalActive =
       until && !Number.isNaN(until.getTime()) && new Date() <= until;
-    if (!evalActive) return response; // evergreen tags in the HTML stand
+
+    // Evergreen: pass the page through unchanged, tagged so the mode is
+    // observable in production (the output is otherwise identical to the
+    // static HTML, so this header is the only way to confirm the function ran).
+    if (!evalActive) {
+      const passthrough = new Response(response.body, response);
+      passthrough.headers.set('x-tns-preview', 'evergreen');
+      return passthrough;
+    }
 
     const p = EVAL_PREVIEW;
     const content = (value) => ({
@@ -56,7 +64,7 @@ export async function onRequest(context) {
         el.setAttribute('content', value);
       },
     });
-    return new HTMLRewriter()
+    const rewritten = new HTMLRewriter()
       .on('meta[property="og:title"]', content(p.title))
       .on('meta[property="og:description"]', content(p.description))
       .on('meta[property="og:image"]', content(p.image))
@@ -66,6 +74,8 @@ export async function onRequest(context) {
       .on('meta[name="twitter:image"]', content(p.image))
       .on('meta[name="twitter:image:alt"]', content(p.alt))
       .transform(response);
+    rewritten.headers.set('x-tns-preview', 'eval');
+    return rewritten;
   } catch (err) {
     return response; // fail-safe: serve the page unchanged
   }
