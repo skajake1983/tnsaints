@@ -2,6 +2,9 @@
 worker/.wrangler/
 worker/node_modules/
 
+# Cloudflare Pages local dev cache (created by `wrangler pages dev`)
+.wrangler/
+
 # Local secrets and environment overrides
 worker/.dev.vars
 worker/.env
