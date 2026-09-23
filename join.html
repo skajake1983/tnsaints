@@ -71,6 +71,12 @@
     }
     .join-card h2 { font-size: 1.4rem; color: var(--saints-blue-dark); margin: 14px 0 4px; }
     .join-card .price-note { color: var(--saints-muted); font-size: 0.92rem; margin: 0 0 18px; }
+    .fee-note {
+      background: var(--saints-light); border: 1px solid var(--saints-gray);
+      border-left: 4px solid var(--saints-gold); border-radius: 8px;
+      padding: 12px 14px; font-size: 0.9rem; text-align: left; margin: 12px 0 16px;
+    }
+    .fee-note strong { color: var(--saints-blue-dark); }
     .paypal-wrap { max-width: 320px; margin: 0 auto; min-height: 46px; }
     .fine { color: var(--saints-muted); font-size: 0.82rem; margin: 16px 0 0; }
 
@@ -111,7 +117,8 @@
       <aside class="panel join-card">
         <span class="tag">Monthly Membership</span>
         <h2>Become a Saint</h2>
-        <p class="price-note">Billed monthly through PayPal. You&rsquo;ll see the exact amount before you confirm.</p>
+        <div class="fee-note"><strong>One-time $40 setup fee</strong> when you join &mdash; it covers your player&rsquo;s practice shirt. It&rsquo;s charged once at sign-up, then it&rsquo;s just your monthly membership.</div>
+        <p class="price-note">Billed monthly through PayPal. You&rsquo;ll see the full amount &mdash; the $40 setup fee plus your first month &mdash; before you confirm.</p>
 
         <div class="paypal-wrap">
           <div id="paypal-button-container-P-3A8355760P817903NNKZ4ZGQ"></div>
