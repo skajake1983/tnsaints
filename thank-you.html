@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thank You | Tennessee Saints</title>
+  <meta name="description" content="Thank you — your payment to Tennessee Saints Basketball Academy was received." />
+  <!-- Payment return page; no reason for search engines to index it. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
+  <style>
+    :root {
+      --saints-blue: #0b3a8d;
+      --saints-blue-dark: #06255c;
+      --saints-gold: #f5cf00;
+      --saints-light: #f3f5f9;
+      --saints-gray: #dfe3ea;
+      --saints-text: #13233d;
+      --saints-ok: #14663a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(160deg, #002448 0%, var(--saints-blue) 100%);
+      color: var(--saints-text);
+      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+      max-width: 520px;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .card-head {
+      background: var(--saints-blue-dark);
+      border-bottom: 4px solid var(--saints-gold);
+      padding: 20px 26px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .card-head img { width: 48px; height: 48px; object-fit: contain; }
+    .card-head strong { color: #fff; font-size: 1.05rem; display: block; }
+    .card-head span { color: rgba(255, 255, 255, 0.75); font-size: 0.85rem; }
+
+    .card-body { padding: 30px 26px; text-align: center; }
+
+    .check {
+      width: 66px;
+      height: 66px;
+      border-radius: 50%;
+      background: var(--saints-ok);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+    }
+
+    h1 { margin: 0 0 8px; font-size: 1.5rem; color: var(--saints-blue-dark); }
+    p { margin: 0 0 14px; }
+    .muted { color: #536277; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 22px 0 4px; }
+
+    .btn {
+      flex: 1 1 auto;
+      padding: 12px 22px;
+      border: 0;
+      border-radius: 999px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .btn-primary { background: var(--saints-blue-dark); color: #fff; }
+    .btn-primary:hover { background: var(--saints-blue); }
+
+    .contact { font-size: 0.9rem; color: #536277; margin: 18px 0 0; }
+    .contact a { color: var(--saints-blue); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-head">
+      <img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="" />
+      <div>
+        <strong>Tennessee Saints</strong>
+        <span>Year-Round Basketball Academy</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="check" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="34" height="34" fill="none">
+          <path d="M20 6 9 17l-5-5" stroke="#fff" stroke-width="2.6"
+                stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+
+      <h1>Thank you!</h1>
+      <p>Your payment went through PayPal. A receipt is on its way to your email
+        from PayPal &mdash; that&rsquo;s your confirmation.</p>
+      <p class="muted">We&rsquo;re glad to have your family with the Tennessee Saints.</p>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="/">Back to tnsaints.com</a>
+      </div>
+
+      <p class="contact">Questions about your payment or your player&rsquo;s spot? Email
+        <a href="mailto:info@tnsaints.com">info@tnsaints.com</a>.</p>
+    </div>
+  </div>
+</body>
+</html>
