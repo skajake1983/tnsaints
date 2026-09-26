@@ -94,6 +94,8 @@ const STYLES = `${BRAND_TOKENS}
   .item-sub { color: var(--muted); font-size: 15px; }
   ul.plain, ol.plain { margin: 0 0 12px; padding-left: 20px; }
   header nav form { margin: 0; }
+  .waiver { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px;
+           padding: 14px 16px; margin: 0 0 18px; background: #fafbfd; font-size: 16px; }
   footer { color: var(--muted); font-size: 14px; text-align: center; padding: 0 18px 32px; }
   footer a { color: var(--muted); }
   @media (max-width: 560px) {

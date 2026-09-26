@@ -78,12 +78,21 @@ import {
 import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
 import { crossSiteCheck, originAllowed } from '../lib/csrf.js';
+import { readForm } from '../lib/body.js';
+import { sendEnrollmentOffer } from '../email.js';
+import { portalOrigin } from '../auth/magic.js';
+import {
+  getProgram, listGroups, queue as enrollmentQueue, offerSeat, waitlist as waitlistEnrollment,
+  decline as declineEnrollment, expireOffers, householdEmails, enrollmentWithGroup, priceLine,
+} from '../programs/enrollment.js';
+import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from './enrollments-ui.js';
 import { choice } from '../lib/flags.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
   { href: '/eval', label: 'Evaluations' },
   { href: '/decisions', label: 'Decisions' },
+  { href: '/enrollments', label: 'Enrollments' },
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -158,7 +167,7 @@ function adminCrossSite(request, env, ctx, principal, isDev, pathname) {
  * Everything on this hostname is gated. There is no public path here by
  * design — see the module comment on failing closed.
  */
-export async function handleAdmin(request, env, ctx, path) {
+export async function handleAdmin(request, env, ctx, path, base = '') {
   const url = new URL(request.url);
   // Resolved by the dispatcher, which strips the local development prefix. Do
   // not read url.pathname directly here — that would make every route below
@@ -227,6 +236,23 @@ export async function handleAdmin(request, env, ctx, path) {
 
   if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
+  }
+
+  // --- Enrollment requests (admin only) --------------------------------------
+  if (pathname === '/enrollments' && request.method === 'GET') {
+    if (!can(principal, 'enrollments:manage')) {
+      return htmlResponse(page({ title: 'Enrollments', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Only academy admins can offer seats.</p>' }), { status: 403 });
+    }
+    return await renderEnrollments(env, principal, url, base);
+  }
+  const enrollAct = pathname.match(/^\/enrollments\/(\d{1,12})\/(offer|waitlist|decline)$/);
+  if (enrollAct && request.method === 'POST') {
+    if (!can(principal, 'enrollments:manage')) {
+      return htmlResponse(page({ title: 'Enrollments', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Only academy admins can offer seats.</p>' }), { status: 403 });
+    }
+    return await handleEnrollmentAction(request, env, ctx, principal, Number(enrollAct[1]), enrollAct[2], base);
   }
 
   // --- User management (admin only) ----------------------------------------
@@ -1337,4 +1363,100 @@ async function renderRoster(env, principal) {
   return new Response(html, {
     headers: adminHeaders({ 'Content-Security-Policy': await rosterCsp() }),
   });
+}
+
+// --- Enrollment requests ---------------------------------------------------------
+//
+// The queue where applications become seats. Admin-only (enrollments:manage).
+// Plain forms, post-redirect-get; see admin/enrollments-ui.js.
+
+/** The academy is the one approval-mode program in Phase 1. */
+const ENROLLMENT_PROGRAM = 'academy';
+
+async function renderEnrollments(env, principal, url, base) {
+  const program = await getProgram(env, ENROLLMENT_PROGRAM);
+  if (!program) {
+    return htmlResponse(page({ title: 'Enrollments', principal, nav: NAV, current: '/enrollments',
+      body: '<h1>Enrollment requests</h1><p class="sub">The academy program has not been set up.</p>' }));
+  }
+  // Keep statuses honest on view: lapsed offers go back to the waiting list.
+  // Their seats were already free — a lapsed offer stops counting at once.
+  await expireOffers(env);
+  const [groups, rows] = await Promise.all([listGroups(env, program.id), enrollmentQueue(env, program.id)]);
+  return htmlResponse(
+    page({
+      title: 'Enrollments',
+      principal,
+      nav: NAV,
+      current: '/enrollments',
+      body: enrollmentsBody({ program, groups, rows, message: url.searchParams.get('msg'), base }),
+      extraStyles: ENROLLMENT_STYLES,
+    })
+  );
+}
+
+async function handleEnrollmentAction(request, env, ctx, principal, enrollmentId, action, base) {
+  const back = (msg) =>
+    new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/enrollments?msg=${msg}` }) });
+  let form;
+  try {
+    form = await readForm(request);
+  } catch {
+    form = null;
+  }
+  if (!form) return back('state');
+
+  const enrollment = await env.DB.prepare(`SELECT id, program_id FROM enrollments WHERE id = ?1`)
+    .bind(enrollmentId)
+    .first();
+  if (!enrollment) return back('state');
+  const log = (act, detail) =>
+    ctx.waitUntil(audit(env, { actor: principal.email, action: act, subjectType: 'enrollment', subjectId: enrollmentId, detail }));
+
+  if (action === 'offer') {
+    const groupId = Number(form.get('group_id'));
+    const program = await getProgram(env, enrollment.program_id);
+    if (!Number.isInteger(groupId) || !program) return back('state');
+    const result = await offerSeat(env, {
+      enrollmentId, groupId, staffEmail: principal.email, holdDays: Number(program.offer_hold_days) || 7,
+    });
+    if (!result.ok) return back(result.reason);
+    log('enrollment.offer', { group: groupId });
+    const e = await enrollmentWithGroup(env, enrollmentId);
+    const sent = await sendEnrollmentOffer(env, {
+      to: await householdEmails(env, enrollmentId),
+      programName: e.program_name,
+      groupName: e.group_name,
+      schedule: e.schedule_summary,
+      location: e.location || '',
+      startsOn: e.starts_on || '',
+      priceLine: priceLine(program),
+      payBy: formatPayBy(result.expiresAt),
+      url: `${portalOrigin(env)}/`,
+    });
+    return back(sent.ok ? 'offered' : 'offered-no-email');
+  }
+
+  if (action === 'waitlist') {
+    if (!(await waitlistEnrollment(env, { enrollmentId, staffEmail: principal.email }))) return back('state');
+    log('enrollment.waitlist');
+    return back('waitlisted');
+  }
+
+  if (action === 'decline') {
+    const reason = String(form.get('reason') || '');
+    if (!DECLINE_REASONS.some(([v]) => v === reason)) return back('state');
+    if (!(await declineEnrollment(env, { enrollmentId, staffEmail: principal.email, reason }))) return back('state');
+    log('enrollment.decline', { reason });
+    return back('declined');
+  }
+
+  return back('state');
+}
+
+/** "Saturday, October 3" in Central time, for the pay-by line of the offer email. */
+function formatPayBy(isoString) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric',
+  }).format(new Date(isoString));
 }

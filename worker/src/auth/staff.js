@@ -41,6 +41,8 @@ const CAPABILITIES = {
     'messages:send',
     'staff:manage',
     'events:manage',
+    // Offer seats in scheduled groups, waitlist, decline (programs/enrollment.js).
+    'enrollments:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not

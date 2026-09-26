@@ -338,6 +338,68 @@ export async function sendHouseholdInvite(env, { to, inviterName, familyName, ur
   });
 }
 
+/**
+ * "A place is ready" — a seat offer, with the schedule and the pay-by date.
+ *
+ * Receipt lane, to every guardian in the family (Resend counts each address).
+ * Names no child: a family with two applicants signs in to see which one. The
+ * point of the email is the schedule and the deadline, so a family can decide
+ * before paying anything.
+ */
+export async function sendEnrollmentOffer(env, { to, programName, groupName, schedule, location, startsOn, priceLine, payBy, url }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  if (!to.length) return { ok: false, error: 'no recipients' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#14663a;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">A place is ready — ${escapeHtml(programName)}</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">
+      <p style="margin-top:0;">Good news: we have a place for your child in <strong>${escapeHtml(groupName)}</strong>.</p>
+      <table style="border-collapse:collapse;font-size:14px;margin:12px 0;">
+        ${row('When', schedule)}
+        ${row('Where', location)}
+        ${row('First session', startsOn)}
+        ${row('Cost', priceLine)}
+        ${row('Complete by', payBy)}
+      </table>
+      <p style="margin:18px 0;">
+        <a href="${escapeHtml(url)}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Sign in to accept the place</a>
+      </p>
+      <p style="color:#536277;font-size:14px;">If the place isn't taken by then, it goes to the next family and your child
+      stays on the waiting list. Can't make this schedule? Reply and let us know. Questions: ${escapeHtml(contact)}.</p>
+    </div>
+  </div>`;
+
+  const text = [
+    `Good news: we have a place for your child in ${groupName} (${programName}).`,
+    '',
+    `When: ${schedule}`,
+    location ? `Where: ${location}` : '',
+    startsOn ? `First session: ${startsOn}` : '',
+    `Cost: ${priceLine}`,
+    `Complete by: ${payBy}`,
+    '',
+    `Sign in to accept the place: ${url}`,
+    '',
+    "If the place isn't taken by then, it goes to the next family and your child stays on the waiting list.",
+    `Questions: ${contact}`,
+  ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
+
+  return sendMetered(env, 'receipt', {
+    to,
+    subject: `A place is ready: ${programName}, ${groupName}`,
+    html,
+    text,
+    replyTo: contact,
+  });
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>

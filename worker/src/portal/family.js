@@ -25,9 +25,12 @@ import { setupPage, dashboardPage, childPage, contactsPage, accountPage } from '
 import { redirect } from './auth-pages.js';
 import { notFoundResponse } from './ui.js';
 import { guardianRoutes } from './guardians.js';
+import { applyRoutes } from './apply.js';
+import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
 
 const NOTICES = {
   joined: "Welcome — you've joined the family.",
+  applied: "Application received. We'll email you when a place in a group is ready.",
   contacts: 'Emergency contacts saved.',
   claimed: 'Added to your family.',
   'not-claimed': "That child couldn't be added. They may already be in a family.",
@@ -107,14 +110,17 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
   }
 
   if (pathname === '/' && method === 'GET') {
-    const [guardians, children, contacts, claimable] = await Promise.all([
+    const [guardians, children, contacts, claimable, enrollments, academy] = await Promise.all([
       data.listGuardians(env, accountId),
       data.listChildren(env, accountId),
       data.listEmergencyContacts(env, accountId),
       data.claimableChildren(env, accountId),
+      familyEnrollments(env, accountId),
+      getProgram(env, 'academy'),
     ]);
     return dashboardPage(rc, {
-      household, guardians, children, contacts, claimable,
+      household, guardians, children, contacts, claimable, enrollments,
+      academy: academy && programOpen(academy) ? academy : null,
       notice: NOTICES[url.searchParams.get('notice')] || '',
     });
   }
@@ -159,6 +165,9 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       return redirect(rc.url(`/?notice=${playerId ? 'claimed' : 'not-claimed'}`));
     });
   }
+
+  const application = await applyRoutes({ env, ctx, request, rc, session, pathname, method, readForm });
+  if (application) return application;
 
   const childMatch = /^\/children\/(\d{1,12})(\/medical)?$/.exec(pathname);
   if (childMatch) {

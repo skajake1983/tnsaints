@@ -19,6 +19,7 @@ import { validateRegistration, botSignals } from './validate.js';
 import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
 import { cleanupExpiredAuth } from './auth/cleanup.js';
+import { expireOffers } from './programs/enrollment.js';
 import { flag } from './lib/flags.js';
 import { audit } from './auth/staff.js';
 import {
@@ -46,7 +47,7 @@ export default {
     const route = resolveSurface(request, env);
     if (route.surface === 'admin') {
       try {
-        return await handleAdmin(request, env, ctx, route.path);
+        return await handleAdmin(request, env, ctx, route.path, route.base);
       } catch (err) {
         console.error('Unhandled admin error:', err?.stack || err?.message || err);
         return new Response('Something went wrong. Try again, or text Jacob.', {
@@ -124,6 +125,8 @@ export default {
     ctx.waitUntil(sendRosterDigest(env, { reason: event.cron || 'scheduled' }));
     // Spent sign-in links, sessions and rate-limit windows. Bounded per run.
     ctx.waitUntil(cleanupExpiredAuth(env));
+    // Lapsed seat offers back to the waiting list (their seats are already free).
+    ctx.waitUntil(expireOffers(env));
   },
 };
 

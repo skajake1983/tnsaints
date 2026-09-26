@@ -47,7 +47,26 @@ function medicalBadge(status) {
   return '<span class="badge warn">Medical answer needed</span>';
 }
 
-export function dashboardPage(rc, { household, guardians, children, contacts, claimable, notice = '' }) {
+/** One line per child about the academy: where the application stands, or how to apply. */
+function academyLine(rc, child, enrollments, academy) {
+  const e = enrollments.find((x) => Number(x.player_id) === Number(child.id) && x.program_id === 'academy'
+    && ['applied', 'waitlist', 'offered', 'active', 'past_due'].includes(x.status));
+  if (!e) {
+    return academy ? `<a href="${esc(rc.url(`/children/${child.id}/apply/academy`))}">Apply to the academy</a>` : '';
+  }
+  const until = e.offer_expires_at ? new Date(e.offer_expires_at).toLocaleDateString('en-US',
+    { timeZone: 'America/Chicago', month: 'long', day: 'numeric' }) : '';
+  if (e.status === 'applied') return '<span class="badge ok">Academy: application received</span>';
+  if (e.status === 'waitlist') return '<span class="badge warn">Academy: on the waiting list</span>';
+  if (e.status === 'offered') {
+    return `<span class="badge ok">Place offered: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>`;
+  }
+  if (e.status === 'past_due') return '<span class="badge warn">Academy: payment needed</span>';
+  return `<span class="badge ok">Academy: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;
+}
+
+export function dashboardPage(rc, { household, guardians, children, contacts, claimable, enrollments = [],
+  academy = null, notice = '' }) {
   const kids = children.length
     ? `<ul class="cards-list">${children
         .map((c) => {
@@ -57,7 +76,8 @@ export function dashboardPage(rc, { household, guardians, children, contacts, cl
             .join(' · ');
           return `<li class="item">
   <div><a class="item-title" href="${esc(rc.url(`/children/${c.id}`))}">${esc(c.display_name)}</a>
-  ${details ? `<div class="item-sub">${esc(details)}</div>` : ''}</div>
+  ${details ? `<div class="item-sub">${esc(details)}</div>` : ''}
+  <div class="item-sub">${academyLine(rc, c, enrollments, academy)}</div></div>
   ${medicalBadge(c.medical_status)}
 </li>`;
         })
