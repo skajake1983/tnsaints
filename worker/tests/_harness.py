@@ -133,7 +133,41 @@ def staff_email():
     return email
 
 
+def require_registration_open(base_url):
+    """Refuse to run unless the local evaluation registration window is open.
+
+    Most suites register players. The window comes from REGISTRATION_CLOSES_AT,
+    and its value in wrangler.toml is a real production deadline, which passes.
+    After it does, every registration is refused as "closed" and a full run
+    fails dozens of checks for no code reason. That happened on 2026-09-26, a
+    month after the 8/27 deadline: 29 failures in the first suite, all of them
+    the same refusal.
+
+    The fix is a far-future date in .dev.vars, which overrides wrangler.toml
+    locally and is never deployed. This check makes a missing override say
+    exactly that instead of looking like a regression.
+    """
+    try:
+        with urllib.request.urlopen(base_url + "/api/availability", timeout=10) as r:
+            body = json.loads(r.read().decode())
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        sys.exit(
+            f"\nREFUSING TO RUN.\n"
+            f"  Could not read {base_url}/api/availability ({exc}).\n"
+            f"  Start the Worker first:  cd worker && npm run dev\n"
+        )
+    if not body.get("registration_open"):
+        sys.exit(
+            "\nREFUSING TO RUN.\n"
+            f"  The local registration window is closed (closes_at={body.get('closes_at')}).\n"
+            "  The suites register players, so those checks would all fail.\n"
+            "  Pin a future date in worker/.dev.vars and restart `npm run dev`:\n"
+            "      REGISTRATION_CLOSES_AT=2099-12-31T23:59:59-05:00\n"
+        )
+
+
 def preflight(base_url):
     """Run every guard. Call this before the first request in a suite."""
     require_local(base_url)
     require_email_disabled()
+    require_registration_open(base_url)

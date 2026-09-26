@@ -50,6 +50,16 @@ EMAIL_DAILY_LIMIT=0
 # Two independent things keep this out of production:
 #   1. .dev.vars is gitignored and `wrangler deploy` does not upload it, so
 #      DEV_ADMIN_EMAIL simply is not set there.
-#   2. The bypass refuses outright whenever ACCESS_AUD is set, which it is in
-#      any real deployment.
+#   2. The bypass refuses any request carrying a Cf-Ray header. Cloudflare's
+#      edge stamps one on every request it proxies, and in production the
+#      Worker is only reachable through that edge (see devPrincipalEmail in
+#      src/auth/access.js for why earlier config-based guards were dropped).
 DEV_ADMIN_EMAIL=you@example.com
+
+# --- Test clock ---------------------------------------------------------------
+#
+# The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,
+# a real production deadline. Once it passes, every local registration is
+# refused as "closed" and the test suites fail for no code reason. Pin a
+# far-future date here; the harness refuses to run if the window is closed.
+REGISTRATION_CLOSES_AT=2099-12-31T23:59:59-05:00

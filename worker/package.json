@@ -12,7 +12,7 @@
     "db:init:local": "wrangler d1 execute tnsaints --local --file=./schema.sql",
     "db:init:remote": "wrangler d1 execute tnsaints --remote --file=./schema.sql",
     "db:dump:local": "wrangler d1 execute tnsaints --local --command=\"SELECT * FROM registrations ORDER BY id\"",
-    "db:reset:local": "wrangler d1 execute tnsaints --local --command=\"DELETE FROM parent_feedback; DELETE FROM parent_messages; DELETE FROM decisions; DELETE FROM decision_batches; DELETE FROM eval_notes_internal; DELETE FROM eval_feedback; DELETE FROM registrations; DELETE FROM players; DELETE FROM email_budget;\"",
+    "db:reset:local": "python tests/reset_local_db.py",
     "staff:list": "wrangler d1 execute tnsaints --remote --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
     "staff:list:local": "wrangler d1 execute tnsaints --local --command=\"SELECT email_norm, display_name, author_label, role, active FROM staff ORDER BY role, email_norm\"",
     "audit:tail": "wrangler d1 execute tnsaints --remote --command=\"SELECT at, actor, action, subject_type, subject_id FROM audit_log ORDER BY id DESC LIMIT 40\"",
