@@ -226,3 +226,4 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+sys.exit(1 if failed else 0)

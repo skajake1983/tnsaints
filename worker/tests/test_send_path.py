@@ -36,6 +36,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _d1 import wrangler_local
 from _harness import preflight, staff_email
 
 BASE = "http://127.0.0.1:8787"
@@ -96,11 +97,7 @@ class Sink(BaseHTTPRequestHandler):
 
 
 def _wrangler(command):
-    res = subprocess.run(
-        ["npx", "wrangler", "d1", "execute", "tnsaints", "--local", "--command", command],
-        capture_output=True, shell=(os.name == "nt"), cwd=WORKER_DIR,
-    )
-    return (res.stdout or b"").decode("utf-8", errors="replace")
+    return wrangler_local(command)
 
 
 sql = _wrangler
@@ -418,3 +415,4 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+sys.exit(1 if failed else 0)

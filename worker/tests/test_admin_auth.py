@@ -19,6 +19,7 @@ import urllib.error
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _d1 import wrangler_local
 from _harness import preflight, staff_email
 
 
@@ -51,11 +52,7 @@ def _wrangler(command):
     which crashes the decode and, worse, returns None rather than failing
     loudly, so an assertion against the output silently has nothing to assert.
     """
-    res = subprocess.run(
-        ["npx", "wrangler", "d1", "execute", "tnsaints", "--local", "--command", command],
-        capture_output=True, shell=(os.name == "nt"), cwd=WORKER_DIR,
-    )
-    return (res.stdout or b"").decode("utf-8", errors="replace")
+    return wrangler_local(command)
 
 
 def sql(command):
@@ -353,3 +350,4 @@ if failed:
     for f in failed:
         print("  - " + f)
 print("=" * 62)
+sys.exit(1 if failed else 0)

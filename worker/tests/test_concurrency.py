@@ -150,3 +150,4 @@ chk("public availability still hides exact counts",
     not {"taken", "remaining", "capacity"} & set(sess), str(sess))
 print("=" * 58)
 print("RACE TEST: " + ("PASSED" if ok else "FAILED"))
+sys.exit(0 if ok else 1)
