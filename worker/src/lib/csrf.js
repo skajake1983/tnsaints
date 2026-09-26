@@ -57,6 +57,33 @@ export function crossSiteCheck(request, { isAllowedOrigin }) {
   return { ok: true };
 }
 
+/**
+ * May a state-changing request to a surface carry this Origin?
+ *
+ * Production: exactly https://<expectedHost>, from config — never derived from
+ * the request, which is what an attacker controls.
+ *
+ * Local development only (`isDev`: the request came through a dev door, which
+ * already refused anything carrying Cf-Ray), two more:
+ *   - any loopback origin, e.g. http://localhost:8787;
+ *   - the origin wrangler reports for this request. `wrangler dev` rewrites an
+ *     Origin equal to its own listen address (http://127.0.0.1:8787) to the
+ *     first route's host, matching how it rewrites request.url — observed
+ *     2026-09-26: the browser's Origin arrived as http://api.tnsaints.com.
+ *     Without this, every local browser POST would be refused.
+ */
+export function originAllowed(origin, { expectedHost, requestUrl, isDev }) {
+  const host = String(expectedHost || '').trim().toLowerCase();
+  if (host && origin === `https://${host}`) return true;
+  if (!isDev) return false;
+  if (isLoopbackOrigin(origin)) return true;
+  try {
+    return origin === new URL(requestUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /** True for an http(s) origin on this machine, e.g. http://127.0.0.1:8787. Local development only. */

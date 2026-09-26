@@ -69,6 +69,18 @@ DEV_ADMIN_EMAIL=you@example.com
 DEV_PORTAL=true
 PORTAL_ENABLED=true
 
+# Signs and hashes every portal secret (sign-in links, sessions, invites).
+# Without it the portal refuses to run. Generate a local one:
+#   python -c "import secrets; print(secrets.token_urlsafe(36))"
+AUTH_PEPPER=replace-with-32-plus-random-characters
+
+# Cloudflare's always-pass test site key, and where sign-in links point locally.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+PORTAL_ORIGIN=http://127.0.0.1:8787
+
+# Uncomment to test self-signup instead of the invite-only pilot.
+# PORTAL_SIGNUP_ENABLED=true
+
 # --- Test clock ---------------------------------------------------------------
 #
 # The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,

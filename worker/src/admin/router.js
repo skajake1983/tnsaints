@@ -77,7 +77,7 @@ import {
 } from './roster-ui.js';
 import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
-import { crossSiteCheck, isLoopbackOrigin } from '../lib/csrf.js';
+import { crossSiteCheck, originAllowed } from '../lib/csrf.js';
 import { choice } from '../lib/flags.js';
 
 const NAV = [
@@ -89,32 +89,15 @@ const NAV = [
 ];
 
 /**
- * May a state-changing admin request carry this Origin? Pure, so it is tested
- * directly (tests/test_admin_csrf.py) rather than only through report mode,
- * which lets everything through and so proves nothing.
- *
- * Production: exactly https://<ADMIN_HOSTNAME>, from config — never derived from
- * the request, which is what an attacker controls.
- *
- * Local development, and only when the dev bypass signed the request in (which
- * already requires DEV_ADMIN_EMAIL and no Cf-Ray header), two more:
- *   - any loopback origin, e.g. http://localhost:8787;
- *   - the origin wrangler reports for this request. `wrangler dev` rewrites an
- *     Origin equal to its own listen address (http://127.0.0.1:8787) to the
- *     first route's host, matching how it rewrites request.url — observed
- *     2026-09-26, the browser's Origin arrived as http://api.tnsaints.com.
- *     Without this, enforce mode would refuse every local browser POST.
+ * May a state-changing admin request carry this Origin? The shared rule in
+ * lib/csrf.js (originAllowed), against ADMIN_HOSTNAME. Exported so it is
+ * tested directly (tests/test_admin_csrf.py) rather than only through report
+ * mode, which lets everything through and so proves nothing. `isDev` is true
+ * only when the dev bypass signed the request in (DEV_ADMIN_EMAIL set, no
+ * Cf-Ray header).
  */
 export function adminOriginAllowed(origin, { env, requestUrl, isDev }) {
-  const configured = String(env.ADMIN_HOSTNAME || '').trim().toLowerCase();
-  if (configured && origin === `https://${configured}`) return true;
-  if (!isDev) return false;
-  if (isLoopbackOrigin(origin)) return true;
-  try {
-    return origin === new URL(requestUrl).origin;
-  } catch {
-    return false;
-  }
+  return originAllowed(origin, { expectedHost: env.ADMIN_HOSTNAME, requestUrl, isDev });
 }
 
 /**

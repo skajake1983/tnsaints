@@ -18,6 +18,7 @@ import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
+import { cleanupExpiredAuth } from './auth/cleanup.js';
 import { flag } from './lib/flags.js';
 import { audit } from './auth/staff.js';
 import {
@@ -121,6 +122,8 @@ export default {
    */
   async scheduled(event, env, ctx) {
     ctx.waitUntil(sendRosterDigest(env, { reason: event.cron || 'scheduled' }));
+    // Spent sign-in links, sessions and rate-limit windows. Bounded per run.
+    ctx.waitUntil(cleanupExpiredAuth(env));
   },
 };
 

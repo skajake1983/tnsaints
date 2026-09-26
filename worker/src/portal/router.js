@@ -8,16 +8,27 @@
  *   - tnsaints.com stays on GitHub Pages, untouched and free;
  *   - its CSP and headers are its own, independent of the marketing site's.
  *
- * Everything here defaults CLOSED. PORTAL_ENABLED must be exactly "true" or
- * every path answers with the maintenance page (503), so a missing or
- * misspelled setting can never expose a half-built surface.
+ * Everything here defaults CLOSED:
+ *   - PORTAL_ENABLED must be exactly "true", or every path answers with the
+ *     maintenance page (503);
+ *   - without AUTH_PEPPER there is no safe way to store a secret, so the same;
+ *   - every state-changing request passes the cross-site check, BOTH layers
+ *     enforced from day one — unlike the admin there are no older clients
+ *     to ease in, and a parent's session can change a child's medical record.
  *
- * Pages are server-rendered with no script. Routes that change state arrive
- * with sign-in (P1.5) and each passes the cross-site check in lib/csrf.js.
+ * Pages are server-rendered plain HTML forms with post-redirect-get, so every
+ * flow works without JavaScript except following a sign-in link (see
+ * auth-pages.js for why that page needs it).
  */
 
 import { flag, choice } from '../lib/flags.js';
+import { crossSiteCheck, originAllowed } from '../lib/csrf.js';
+import { authConfigured } from '../lib/crypto.js';
+import { readForm, BodyTooLarge } from '../lib/body.js';
 import { logoResponse } from '../admin/logo.js';
+import { loadSession, revokeSession, clearedCookie, SESSION_COOKIE } from '../auth/session.js';
+import { requestLink, verifyLink, renderSignIn } from '../auth/magic.js';
+import { verifyPage, homePage, redirect } from './auth-pages.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
 /**
@@ -30,6 +41,7 @@ import { esc, requestContext, portalPage, portalResponse, notFoundResponse, main
  */
 export async function handlePortal(request, env, ctx, route) {
   const pathname = route.path;
+  const isDev = route.base !== '';
   const rc = requestContext({
     base: route.base,
     siteUrl: env.SITE_URL,
@@ -48,32 +60,84 @@ export async function handlePortal(request, env, ctx, route) {
   if (!flag(env, 'PORTAL_ENABLED', false)) {
     return maintenanceResponse(rc);
   }
+  if (!authConfigured(env)) {
+    console.error(JSON.stringify({ event: 'portal_auth_misconfigured' }));
+    return maintenanceResponse(rc);
+  }
+
+  if (method !== 'GET') {
+    const check = crossSiteCheck(request, {
+      isAllowedOrigin: (origin) =>
+        originAllowed(origin, { expectedHost: env.PORTAL_HOSTNAME, requestUrl: request.url, isDev }),
+    });
+    if (!check.ok) {
+      console.warn(JSON.stringify({ event: 'portal_csrf_blocked', reason: check.reason, method: request.method }));
+      return refusedResponse(rc);
+    }
+  }
+
+  const session = await loadSession(env, request, ctx);
 
   if (pathname === '/' && method === 'GET') {
-    return homePage(rc);
+    return session ? homePage(rc, session) : renderSignIn(env, rc);
+  }
+
+  if (pathname === '/auth/email' && method === 'POST') {
+    if (!flag(env, 'MAGIC_LINK_ENABLED', false)) {
+      return renderSignIn(env, rc, {
+        status: 503,
+        errors: [{ id: 'email', message: 'Email sign-in is paused right now. Please try again later.' }],
+      });
+    }
+    return withForm(request, rc, (form) => requestLink(env, ctx, request, rc, form));
+  }
+
+  if (pathname === '/auth/email/verify' && method === 'GET') {
+    return verifyPage(rc);
+  }
+
+  if (pathname === '/auth/email/verify' && method === 'POST') {
+    return withForm(request, rc, (form) => verifyLink(env, ctx, request, rc, form));
+  }
+
+  if (pathname === '/auth/signout' && method === 'POST') {
+    if (session) await revokeSession(env, session.idHash);
+    return redirect(rc.url('/'), [clearedCookie(SESSION_COOKIE)]);
   }
 
   return notFoundResponse(rc);
 }
 
-/**
- * The front door. Sign-in (magic link and Google) replaces the placeholder
- * paragraph in P1.5/P1.6; until then the portal is reachable only locally, and
- * in production only once PORTAL_ENABLED is switched on at launch.
- */
-function homePage(rc) {
+/** Parse a form body (capped) and hand it on, or answer the problem plainly. */
+async function withForm(request, rc, handler) {
+  let form;
+  try {
+    form = await readForm(request);
+  } catch (err) {
+    if (err instanceof BodyTooLarge) return problemResponse(rc, 413, 'That form was too large to send.');
+    throw err;
+  }
+  if (!form) return problemResponse(rc, 415, "We couldn't read that form. Please go back and try again.");
+  return handler(form);
+}
+
+function problemResponse(rc, status, message) {
   return portalResponse(
     portalPage({
       rc,
-      title: 'Parent portal',
-      body: `<h1>Tennessee Saints parent portal</h1>
-<p class="lede">Create your family account, add your children, and apply to the academy — all in one place.</p>
-<div class="panel">
-  <h2 style="margin-top:0">Sign in</h2>
-  <p>Sign-in is being set up. Until it opens, email
-  <a href="mailto:info@tnsaints.com">info@tnsaints.com</a> and we'll help directly.</p>
-</div>
-<p><a href="${esc(rc.siteUrl)}">Back to tnsaints.com</a></p>`,
-    })
+      title: 'Something went wrong',
+      body: `<h1>Something went wrong</h1><p class="lede">${esc(message)}</p>
+<p><a class="btn" href="${esc(rc.url('/'))}">Back to the parent portal</a></p>`,
+    }),
+    { status }
+  );
+}
+
+/** A state change that did not come from a portal page. Nothing was done. */
+function refusedResponse(rc) {
+  return problemResponse(
+    rc,
+    403,
+    "That request didn't come from the parent portal, so nothing was changed. Please go back and try again."
   );
 }

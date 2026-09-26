@@ -102,6 +102,26 @@ ADMIN_CSRF_MODE = "report"
 PORTAL_HOSTNAME = "portal.tnsaints.com"
 PORTAL_ENABLED = "false"
 
+# Who can get a sign-in link. "false" = invited families only (the pilot): an
+# address without an account is sent nothing, and the page answers the same
+# either way. "true" = anyone may create a family account by email.
+PORTAL_SIGNUP_ENABLED = "false"
+
+# Kill switch for email sign-in links (e.g. if someone is draining the email
+# budget). Existing sessions keep working.
+MAGIC_LINK_ENABLED = "true"
+
+# Session lengths (days) and how recent a sign-in must be (hours) for export,
+# deletion, invites and claiming a subscription. Defaults shown.
+# SESSION_IDLE_DAYS = "14"
+# SESSION_MAX_DAYS = "30"
+# RECENT_AUTH_HOURS = "12"
+
+# The public Turnstile site key (the same widget as the registration form).
+# portal.tnsaints.com must be added to the widget's hostnames in the
+# Cloudflare dashboard before launch (plan item O7).
+TURNSTILE_SITE_KEY = "0x4AAAAAAEKmJntXjTbt2yuF"
+
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links
 # generated during local development pointed at the live site.
@@ -187,5 +207,7 @@ head_sampling_rate = 1
 #   wrangler secret put ADMIN_TOKEN
 #   wrangler secret put IP_HASH_SALT
 #   wrangler secret put RESEND_API_KEY
+#   wrangler secret put AUTH_PEPPER      (parent portal: 32+ random characters;
+#                                         rotating it signs every parent out)
 # Locally they come from .dev.vars (gitignored).
 # ---------------------------------------------------------------------------

@@ -226,6 +226,60 @@ export async function sendStaffInvite(env, { to, displayName, role }) {
   });
 }
 
+/**
+ * A parent's sign-in link.
+ *
+ * Auth lane: the one lane allowed into the last credits of the day, because a
+ * parent who cannot sign in cannot do anything else.
+ *
+ * Says nothing about the family: no child's name, no account details — only the
+ * link, how long it lasts, and what to do if they did not ask for it. Anyone
+ * who reads a forwarded or intercepted copy learns only that the address has a
+ * portal account.
+ */
+export async function sendSignInLink(env, { to, url, minutes }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">Tennessee Saints — parent portal</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">
+      <p style="margin-top:0;">Here is your sign-in link for the Tennessee Saints parent portal.</p>
+      <p style="margin:18px 0;">
+        <a href="${escapeHtml(url)}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Sign in</a>
+      </p>
+      <p>The link works once and expires in ${minutes} minutes.</p>
+      <p style="color:#536277;font-size:14px;">If you didn't ask to sign in, you can ignore this email —
+      nobody can sign in without the link. Questions: ${escapeHtml(contact)}.</p>
+    </div>
+  </div>`;
+
+  const text = [
+    'Here is your sign-in link for the Tennessee Saints parent portal:',
+    '',
+    url,
+    '',
+    `The link works once and expires in ${minutes} minutes.`,
+    '',
+    "If you didn't ask to sign in, you can ignore this email; nobody can sign in without the link.",
+    `Questions: ${contact}`,
+  ].join('\n');
+
+  return sendMetered(env, 'auth', {
+    to,
+    subject: 'Your Tennessee Saints sign-in link',
+    html,
+    text,
+    replyTo: contact,
+  });
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>

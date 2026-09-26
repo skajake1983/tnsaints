@@ -63,7 +63,9 @@ st, h, body = get(PORTAL + "/")
 html = body.decode("utf-8", "replace")
 check("GET /__portal/ answers 200", st == 200, st)
 check("it is the parent portal shell", "Parent Portal" in html and "<h1>" in html, html[:200])
-check("no script at all on the page", "<script" not in html.lower())
+scripts = re.findall(r"<script[^>]*>", html, re.I)
+check("its only script is the Turnstile loader; nothing inline",
+      scripts == ['<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer>'], scripts)
 check("lang, skip link and a main landmark are present",
       '<html lang="en">' in html and 'class="skip" href="#main"' in html and '<main id="main"' in html)
 check("links are built under the local door, so they work locally",
@@ -73,8 +75,10 @@ check("the door without a trailing slash is the same page", st2 == 200, st2)
 
 print("\n=== headers ===")
 hl = {k.lower(): v for k, v in h.items()}
-check("CSP allows no script and no framing", hl.get("content-security-policy") == EXPECTED_CSP,
-      hl.get("content-security-policy"))
+_, h404, body404 = get(PORTAL + "/no-such-page")
+csp404 = {k.lower(): v for k, v in h404.items()}.get("content-security-policy")
+check("an ordinary portal page allows no script and no framing", csp404 == EXPECTED_CSP, csp404)
+check("and carries no script", b"<script" not in body404.lower())
 check("HSTS", "max-age=31536000" in hl.get("strict-transport-security", ""))
 check("never cached", "no-store" in hl.get("cache-control", ""))
 check("no camera, microphone, location or payment API",
@@ -92,7 +96,10 @@ check("the logo is served", st == 200 and h.get("Content-Type", h.get("content-t
 st, h, body = get(PORTAL + "/family/123")
 check("an unknown page is a 404 portal page", st == 404 and b"couldn't find" in body, st)
 st, _, body = get(PORTAL + "/", method="POST", headers={"Content-Type": "application/x-www-form-urlencoded"}, body=b"x=1")
-check("no state-changing routes exist yet: POST is a 404", st == 404, st)
+check("a POST with no origin evidence is refused before any route", st == 403, st)
+st, _, body = get(PORTAL + "/", method="POST", body=b"x=1", headers={
+    "Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
+check("a same-origin POST to a page with no form handler is a 404", st == 404, st)
 
 print("\n=== the local door stays shut when it should ===")
 st, h, body = get(PORTAL + "/", headers={"Cf-Ray": "8c0ffee0000000-DFW"})
@@ -136,7 +143,9 @@ console.log(JSON.stringify({
   },
   switch: {
     unset: await status({}), off: await status({ PORTAL_ENABLED: 'false' }),
-    typo: await status({ PORTAL_ENABLED: 'TRUE' }), on: await status({ PORTAL_ENABLED: 'true' }),
+    typo: await status({ PORTAL_ENABLED: 'TRUE' }),
+    on: await status({ PORTAL_ENABLED: 'true', AUTH_PEPPER: 'p'.repeat(40) }),
+    on_without_pepper: await status({ PORTAL_ENABLED: 'true' }),
     logo_while_off: await status({}, '/logo.png'),
     retry_after: off.headers.get('Retry-After'),
     off_body_mentions_open: (await off.text()).includes("isn't open"),
@@ -171,6 +180,7 @@ if u:
     check("'false' -> 503", sw["off"] == 503, sw)
     check("a misspelling ('TRUE') stays closed", sw["typo"] == 503, sw)
     check("exactly 'true' -> open", sw["on"] == 200, sw)
+    check("switched on but with no AUTH_PEPPER it stays closed", sw["on_without_pepper"] == 503, sw)
     check("the maintenance page still gets its logo", sw["logo_while_off"] == 200, sw)
     check("maintenance says come back later (Retry-After, plain words)",
           sw["retry_after"] == "3600" and sw["off_body_mentions_open"], sw)
