@@ -97,9 +97,9 @@ st, h, body = get(PORTAL + "/family/123")
 check("an unknown page is a 404 portal page", st == 404 and b"couldn't find" in body, st)
 st, _, body = get(PORTAL + "/", method="POST", headers={"Content-Type": "application/x-www-form-urlencoded"}, body=b"x=1")
 check("a POST with no origin evidence is refused before any route", st == 403, st)
-st, _, body = get(PORTAL + "/", method="POST", body=b"x=1", headers={
+st, _, body = get(PORTAL + "/no-such-page", method="POST", body=b"x=1", headers={
     "Content-Type": "application/x-www-form-urlencoded", "Sec-Fetch-Site": "same-origin"})
-check("a same-origin POST to a page with no form handler is a 404", st == 404, st)
+check("a same-origin POST to a path with no handler is a 404", st == 404, st)
 
 print("\n=== the local door stays shut when it should ===")
 st, h, body = get(PORTAL + "/", headers={"Cf-Ray": "8c0ffee0000000-DFW"})

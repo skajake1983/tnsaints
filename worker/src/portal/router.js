@@ -29,7 +29,8 @@ import { logoResponse } from '../admin/logo.js';
 import { loadSession, revokeSession, clearedCookie, SESSION_COOKIE } from '../auth/session.js';
 import { requestLink, verifyLink, renderSignIn } from '../auth/magic.js';
 import { googleConfigured, startGoogle, finishGoogle } from '../auth/google.js';
-import { verifyPage, homePage, redirect } from './auth-pages.js';
+import { verifyPage, redirect } from './auth-pages.js';
+import { familyRoutes, isFamilyPath } from './family.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
 /**
@@ -79,21 +80,6 @@ export async function handlePortal(request, env, ctx, route) {
 
   const session = await loadSession(env, request, ctx);
 
-  if (pathname === '/' && method === 'GET') {
-    if (!session) return renderSignIn(env, rc);
-    const google = googleConfigured(env);
-    const linked = google
-      ? Boolean(
-          await env.DB.prepare(
-            `SELECT 1 FROM account_identities WHERE account_id = ?1 AND provider = 'google' LIMIT 1`
-          )
-            .bind(session.accountId)
-            .first()
-        )
-      : false;
-    return homePage(rc, session, { google, googleLinked: linked });
-  }
-
   if (pathname === '/auth/email' && method === 'POST') {
     if (!flag(env, 'MAGIC_LINK_ENABLED', false)) {
       return renderSignIn(env, rc, {
@@ -133,6 +119,19 @@ export async function handlePortal(request, env, ctx, route) {
   if (pathname === '/auth/signout' && method === 'POST') {
     if (session) await revokeSession(env, session.idHash);
     return redirect(rc.url('/'), [clearedCookie(SESSION_COOKIE)]);
+  }
+
+  // Everything about a family needs a signed-in parent. Signed out, the front
+  // door is the sign-in page and every other family path leads back to it.
+  if (isFamilyPath(pathname)) {
+    if (!session) {
+      return pathname === '/' && method === 'GET' ? renderSignIn(env, rc) : redirect(rc.url('/'));
+    }
+    const response = await familyRoutes({
+      env, ctx, request, rc, session, pathname, method,
+      readForm: (handler) => withForm(request, rc, handler),
+    });
+    if (response) return response;
   }
 
   return notFoundResponse(rc);

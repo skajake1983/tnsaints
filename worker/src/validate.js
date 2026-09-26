@@ -8,7 +8,7 @@
 
 const NAME_RE = /^[A-Za-zÀ-ÿ' -]{2,60}$/;
 const SCHOOL_RE = /^[A-Za-z0-9À-ÿ'&., -]{2,80}$/;
-const PHONE_RE = /^(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}$/;
+export const PHONE_RE = /^(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const URL_RE = /^https?:\/\/.+/i;
 

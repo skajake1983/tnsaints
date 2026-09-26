@@ -77,6 +77,23 @@ const STYLES = `${BRAND_TOKENS}
          background: var(--navy); color: #fff; text-decoration: none; cursor: pointer; }
   .btn:hover { background: var(--navy-soft); }
   .btn.secondary { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+  fieldset.field { border: 0; padding: 0; margin: 0 0 18px; min-width: 0; }
+  fieldset.field legend { padding: 0; }
+  .choice { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 400; margin: 2px 0; cursor: pointer; }
+  .field .choice input { width: 22px; height: 22px; min-height: 0; margin: 0; flex: none; }
+  .field textarea { min-height: 96px; resize: vertical; }
+  /* Badge text colours are darker than the admin's pills so they clear AA on their tints. */
+  .badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .badge.ok { background: #e4f3ea; color: #145c37; }
+  .badge.warn { background: #fdf0dd; color: #7a4a09; }
+  .cards-list { list-style: none; margin: 0 0 16px; padding: 0; }
+  .cards-list .item { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+                      padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .cards-list .item:last-child { border-bottom: 0; }
+  .item-title { font-weight: 700; font-size: 18px; }
+  .item-sub { color: var(--muted); font-size: 15px; }
+  ul.plain, ol.plain { margin: 0 0 12px; padding-left: 20px; }
+  header nav form { margin: 0; }
   footer { color: var(--muted); font-size: 14px; text-align: center; padding: 0 18px 32px; }
   footer a { color: var(--muted); }
   @media (max-width: 560px) {
@@ -114,8 +131,9 @@ export function requestContext({ base = '', siteUrl = 'https://tnsaints.com', te
  * @param {string} o.body      already-escaped HTML
  * @param {Array<{href: string, label: string}>} [o.nav]  portal-relative hrefs
  * @param {string} [o.current] the nav href of this page
+ * @param {boolean} [o.signedIn] show Sign out in the header
  */
-export function portalPage({ rc, title, body, nav = [], current = '' }) {
+export function portalPage({ rc, title, body, nav = [], current = '', signedIn = false }) {
   const links = nav
     .map(
       (n) =>
@@ -140,7 +158,7 @@ export function portalPage({ rc, title, body, nav = [], current = '' }) {
       <img src="${esc(rc.url('/logo.png'))}" width="44" height="44" alt="">
       <div class="mark">Tennessee Saints<small>Parent Portal</small></div>
     </a>
-    ${links ? `<nav aria-label="Portal">${links}</nav>` : ''}
+    ${links || signedIn ? `<nav aria-label="Portal">${links}${signedIn ? `<form method="post" action="${esc(rc.url('/auth/signout'))}"><button type="submit">Sign out</button></form>` : ''}</nav>` : ''}
   </div>
 </header>
 <main id="main" tabindex="-1">
@@ -255,4 +273,55 @@ export function maintenanceResponse(rc) {
     }),
     { status: 503, headers: { 'Retry-After': '3600' } }
   );
+}
+
+function labelTag(id, label, required) {
+  return `<label for="${esc(id)}">${esc(label)} ${required ? '<span class="req">(required)</span>' : '<span class="opt">(optional)</span>'}</label>`;
+}
+
+function describedBy(id, hint, error) {
+  return [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ');
+}
+
+/** A <select>. `options` is a list of [value, label]. */
+export function selectField({ id, label, options, value = '', required = false, hint = '', error = '', placeholder = 'Choose…' }) {
+  const d = describedBy(id, hint, error);
+  const opts = [`<option value="">${esc(placeholder)}</option>`]
+    .concat(options.map(([v, l]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(l)}</option>`))
+    .join('');
+  return `<div class="field${error ? ' has-error' : ''}">
+  ${labelTag(id, label, required)}
+  ${hint ? `<span class="hint" id="${esc(id)}-hint">${esc(hint)}</span>` : ''}
+  ${error ? `<span class="error" id="${esc(id)}-error">${esc(error)}</span>` : ''}
+  <select id="${esc(id)}" name="${esc(id)}"${required ? ' required aria-required="true"' : ''}${error ? ' aria-invalid="true"' : ''}${d ? ` aria-describedby="${esc(d)}"` : ''}>${opts}</select>
+</div>`;
+}
+
+/** A multi-line text field. */
+export function textareaField({ id, label, value = '', required = false, hint = '', error = '', rows = 4, maxlength = 2000 }) {
+  const d = describedBy(id, hint, error);
+  return `<div class="field${error ? ' has-error' : ''}">
+  ${labelTag(id, label, required)}
+  ${hint ? `<span class="hint" id="${esc(id)}-hint">${esc(hint)}</span>` : ''}
+  ${error ? `<span class="error" id="${esc(id)}-error">${esc(error)}</span>` : ''}
+  <textarea id="${esc(id)}" name="${esc(id)}" rows="${rows}" maxlength="${maxlength}"${required ? ' aria-required="true"' : ''}${error ? ' aria-invalid="true"' : ''}${d ? ` aria-describedby="${esc(d)}"` : ''}>${esc(value)}</textarea>
+</div>`;
+}
+
+/**
+ * Radio buttons in a fieldset, so a screen reader announces the question with
+ * each option. The first option carries the id, so an error-summary link lands
+ * on the group.
+ */
+export function radioGroup({ id, legend, options, value = '', required = false, hint = '', error = '' }) {
+  const radios = options
+    .map(([v, l], i) => `<label class="choice"><input type="radio" name="${esc(id)}" value="${esc(v)}"${i === 0 ? ` id="${esc(id)}"` : ''}${
+      String(v) === String(value) ? ' checked' : ''}${required ? ' required' : ''}> ${esc(l)}</label>`)
+    .join('');
+  return `<fieldset class="field${error ? ' has-error' : ''}"${error ? ` aria-describedby="${esc(id)}-error"` : ''}>
+  <legend>${esc(legend)} ${required ? '<span class="req">(required)</span>' : ''}</legend>
+  ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
+  ${error ? `<span class="error" id="${esc(id)}-error">${esc(error)}</span>` : ''}
+  ${radios}
+</fieldset>`;
 }

@@ -273,7 +273,10 @@ try:
     check("with a coarse device label, not a User-Agent", srows and srows[0].get("device_label", "").count(" on ") == 1,
           srows[0].get("device_label") if srows else None)
     st, _, _, html = request("GET", P + "/", cookies={"__Host-tns_session": SESSION})
-    check("the portal knows who is signed in", st == 200 and "parent@example.com" in html.lower() and "Sign out" in html, st)
+    check("signed in, the front door is the family area (setup, with Sign out)",
+          st == 200 and "Set up your family" in html and "Sign out" in html, st)
+    st, _, _, html = request("GET", P + "/account", cookies={"__Host-tns_session": SESSION})
+    check("the account page shows who is signed in", st == 200 and "parent@example.com" in html.lower(), st)
     audit = sql("SELECT actor, action, detail FROM audit_log WHERE action='portal.signin' ORDER BY id DESC LIMIT 1")
     check("the sign-in is audited by account id, never by address",
           audit and audit[0]["actor"] == f"account:{ACC}" and "@" not in json.dumps(audit), audit)

@@ -144,26 +144,6 @@ export function linkProblemPage(rc) {
   return portalResponse(portalPage({ rc, title: 'Link expired', body }), { status: 400 });
 }
 
-/** Signed-in landing. The family dashboard replaces the placeholder in P1.7. */
-export function homePage(rc, session, { google = false, googleLinked = false } = {}) {
-  const body = `<h1>Welcome</h1>
-<p class="lede">You're signed in as <strong>${esc(session.email)}</strong>.</p>
-<div class="panel">
-  <p style="margin:0">Your family dashboard is coming next: add your children, keep medical and emergency
-  details up to date, and apply to the academy.</p>
-</div>
-${google ? `<div class="panel">
-  <h2 style="margin-top:0">Sign-in options</h2>
-  ${googleLinked
-    ? '<p style="margin:0">Google is connected. You can sign in with Google or an email link.</p>'
-    : `<p>Connect Google to sign in with one tap next time.</p>${googleButton(rc, { mode: 'link', label: 'Connect Google' })}`}
-</div>` : ''}
-<form method="post" action="${esc(rc.url('/auth/signout'))}">
-  <button class="btn secondary" type="submit">Sign out</button>
-</form>`;
-  return portalResponse(portalPage({ rc, title: 'Your family', body }));
-}
-
 /** 303 See Other: the post-redirect-get step after a form. */
 export function redirect(location, cookies = []) {
   const headers = new Headers(portalHeaders({ Location: location }));
