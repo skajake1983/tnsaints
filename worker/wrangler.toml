@@ -109,13 +109,25 @@ SEND_PARENT_CONFIRMATION = "true"
 # Set to "true" (or delete this line) to resume it for a future event.
 ROSTER_DIGEST_ENABLED = "false"
 
-# Resend free plan sends at most 100 emails/day. Two per registration means a
-# full 50-seat day sits exactly on the ceiling, so the Worker meters its own
-# spend. Alerts may use the whole budget; parent receipts stop once fewer than
-# EMAIL_ALERT_RESERVE credits remain, keeping headroom for a late rush.
-# Raise EMAIL_DAILY_LIMIT if the Resend plan is upgraded.
+# Resend's free plan allows 100 emails/day and 3,000/month, counted per
+# recipient, so the Worker meters its own spend (src/email-budget.js). Each
+# send names a lane:
+#   auth    sign-in links (portal)        may use the whole day and month
+#   alert   staff alerts, digest, invites daily limit minus EMAIL_AUTH_RESERVE
+#   bulk    decision batches              daily limit minus EMAIL_AUTH_RESERVE
+#   receipt parent confirmations          daily limit minus the larger reserve
+# All but auth stop at EMAIL_MONTHLY_LIMIT minus EMAIL_MONTHLY_AUTH_RESERVE
+# over a rolling 31 days.
+#
+# EMAIL_AUTH_RESERVE stays 0 until the parent portal launches, which keeps
+# today's behaviour exactly. Raising it (plan: 15) takes that many credits a
+# day from alerts and batches — an owner decision (O11).
+# Raise the limits if the Resend plan is upgraded.
 EMAIL_DAILY_LIMIT = "100"
 EMAIL_ALERT_RESERVE = "25"
+EMAIL_AUTH_RESERVE = "0"
+EMAIL_MONTHLY_LIMIT = "3000"
+EMAIL_MONTHLY_AUTH_RESERVE = "150"
 
 # Set to "false" only for local testing without Turnstile keys.
 TURNSTILE_ENABLED = "true"

@@ -1192,6 +1192,12 @@ async function handleStaffReinvite(request, env, ctx, principal) {
       subjectId: target.email_norm,
     })
   );
+  if (sent.budget) {
+    return json(
+      { ok: false, error: 'Today’s email allowance is used up. Try again tomorrow, or tell them the site address directly.' },
+      { status: 429 }
+    );
+  }
   if (!sent.ok) {
     return json({ ok: false, error: 'Email could not be sent right now. Tell them the site address directly.' }, { status: 502 });
   }

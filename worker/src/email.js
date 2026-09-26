@@ -12,6 +12,7 @@
  */
 
 import { toCsv, toBase64 } from './http.js';
+import { reserveSend, refundSend, recipientCount } from './email-budget.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -61,76 +62,6 @@ export function emailConfigured(env) {
   return Boolean(env.RESEND_API_KEY && env.NOTIFY_EMAIL_FROM && env.NOTIFY_EMAIL_TO);
 }
 
-/**
- * Reserve one send against today's budget.
- *
- * Resend's free plan caps at 100 emails/day. Two emails per registration
- * means a full 50-seat day sits exactly on that ceiling, so the budget has to
- * be spent deliberately rather than first-come-first-served: the academy
- * alert is the thing the owner actually asked for, and it must never be the
- * message that gets dropped because a parent receipt spent the last credit.
- *
- * @returns {Promise<boolean>} true if this send is within budget
- */
-export async function reserveSend(env, { reserveFloor = 0 } = {}) {
-  // NOT `parseInt(...) || 100`. Zero is falsy, so that expression turned
-  // EMAIL_DAILY_LIMIT=0 into a limit of 100 — the exact opposite of what it
-  // says. Every test suite and the local harness documented 0 as "sending is
-  // switched off", so a developer who pasted a real key while trusting that
-  // guard would have sent roughly eighty real emails to invented addresses
-  // from the academy's domain. Nothing was disabled; only the missing API key
-  // was holding it.
-  const parsed = parseInt(env.EMAIL_DAILY_LIMIT, 10);
-  const limit = Number.isFinite(parsed) ? parsed : 100;
-  // Resend's counter is UTC-based, so key the budget the same way.
-  const day = new Date().toISOString().slice(0, 10);
-
-  try {
-    const row = await env.DB.prepare(
-      `INSERT INTO email_budget (day, sent) VALUES (?1, 1)
-         ON CONFLICT(day) DO UPDATE SET sent = sent + 1
-       RETURNING sent`
-    )
-      .bind(day)
-      .first();
-
-    const used = Number(row?.sent || 0);
-    if (used > limit - reserveFloor) {
-      console.warn(
-        `Email budget guard: ${used}/${limit} used today, reserveFloor=${reserveFloor} — skipping this send.`
-      );
-      return false;
-    }
-    return true;
-  } catch (err) {
-    // Budget bookkeeping must never block the alert itself.
-    console.error('Email budget check failed, sending anyway:', err?.message);
-    return true;
-  }
-}
-
-/**
- * Give back a credit reserved by reserveSend() when the send did not happen.
- *
- * reserveSend increments before the network call, so a transient Resend 429
- * during a decision batch burns a credit for a message that never went out.
- * Across fifty near-identical messages that can defer genuinely-deliverable
- * families to the next day for no reason. Refunding on a real failure keeps the
- * counter honest. Floored at zero so it can never go negative.
- */
-export async function refundSend(env) {
-  const day = new Date().toISOString().slice(0, 10);
-  try {
-    await env.DB.prepare(
-      `UPDATE email_budget SET sent = MAX(0, sent - 1) WHERE day = ?1`
-    )
-      .bind(day)
-      .run();
-  } catch (err) {
-    console.error('Email budget refund failed:', err?.message);
-  }
-}
-
 async function send(env, { to, subject, html, text, replyTo, attachments }) {
   const payload = {
     from: env.NOTIFY_EMAIL_FROM,
@@ -177,6 +108,29 @@ async function send(env, { to, subject, html, text, replyTo, attachments }) {
 }
 
 /**
+ * Reserve budget in `lane`, send, and give the credits back if the provider fails.
+ *
+ * Every send outside the batch drain goes through here, so none can skip the
+ * budget and none keeps a credit for a message that never went out. See
+ * email-budget.js for what the lanes mean.
+ *
+ * Never throws for a send or budget failure:
+ *   { ok: true, id }             sent
+ *   { ok: false, budget: true }  refused for budget — nothing attempted, nothing charged
+ *   { ok: false, error }         provider failed — credits refunded
+ */
+async function sendMetered(env, lane, message) {
+  const recipients = recipientCount(message.to);
+  if (!(await reserveSend(env, { lane, recipients }))) return { ok: false, budget: true };
+  try {
+    return { ok: true, id: await send(env, message) };
+  } catch (err) {
+    await refundSend(env, { recipients });
+    return { ok: false, error: err?.message || 'send failed' };
+  }
+}
+
+/**
  * Send one already-composed message and report the outcome rather than throwing.
  *
  * The batch drain needs to record per-message success or failure and carry on,
@@ -212,6 +166,10 @@ export async function sendComposedMessage(env, { to, subject, html, text, replyT
  * Best-effort: returns {ok} and never throws, so adding a user succeeds even if
  * the mail provider is momentarily down. The row is what grants access; the
  * email is a courtesy.
+ *
+ * Metered in the alert lane. It was the one send that skipped the budget, so
+ * re-sending invites could spend credits a registration alert needed.
+ * `budget: true` in the result means today's allowance ran out.
  */
 export async function sendStaffInvite(env, { to, displayName, role }) {
   if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
@@ -259,18 +217,13 @@ export async function sendStaffInvite(env, { to, displayName, role }) {
     `identity; that is normal. Questions: ${contact}.`,
   ].join('\n');
 
-  try {
-    const id = await send(env, {
-      to,
-      subject: 'Your Tennessee Saints staff access',
-      html,
-      text,
-      replyTo: contact,
-    });
-    return { ok: true, id };
-  } catch (err) {
-    return { ok: false, error: err?.message || 'send failed' };
-  }
+  return sendMetered(env, 'alert', {
+    to,
+    subject: 'Your Tennessee Saints staff access',
+    html,
+    text,
+    replyTo: contact,
+  });
 }
 
 function row(label, value) {
@@ -550,29 +503,26 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
 
   const csv = rows.length ? toCsv(rows) : 'no registrations';
 
-  try {
-    // Counted against the daily budget like everything else — it was exempt
-    // before, which quietly made the budget figure wrong. Given no reserve
-    // floor, so it can spend the last credit: this email is the owner's daily
-    // visibility and is the wrong thing to starve.
-    if (!(await reserveSend(env))) {
-      console.error('Roster digest skipped: daily email budget exhausted.');
-      return;
-    }
-
-    await send(env, {
-      to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
-      subject: windowOpen
-        ? `Evaluation roster — ${confirmed.length}/${totalCapacity} filled, ${spotsLeft} spots left`
-        : `FINAL roster — ${confirmed.length} confirmed, ${waitlist.length} waitlisted`,
-      html,
-      attachments: [
-        { filename: `roster-${env.EVENT_ID}.csv`, content: toBase64(csv) },
-      ],
-    });
+  // Counted against the budget like everything else — it was exempt before,
+  // which quietly made the budget figure wrong. Alert lane, so it can spend the
+  // last credit: this email is the owner's daily visibility and is the wrong
+  // thing to starve.
+  const result = await sendMetered(env, 'alert', {
+    to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+    subject: windowOpen
+      ? `Evaluation roster — ${confirmed.length}/${totalCapacity} filled, ${spotsLeft} spots left`
+      : `FINAL roster — ${confirmed.length} confirmed, ${waitlist.length} waitlisted`,
+    html,
+    attachments: [
+      { filename: `roster-${env.EVENT_ID}.csv`, content: toBase64(csv) },
+    ],
+  });
+  if (result.budget) {
+    console.error('Roster digest skipped: daily email budget exhausted.');
+  } else if (!result.ok) {
+    console.error('Roster digest send failed:', result.error);
+  } else {
     console.log(JSON.stringify({ event: 'roster_digest_sent', reason, rows: rows.length }));
-  } catch (err) {
-    console.error('Roster digest send failed:', err?.message);
   }
 }
 
@@ -617,17 +567,16 @@ async function sendPromotionEmail(env, promoted) {
     </div>
   </div>`;
 
-  try {
-    if (await reserveSend(env)) {
-      await send(env, {
-        to: promoted.parent_email,
-        subject: `You're in — ${promoted.player_name}, ${promoted.session_time} evaluation`,
-        html,
-        replyTo: env.NOTIFY_EMAIL_TO.split(',')[0].trim(),
-      });
-    }
-  } catch (err) {
-    console.error('Failed to send promotion email:', err?.message);
+  // Alert lane, not receipt: the family's seat is already committed and they
+  // need to know today, so this may spend down to the last credit.
+  const result = await sendMetered(env, 'alert', {
+    to: promoted.parent_email,
+    subject: `You're in — ${promoted.player_name}, ${promoted.session_time} evaluation`,
+    html,
+    replyTo: env.NOTIFY_EMAIL_TO.split(',')[0].trim(),
+  });
+  if (!result.ok && !result.budget) {
+    console.error('Failed to send promotion email:', result.error);
   }
 }
 
@@ -693,16 +642,13 @@ export async function sendCancellationAlert(env, result) {
     </div>
   </div>`;
 
-  try {
-    if (await reserveSend(env)) {
-      await send(env, {
-        to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
-        subject: `Spot released: ${r.player_name} — ${r.session_time}${waiting ? ` (${waiting} waiting)` : ''}`,
-        html,
-      });
-    }
-  } catch (err) {
-    console.error('Failed to send cancellation alert:', err?.message);
+  const sent = await sendMetered(env, 'alert', {
+    to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+    subject: `Spot released: ${r.player_name} — ${r.session_time}${waiting ? ` (${waiting} waiting)` : ''}`,
+    html,
+  });
+  if (!sent.ok && !sent.budget) {
+    console.error('Failed to send cancellation alert:', sent.error);
   }
 }
 
@@ -725,49 +671,41 @@ export async function sendRegistrationEmails(env, data, result) {
 
   // The academy alert goes first and spends budget down to the last credit:
   // this is the notification the whole feature exists for.
-  try {
-    if (await reserveSend(env)) {
-      await send(env, {
-        to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
-        subject,
-        html: alertHtml(env, data, result),
-        replyTo: data.parent_email,
-      });
-    } else {
-      console.error(
-        `EMAIL BUDGET EXHAUSTED — no alert sent for ${data.player_name} (${data.session_time}). ` +
-          'Registration IS saved; pull the roster via /api/admin/registrations.'
-      );
-    }
-  } catch (err) {
-    console.error('Failed to send academy alert email:', err?.message);
+  const alert = await sendMetered(env, 'alert', {
+    to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+    subject,
+    html: alertHtml(env, data, result),
+    replyTo: data.parent_email,
+  });
+  if (alert.budget) {
+    console.error(
+      `EMAIL BUDGET EXHAUSTED — no alert sent for ${data.player_name} (${data.session_time}). ` +
+        'Registration IS saved; pull the roster via /api/admin/registrations.'
+    );
+  } else if (!alert.ok) {
+    console.error('Failed to send academy alert email:', alert.error);
   }
 
   if (String(env.SEND_PARENT_CONFIRMATION || 'true').toLowerCase() === 'false') return;
 
-  // Parent receipts stop early, leaving a reserve so that a late rush of
-  // registrations still produces alerts. Losing a receipt is a minor UX cost;
-  // losing an alert means a family signs up and nobody ever contacts them.
-  const reserveFloor = parseInt(env.EMAIL_ALERT_RESERVE, 10) || 25;
-  if (!(await reserveSend(env, { reserveFloor }))) {
+  // Receipt lane: stops EMAIL_ALERT_RESERVE short of the limit, so a late rush
+  // of registrations still produces alerts. Losing a receipt is a minor UX
+  // cost; losing an alert means a family signs up and nobody ever contacts them.
+  const receipt = await sendMetered(env, 'receipt', {
+    to: data.parent_email,
+    subject:
+      result.status === 'waitlist'
+        ? `Waiting list — ${data.player_name}, Tennessee Saints evaluation`
+        : `You're registered — ${data.player_name}, Tennessee Saints evaluation`,
+    html: parentHtml(env, data, result),
+    replyTo: env.NOTIFY_EMAIL_TO.split(',')[0].trim(),
+  });
+  if (receipt.budget) {
     // No address in the log. Constitution: PII never in logs. The player name
     // is enough for staff to know which receipt was deferred, and a first name
     // is far less linkable than an email.
     console.warn(`Skipped parent receipt for ${data.player_name} to protect alert budget.`);
-    return;
-  }
-
-  try {
-    await send(env, {
-      to: data.parent_email,
-      subject:
-        result.status === 'waitlist'
-          ? `Waiting list — ${data.player_name}, Tennessee Saints evaluation`
-          : `You're registered — ${data.player_name}, Tennessee Saints evaluation`,
-      html: parentHtml(env, data, result),
-      replyTo: env.NOTIFY_EMAIL_TO.split(',')[0].trim(),
-    });
-  } catch (err) {
-    console.error('Failed to send parent confirmation email:', err?.message);
+  } else if (!receipt.ok) {
+    console.error('Failed to send parent confirmation email:', receipt.error);
   }
 }

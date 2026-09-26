@@ -243,14 +243,30 @@ Resend's free plan allows **100 emails per day** (3,000/month). At two per
 registration, a full 50-seat day lands *exactly* on that ceiling — and the
 failure is silent: the parent sees success, the row saves, nobody is told.
 
-So the Worker tracks its own spend in the `email_budget` table. Alerts may use
-the entire budget; parent receipts stop once fewer than `EMAIL_ALERT_RESERVE`
-(default 25) credits remain. Losing a receipt is a minor annoyance; losing an
-alert means a family signs up and is never contacted.
+So the Worker tracks its own spend in the `email_budget` table
+(`src/email-budget.js`), charged **per recipient** because that is how Resend
+counts. Every send names a **lane**, and the lane decides how far into the budget
+it may reach:
 
-Raise `EMAIL_DAILY_LIMIT` in `wrangler.toml` if the Resend plan is upgraded.
-Set it to `0` to disable sending entirely — useful when running the test suite
-against a real API key.
+| Lane | Used by | Daily ceiling |
+|---|---|---|
+| `auth` | parent sign-in links (portal, not yet built) | `EMAIL_DAILY_LIMIT` |
+| `alert` | staff alerts, roster digest, waitlist promotion, staff invites | limit − `EMAIL_AUTH_RESERVE` |
+| `bulk` | decision batches | limit − `EMAIL_AUTH_RESERVE` |
+| `receipt` | parent confirmations | limit − max(`EMAIL_ALERT_RESERVE`, `EMAIL_AUTH_RESERVE`) |
+
+Losing a receipt is a minor annoyance; losing an alert means a family signs up
+and is never contacted. `EMAIL_AUTH_RESERVE` is `0` until the parent portal
+ships, which makes these exactly the ceilings in force before lanes existed.
+
+Every lane except `auth` also stops at `EMAIL_MONTHLY_LIMIT` −
+`EMAIL_MONTHLY_AUTH_RESERVE` over a rolling 31 days, which caps any month
+whether Resend counts calendar months or billing periods.
+
+A send refused for budget changes nothing, and a send the provider rejects
+gives its credit back. Raise `EMAIL_DAILY_LIMIT` and `EMAIL_MONTHLY_LIMIT` in
+`wrangler.toml` if the Resend plan is upgraded. Set `EMAIL_DAILY_LIMIT` to `0`
+to disable sending entirely.
 
 ### Deliverability check before launch
 

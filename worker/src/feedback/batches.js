@@ -11,7 +11,8 @@
 import { composeDraft, defaultBodyText, textToHtml, subjectFor, gateMessage } from './compose.js';
 import { resolvePlayerId } from './players.js';
 import { checkEditedBody, loadSafetySources, checkAgainstSources, checkBulkInsertion } from './safety.js';
-import { reserveSend, refundSend, sendComposedMessage, emailConfigured } from '../email.js';
+import { sendComposedMessage, emailConfigured } from '../email.js';
+import { reserveSend, refundSend, budgetStatus } from '../email-budget.js';
 
 /**
  * Fingerprint of the coach notes behind one player's draft.
@@ -821,20 +822,19 @@ export async function preflight(env, id) {
     .bind(id)
     .first();
 
-  const limit = parseInt(env.EMAIL_DAILY_LIMIT, 10) || 0;
-  const day = new Date().toISOString().slice(0, 10);
-  const spent = await env.DB.prepare(`SELECT sent FROM email_budget WHERE day = ?1`)
-    .bind(day)
-    .first();
-
-  const used = Number(spent?.sent || 0);
-  const remaining = Math.max(0, limit - used);
+  // The bulk lane's numbers, from the same parsing the drain's reservations
+  // use. This used to read the limit itself as `parseInt(...) || 0`, which
+  // disagreed with reserveSend whenever the setting was missing, and it knew
+  // nothing of the monthly cap. `remaining` is the tighter of today and the
+  // month, because either one stops the drain.
+  const budget = await budgetStatus(env, 'bulk');
+  const remaining = budget.remaining;
   const toSend = Number(queued?.n || 0);
 
   return {
     to_send: toSend,
-    budget_limit: limit,
-    budget_used: used,
+    budget_limit: budget.limit,
+    budget_used: budget.used,
     budget_remaining: remaining,
     enough: toSend <= remaining,
     shortfall: Math.max(0, toSend - remaining),
@@ -989,7 +989,8 @@ export async function drainBatch(env, id, { max = 5 } = {}) {
       continue;
     }
 
-    if (!(await reserveSend(env))) {
+    // One address per message, so one credit. A refusal changes nothing.
+    if (!(await reserveSend(env, { lane: 'bulk', recipients: 1 }))) {
       // Back to 'queued', NOT 'failed'. Nothing is wrong with this message and
       // it must go out tomorrow untouched. Marking it failed would invite
       // someone to "fix" a message that was never broken.
@@ -1026,7 +1027,7 @@ export async function drainBatch(env, id, { max = 5 } = {}) {
       // The credit was reserved above but nothing went out. Give it back, so a
       // transient provider error does not quietly shrink the day's budget and
       // defer other families' decisions.
-      await refundSend(env);
+      await refundSend(env, { recipients: 1 });
       await env.DB.prepare(
         `UPDATE parent_messages SET send_state = 'failed', last_error = ?2 WHERE id = ?1`
       )
