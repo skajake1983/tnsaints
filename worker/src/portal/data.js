@@ -300,3 +300,151 @@ export async function replaceEmergencyContacts(env, accountId, contacts) {
   await env.DB.batch(statements);
   return true;
 }
+
+// --- guardians and invitations --------------------------------------------------
+
+const OWNER_OF = `SELECT household_id FROM household_members WHERE account_id = ?1 AND role = 'owner'`;
+
+/** Pending, unexpired invitations for this account's household (owner's view). */
+export async function listPendingInvites(env, accountId) {
+  const { results } = await env.DB.prepare(
+    `SELECT invited_email_norm, created_at, expires_at FROM household_invites
+      WHERE household_id IN (${OWNER_OF})
+        AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?2
+      ORDER BY created_at`
+  )
+    .bind(accountId, iso())
+    .all();
+  return results || [];
+}
+
+/**
+ * Record an invitation from the owner. The caller has already checked the
+ * address and the limits. Returns false if this account is not an owner.
+ */
+export async function createInvite(env, accountId, { tokenHash, emailNorm, expiresAt }) {
+  const now = iso();
+  const res = await env.DB.batch([
+    // One live invitation per address per family: a re-send replaces it.
+    env.DB.prepare(
+      `UPDATE household_invites SET revoked_at = ?3
+        WHERE household_id IN (${OWNER_OF}) AND invited_email_norm = ?2
+          AND accepted_at IS NULL AND revoked_at IS NULL`
+    ).bind(accountId, emailNorm, now),
+    env.DB.prepare(
+      `INSERT INTO household_invites (token_hash, household_id, invited_email_norm, invited_by_account_id,
+                                      created_at, expires_at)
+       SELECT ?2, household_id, ?3, ?1, ?4, ?5 FROM household_members
+        WHERE account_id = ?1 AND role = 'owner' LIMIT 1`
+    ).bind(accountId, tokenHash, emailNorm, now, expiresAt),
+  ]);
+  return (res[1].meta?.changes || 0) === 1;
+}
+
+export async function revokeInvite(env, accountId, emailNorm) {
+  const res = await env.DB.prepare(
+    `UPDATE household_invites SET revoked_at = ?3
+      WHERE household_id IN (${OWNER_OF}) AND invited_email_norm = ?2
+        AND accepted_at IS NULL AND revoked_at IS NULL`
+  )
+    .bind(accountId, emailNorm, iso())
+    .run();
+  return res.meta.changes > 0;
+}
+
+/** Is there a live invitation to this address? Lets an invited address sign in while signup is closed. */
+export async function hasPendingInvite(env, emailNorm) {
+  return Boolean(
+    await env.DB.prepare(
+      `SELECT 1 FROM household_invites
+        WHERE invited_email_norm = ?1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?2 LIMIT 1`
+    )
+      .bind(emailNorm, iso())
+      .first()
+  );
+}
+
+/** A live invitation by its token hash, with the inviting family's name. */
+export async function findInvite(env, tokenHash) {
+  return env.DB.prepare(
+    `SELECT i.household_id, i.invited_email_norm, h.display_name
+       FROM household_invites i JOIN households h ON h.id = i.household_id
+      WHERE i.token_hash = ?1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > ?2
+        AND h.status = 'active'`
+  )
+    .bind(tokenHash, iso())
+    .first();
+}
+
+/**
+ * Accept an invitation as `accountId`. The UPDATE is the authority: it wins
+ * only if the invitation is still live AND addressed to this account's own
+ * email. The membership is added only if that UPDATE won.
+ * @returns {Promise<boolean>}
+ */
+export async function acceptInvite(env, accountId, tokenHash) {
+  const now = iso();
+  // One batch = one transaction: the claim and the membership land together
+  // or not at all, so two invitations accepted at the same instant cannot put
+  // one account in two families.
+  const [claim] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE household_invites SET accepted_at = ?3, accepted_account_id = ?1
+        WHERE token_hash = ?2 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > ?3
+          AND invited_email_norm = (SELECT email_norm FROM accounts WHERE id = ?1 AND status = 'active')
+          AND NOT EXISTS (SELECT 1 FROM household_members WHERE account_id = ?1)`
+    ).bind(accountId, tokenHash, now),
+    env.DB.prepare(
+      `INSERT INTO household_members (household_id, account_id, role, created_at)
+       SELECT household_id, ?1, 'guardian', ?3 FROM household_invites
+        WHERE token_hash = ?2 AND accepted_account_id = ?1 AND accepted_at = ?3
+          AND NOT EXISTS (SELECT 1 FROM household_members WHERE account_id = ?1)`
+    ).bind(accountId, tokenHash, now),
+  ]);
+  return (claim.meta?.changes || 0) === 1;
+}
+
+/** The owner removes another guardian. Owners cannot be removed this way. */
+export async function removeGuardian(env, accountId, guardianAccountId) {
+  const res = await env.DB.prepare(
+    `DELETE FROM household_members
+      WHERE account_id = ?2 AND role = 'guardian' AND ?2 != ?1
+        AND household_id IN (${OWNER_OF})`
+  )
+    .bind(accountId, guardianAccountId)
+    .run();
+  return res.meta.changes === 1;
+}
+
+/** A guardian leaves the family. The owner cannot leave (they would orphan it). */
+export async function leaveHousehold(env, accountId) {
+  const res = await env.DB.prepare(
+    `DELETE FROM household_members WHERE account_id = ?1 AND role = 'guardian'`
+  )
+    .bind(accountId)
+    .run();
+  return res.meta.changes === 1;
+}
+
+// --- devices ------------------------------------------------------------------------
+
+export async function listSessions(env, accountId) {
+  const { results } = await env.DB.prepare(
+    `SELECT id_hash, device_label, created_at, last_seen_at, auth_method FROM sessions
+      WHERE account_id = ?1 AND revoked_at IS NULL AND idle_expires_at > ?2 AND absolute_expires_at > ?2
+      ORDER BY last_seen_at DESC`
+  )
+    .bind(accountId, iso())
+    .all();
+  return results || [];
+}
+
+/** Sign out every other device; the current session stays. */
+export async function revokeOtherSessions(env, accountId, keepIdHash) {
+  const res = await env.DB.prepare(
+    `UPDATE sessions SET revoked_at = ?3 WHERE account_id = ?1 AND id_hash != ?2 AND revoked_at IS NULL`
+  )
+    .bind(accountId, keepIdHash, iso())
+    .run();
+  return res.meta.changes || 0;
+}

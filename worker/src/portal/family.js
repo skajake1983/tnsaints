@@ -24,8 +24,10 @@ import { validateGuardian, validateChild, validateMedical, validateContacts } fr
 import { setupPage, dashboardPage, childPage, contactsPage, accountPage } from './family-pages.js';
 import { redirect } from './auth-pages.js';
 import { notFoundResponse } from './ui.js';
+import { guardianRoutes } from './guardians.js';
 
 const NOTICES = {
+  joined: "Welcome — you've joined the family.",
   contacts: 'Emergency contacts saved.',
   claimed: 'Added to your family.',
   'not-claimed': "That child couldn't be added. They may already be in a family.",
@@ -44,7 +46,10 @@ export function isFamilyPath(pathname) {
     pathname === '/contacts' ||
     pathname === '/account' ||
     pathname === '/children' ||
-    pathname.startsWith('/children/')
+    pathname.startsWith('/children/') ||
+    pathname === '/guardians' ||
+    pathname.startsWith('/guardians/') ||
+    pathname === '/account/signout-others'
   );
 }
 
@@ -66,7 +71,16 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
             .first()
         )
       : false;
-    return accountPage(rc, session, { google, googleLinked: linked });
+    const notice = url.searchParams.get('notice') === 'signedout' ? 'Signed out everywhere else.' : '';
+    return accountPage(rc, session, {
+      google, googleLinked: linked, sessions: await data.listSessions(env, accountId), notice,
+    });
+  }
+
+  if (pathname === '/account/signout-others' && method === 'POST') {
+    const n = await data.revokeOtherSessions(env, accountId, session.idHash);
+    if (n) log('portal.signout_others', 'account', accountId);
+    return redirect(rc.url('/account?notice=signedout'));
   }
 
   const household = await data.getHousehold(env, accountId);
@@ -85,6 +99,11 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
   // Everything below needs a household; without one, the only page is setup.
   if (!household) {
     return method === 'GET' && pathname === '/' ? setupPage(rc, session) : redirect(rc.url('/'));
+  }
+
+  if (pathname === '/guardians' || pathname.startsWith('/guardians/')) {
+    const response = await guardianRoutes({ env, ctx, request, rc, session, household, pathname, method, readForm });
+    if (response) return response;
   }
 
   if (pathname === '/' && method === 'GET') {

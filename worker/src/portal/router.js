@@ -31,6 +31,7 @@ import { requestLink, verifyLink, renderSignIn } from '../auth/magic.js';
 import { googleConfigured, startGoogle, finishGoogle } from '../auth/google.js';
 import { verifyPage, redirect } from './auth-pages.js';
 import { familyRoutes, isFamilyPath } from './family.js';
+import { inviteLanding, acceptInvitation } from './guardians.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
 /**
@@ -119,6 +120,14 @@ export async function handlePortal(request, env, ctx, route) {
   if (pathname === '/auth/signout' && method === 'POST') {
     if (session) await revokeSession(env, session.idHash);
     return redirect(rc.url('/'), [clearedCookie(SESSION_COOKIE)]);
+  }
+
+  // An invitation can be opened signed out; accepting it explains how to sign in.
+  if (pathname === '/invite' && method === 'GET') {
+    return inviteLanding(rc);
+  }
+  if (pathname === '/invite/accept' && method === 'POST') {
+    return withForm(request, rc, (form) => acceptInvitation(env, ctx, rc, session, form));
   }
 
   // Everything about a family needs a signed-in parent. Signed out, the front

@@ -280,6 +280,64 @@ export async function sendSignInLink(env, { to, url, minutes }) {
   });
 }
 
+/**
+ * An invitation to share a family on the parent portal.
+ *
+ * Receipt lane. Names the person who sent it and the family name they chose,
+ * and says plainly what accepting means: a co-guardian sees and changes
+ * everything about the family's children. No child is named.
+ */
+export async function sendHouseholdInvite(env, { to, inviterName, familyName, url, days }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const who = inviterName || 'A parent';
+  const family = familyName || 'their family';
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">Tennessee Saints — parent portal</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">
+      <p style="margin-top:0;">${escapeHtml(who)} invited you to join <strong>${escapeHtml(family)}</strong>
+      on the Tennessee Saints parent portal.</p>
+      <p>As a guardian you'll be able to see and update everything about the family's children:
+      their details, medical information, emergency contacts and program sign-ups.</p>
+      <p style="margin:18px 0;">
+        <a href="${escapeHtml(url)}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">View the invitation</a>
+      </p>
+      <p>The invitation works once and expires in ${days} days. You'll sign in with this email address to accept it.</p>
+      <p style="color:#536277;font-size:14px;">Not expecting this? You can ignore it, and nothing will change.
+      Questions: ${escapeHtml(contact)}.</p>
+    </div>
+  </div>`;
+
+  const text = [
+    `${who} invited you to join ${family} on the Tennessee Saints parent portal.`,
+    '',
+    "As a guardian you'll be able to see and update everything about the family's children:",
+    'their details, medical information, emergency contacts and program sign-ups.',
+    '',
+    'View the invitation:',
+    url,
+    '',
+    `The invitation works once and expires in ${days} days. You'll sign in with this email address to accept it.`,
+    '',
+    `Not expecting this? You can ignore it. Questions: ${contact}`,
+  ].join('\n');
+
+  return sendMetered(env, 'receipt', {
+    to,
+    subject: `${who} invited you to the Tennessee Saints parent portal`,
+    html,
+    text,
+    replyTo: contact,
+  });
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>

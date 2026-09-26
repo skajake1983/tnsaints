@@ -104,6 +104,7 @@ ${claim}
   <ul class="plain">${guardians
     .map((g) => `<li>${esc(g.display_name || g.email)}${g.relationship ? ` (${esc(g.relationship)})` : ''}${g.role === 'owner' ? ' · owner' : ''}</li>`)
     .join('')}</ul>
+  <p style="margin-bottom:0"><a class="btn secondary" href="${esc(rc.url('/guardians'))}">Manage guardians</a></p>
 </section>`;
   return page(rc, 'Your family', body);
 }
@@ -188,9 +189,11 @@ ${errorSummary(errors)}
 
 // --- account --------------------------------------------------------------------------
 
-export function accountPage(rc, session, { google = false, googleLinked = false }) {
-  const body = `<h1>Account</h1>
+export function accountPage(rc, session, { google = false, googleLinked = false, sessions = [], notice = '' }) {
+  const body = `${notice ? `<div class="notice" role="status">${esc(notice)}</div>` : ''}
+<h1>Account</h1>
 <p class="lede">Signed in as <strong>${esc(session.email)}</strong>.</p>
+${devicesSection(rc, sessions, session.idHash)}
 ${google ? `<section class="panel" aria-labelledby="so-h">
   <h2 id="so-h" style="margin-top:0">Sign-in options</h2>
   ${googleLinked
@@ -201,4 +204,112 @@ ${google ? `<section class="panel" aria-labelledby="so-h">
   <button class="btn secondary" type="submit">Sign out</button>
 </form>`;
   return page(rc, 'Account', body, { current: '/account' });
+}
+
+// --- guardians ----------------------------------------------------------------------
+
+export function guardiansPage(rc, session, { household, guardians, invites, values = {}, errors = [], notice = '', status = 200 }) {
+  const isOwner = household.role === 'owner';
+  const people = guardians
+    .map((g) => {
+      const me = Number(g.account_id) === session.accountId;
+      const name = `${esc(g.display_name || g.email)}${g.relationship ? ` (${esc(g.relationship)})` : ''}`;
+      const remove = isOwner && !me && g.role !== 'owner'
+        ? `<form method="post" action="${esc(rc.url('/guardians/remove'))}">
+    <input type="hidden" name="account_id" value="${esc(g.account_id)}">
+    <button class="btn secondary" type="submit">Remove</button></form>`
+        : '';
+      return `<li class="item"><div><span class="item-title">${name}</span>
+  <div class="item-sub">${esc(g.email)}${g.role === 'owner' ? ' · owner' : ' · guardian'}${me ? ' · you' : ''}</div></div>${remove}</li>`;
+    })
+    .join('');
+
+  const pending = invites.length
+    ? `<h3>Waiting to accept</h3><ul class="cards-list">${invites
+        .map((i) => `<li class="item"><div><span class="item-title">${esc(i.invited_email_norm)}</span>
+  <div class="item-sub">Invited ${esc(String(i.created_at).slice(0, 10))}</div></div>
+  <form method="post" action="${esc(rc.url('/guardians/invite/cancel'))}">
+    <input type="hidden" name="email" value="${esc(i.invited_email_norm)}">
+    <button class="btn secondary" type="submit">Cancel invitation</button></form></li>`)
+        .join('')}</ul>`
+    : '';
+
+  const invite = isOwner
+    ? `<section class="panel" aria-labelledby="inv-h">
+  <h2 id="inv-h" style="margin-top:0">Invite another guardian</h2>
+  <p><strong>A guardian can see and change everything about your children</strong> — their details, medical
+  information, emergency contacts and program sign-ups. Only invite someone you would trust with all of it.</p>
+  ${errorSummary(errors)}
+  <form method="post" action="${esc(rc.url('/guardians/invite'))}" novalidate>
+    ${field({ id: 'invite_email', label: 'Their email address', type: 'email', value: values.email || '', required: true,
+      autocomplete: 'off', inputmode: 'email', error: errorFor(errors, 'invite_email') })}
+    <button class="btn" type="submit">Send invitation</button>
+  </form>
+  ${pending}
+</section>`
+    : `<section class="panel"><h2 style="margin-top:0">Leave this family</h2>
+  <p>You will no longer see or change these children's details. The owner can invite you again.</p>
+  <form method="post" action="${esc(rc.url('/guardians/leave'))}"><button class="btn secondary" type="submit">Leave this family</button></form>
+</section>`;
+
+  const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
+${notice ? `<div class="notice" role="status">${esc(notice)}</div>` : ''}
+<h1>Guardians</h1>
+<p class="lede">Everyone here can see and update your children's details.</p>
+<section class="panel" aria-label="Guardians"><ul class="cards-list">${people}</ul></section>
+${invite}`;
+  return page(rc, 'Guardians', body, { status });
+}
+
+/**
+ * An invitation's landing page. Inert like the sign-in landing page: the token
+ * rides in the URL fragment and is only ever sent when the person presses the
+ * button, so a mail scanner opening the link accepts nothing.
+ */
+export const INVITE_SCRIPT = `(function () {
+  var form = document.getElementById('accept');
+  var missing = document.getElementById('missing');
+  var m = /(?:^#|&)t=([A-Za-z0-9_-]{43})(?:&|$)/.exec(location.hash);
+  if (!m) { form.hidden = true; missing.hidden = false; return; }
+  form.elements.t.value = m[1];
+  if (window.history && history.replaceState) history.replaceState(null, '', location.pathname);
+})();`;
+
+export function inviteLandingBody(rc) {
+  return `<h1>You've been invited</h1>
+<form id="accept" method="post" action="${esc(rc.url('/invite/accept'))}">
+  <input type="hidden" name="t" value="">
+  <p class="lede">You've been invited to join a family on the Tennessee Saints parent portal.</p>
+  <p><strong>As a guardian you'll see and be able to change everything about the family's children</strong>:
+  their details, medical information, emergency contacts and program sign-ups.</p>
+  <button class="btn" type="submit">Accept the invitation</button>
+</form>
+<div id="missing" hidden>
+  <p class="lede">This invitation link is incomplete. Links sometimes get cut off when copied; open it again from the email.</p>
+</div>
+<noscript><div class="notice">This page needs JavaScript turned on. Turn it on and reload.</div></noscript>
+<script>${INVITE_SCRIPT}</script>`;
+}
+
+export function inviteMessagePage(rc, { title, text, status = 400, action = '' }) {
+  const body = `<h1>${esc(title)}</h1><p class="lede">${esc(text)}</p>${action}
+<p><a class="btn" href="${esc(rc.url('/'))}">Go to the parent portal</a></p>`;
+  return portalResponse(portalPage({ rc, title, body }), { status });
+}
+
+// --- devices ------------------------------------------------------------------------
+
+export function devicesSection(rc, sessions, currentIdHash) {
+  const rows = sessions
+    .map((s) => `<li class="item"><div><span class="item-title">${esc(s.device_label || 'Unknown device')}</span>
+  <div class="item-sub">${s.id_hash === currentIdHash ? 'This device · ' : ''}signed in ${esc(String(s.created_at).slice(0, 10))}
+  · last used ${esc(String(s.last_seen_at).slice(0, 10))}</div></div></li>`)
+    .join('');
+  const others = sessions.filter((s) => s.id_hash !== currentIdHash).length;
+  return `<section class="panel" aria-labelledby="dev-h">
+  <h2 id="dev-h" style="margin-top:0">Where you're signed in</h2>
+  <ul class="cards-list">${rows}</ul>
+  ${others ? `<form method="post" action="${esc(rc.url('/account/signout-others'))}">
+    <button class="btn secondary" type="submit">Sign out everywhere else</button></form>` : ''}
+</section>`;
 }

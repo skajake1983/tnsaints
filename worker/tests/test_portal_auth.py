@@ -389,7 +389,8 @@ console.log(JSON.stringify({
   eligible: [mayReceiveLink({ status: 'active' }, {}), mayReceiveLink({ status: 'disabled' }, {}),
              mayReceiveLink({ status: 'deleted' }, { PORTAL_SIGNUP_ENABLED: 'true' }),
              mayReceiveLink(null, {}), mayReceiveLink(null, { PORTAL_SIGNUP_ENABLED: 'True' }),
-             mayReceiveLink(null, { PORTAL_SIGNUP_ENABLED: 'true' })],
+             mayReceiveLink(null, { PORTAL_SIGNUP_ENABLED: 'true' }), mayReceiveLink(null, {}, { invited: true }),
+             mayReceiveLink({ status: 'disabled' }, {}, { invited: true })],
   masks: [maskEmail('jacob@gmail.com'), maskEmail('j@x.org'), maskEmail('garbage')],
   origin: [portalOrigin({ PORTAL_HOSTNAME: 'portal.tnsaints.com' }), portalOrigin({ PORTAL_ORIGIN: 'http://127.0.0.1:8787/' })],
   domainSeparated: a !== b, deterministic: a === await keyedHash(env, 'session', 'same-value'),
@@ -410,8 +411,8 @@ except Exception:
     u = None
 check("unit harness ran", u is not None, (res.stderr or b"").decode()[-400:])
 if u:
-    check("links go to active accounts; to no-one else unless signup is exactly 'true'",
-          u["eligible"] == [True, False, False, False, False, True], u["eligible"])
+    check("links go to active accounts; to no-one else unless signup is exactly 'true' or they were invited",
+          u["eligible"] == [True, False, False, False, False, True, True, False], u["eligible"])
     check("addresses are masked for the confirm page", u["masks"] == ["j•••@gmail.com", "•••@x.org", "•••"], u["masks"])
     check("link origin: production derives it, local overrides it",
           u["origin"] == ["https://portal.tnsaints.com", "http://127.0.0.1:8787"], u["origin"])

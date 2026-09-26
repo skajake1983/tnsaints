@@ -45,7 +45,7 @@ import { isLoopbackOrigin } from '../lib/csrf.js';
 import { normEmail } from './access.js';
 import { audit } from './staff.js';
 import { createSession, readCookie, hostCookie, clearedCookie } from './session.js';
-import { portalOrigin } from './magic.js';
+import { portalOrigin, mayCreateAccount } from './magic.js';
 import { redirect, googleProblemPage } from '../portal/auth-pages.js';
 
 export const FLOW_COOKIE = '__Host-tns_oidc';
@@ -257,7 +257,7 @@ export async function finishGoogle(env, ctx, request, rc, { isDev, session }) {
       .bind(emailNorm)
       .first();
     if (!account) {
-      if (!flag(env, 'PORTAL_SIGNUP_ENABLED', false)) return problem('no-account');
+      if (!(await mayCreateAccount(env, emailNorm))) return problem('no-account');
       await env.DB.prepare(
         `INSERT INTO accounts (email, email_norm, display_name, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?4) ON CONFLICT (email_norm) DO NOTHING`

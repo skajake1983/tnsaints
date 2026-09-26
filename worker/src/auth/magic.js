@@ -37,6 +37,7 @@ import { verifyTurnstile, turnstileEnabled } from '../turnstile.js';
 import { clientIp } from '../http.js';
 import { sendSignInLink } from '../email.js';
 import { googleConfigured } from './google.js';
+import { hasPendingInvite } from '../portal/data.js';
 import {
   signInPage,
   checkEmailPage,
@@ -63,11 +64,18 @@ export function portalOrigin(env) {
 /**
  * May this address be sent a sign-in link? Pure, so the rule is tested directly.
  * An existing active account: yes. Disabled or deleted: no. No account: only
- * while self-signup is open (PORTAL_SIGNUP_ENABLED exactly "true").
+ * while self-signup is open (PORTAL_SIGNUP_ENABLED exactly "true"), or when a
+ * family has invited this address as a co-guardian — the invitation is how
+ * someone joins while the portal is invite-only.
  */
-export function mayReceiveLink(account, env) {
+export function mayReceiveLink(account, env, { invited = false } = {}) {
   if (account) return account.status === 'active';
-  return flag(env, 'PORTAL_SIGNUP_ENABLED', false);
+  return flag(env, 'PORTAL_SIGNUP_ENABLED', false) || invited;
+}
+
+/** May a new account be created for this address right now? */
+export async function mayCreateAccount(env, emailNorm) {
+  return flag(env, 'PORTAL_SIGNUP_ENABLED', false) || hasPendingInvite(env, emailNorm);
 }
 
 /** "j•••@gmail.com": enough for the owner to recognise, useless to a shoulder-surfer. */
@@ -153,7 +161,8 @@ async function issueLink(env, rc, { emailNorm, typed, bind }) {
     const account = await env.DB.prepare(`SELECT id, email, status FROM accounts WHERE email_norm = ?1`)
       .bind(emailNorm)
       .first();
-    if (!mayReceiveLink(account, env)) return;
+    const invited = account ? false : await hasPendingInvite(env, emailNorm);
+    if (!mayReceiveLink(account, env, { invited })) return;
 
     const token = randomToken(32);
     const now = Date.now();
@@ -220,9 +229,9 @@ export async function verifyLink(env, ctx, request, rc, form) {
     .first();
   let created = false;
   if (!account) {
-    // The link was issued while signup was open. Re-check: closing signup
-    // must also stop links already in flight.
-    if (!flag(env, 'PORTAL_SIGNUP_ENABLED', false)) return linkProblemPage(rc);
+    // Re-check rather than trust the moment the link was issued: closing
+    // signup, or cancelling an invitation, must also stop links in flight.
+    if (!(await mayCreateAccount(env, row.email_norm))) return linkProblemPage(rc);
     await env.DB.prepare(
       `INSERT INTO accounts (email, email_norm, created_at, updated_at) VALUES (?1, ?1, ?2, ?2)
        ON CONFLICT (email_norm) DO NOTHING`

@@ -104,6 +104,19 @@ check("B's contacts are unchanged",
 check("A's contacts save never touched B's (per-household replace)",
       len(sql("SELECT 1 FROM household_emergency_contacts WHERE name LIKE 'Bravo%'")) == 1)
 
+print("\n=== A managing B's guardians ===")
+post(P + "/guardians/invite", {"invite_email": "bravo-helper@example.com"}, cookies=SB)
+check("setup: B has a pending invitation", sql("SELECT 1 FROM household_invites WHERE invited_email_norm='bravo-helper@example.com' "
+                                               "AND revoked_at IS NULL") != [])
+st, _, _, body = post(P + "/guardians/remove", {"account_id": str(B)}, cookies=SA)
+check("A cannot remove B's owner", st == 404 and sql(f"SELECT 1 FROM household_members WHERE account_id={B}") != [], st)
+post(P + "/guardians/invite/cancel", {"email": "bravo-helper@example.com"}, cookies=SA)
+check("A cannot cancel B's invitation", sql("SELECT 1 FROM household_invites WHERE invited_email_norm='bravo-helper@example.com' "
+                                            "AND revoked_at IS NULL") != [])
+st, _, _, body = get(P + "/guardians", cookies=SA)
+check("A's guardians page shows none of B's people or invitations",
+      "Bravo" not in body and "bravo-helper" not in body)
+
 print("\n=== and the same holds the other way ===")
 st, _, _, body = get(P + f"/children/{KID_A}", cookies=SB)
 check("B cannot open A's child either", st == 404, st)
