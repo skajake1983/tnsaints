@@ -17,6 +17,8 @@ import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert } from 
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import { handleAdmin } from './admin/router.js';
+import { handlePortal } from './portal/router.js';
+import { flag } from './lib/flags.js';
 import { audit } from './auth/staff.js';
 import {
   getAvailability,
@@ -34,21 +36,36 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // Hostname dispatch happens before anything else, including CORS. The two
+    // Hostname dispatch happens before anything else, including CORS. The
     // surfaces have opposite defaults — the public API is open to allow-listed
-    // origins, the admin host is closed to everyone who is not staff — and
-    // mixing their routing is how a public path ends up on the private host or
-    // an admin path ends up unauthenticated. See admin/router.js.
-    const admin = adminRequest(url, env);
-    if (admin.admin) {
+    // origins, the admin host is closed to everyone who is not staff, the
+    // portal to everyone without a family session — and mixing their routing
+    // is how a public path ends up on a private host or a private path ends up
+    // unauthenticated. See admin/router.js and portal/router.js.
+    const route = resolveSurface(request, env);
+    if (route.surface === 'admin') {
       try {
-        return await handleAdmin(request, env, ctx, admin.path);
+        return await handleAdmin(request, env, ctx, route.path);
       } catch (err) {
         console.error('Unhandled admin error:', err?.stack || err?.message || err);
         return new Response('Something went wrong. Try again, or text Jacob.', {
           status: 500,
           headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
         });
+      }
+    }
+    if (route.surface === 'portal') {
+      try {
+        return await handlePortal(request, env, ctx, route);
+      } catch (err) {
+        console.error('Unhandled portal error:', err?.stack || err?.message || err);
+        return new Response(
+          'Something went wrong on our end. Please try again, or email info@tnsaints.com.',
+          {
+            status: 500,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+          }
+        );
       }
     }
 
@@ -107,41 +124,67 @@ export default {
   },
 };
 
-/** Local-development-only prefix — see adminRequest(). */
+/** Local-development-only prefixes — see resolveSurface(). */
 const DEV_ADMIN_PREFIX = '/__admin';
+const DEV_PORTAL_PREFIX = '/__portal';
 
 /**
- * Decide whether a request belongs to the staff surface, and what path it is
- * asking for.
+ * Decide which surface a request belongs to — admin, portal or the public
+ * API — and what path it is asking for.
  *
- * In production this is purely a hostname test. ADMIN_HOSTNAME unset means the
- * admin surface does not exist at all, which is the safe direction for a
- * misconfiguration.
+ * In production this is purely a hostname test. ADMIN_HOSTNAME or
+ * PORTAL_HOSTNAME unset means that surface does not exist at all, which is the
+ * safe direction for a misconfiguration.
  *
- * Local development needs a second door, because `wrangler dev` does not
+ * Local development needs other doors, because `wrangler dev` does not
  * simulate multiple hostnames: whatever Host header you send, the Worker sees
  * the first entry in `routes` — verified, not assumed, and `--host` does not
- * change it in local mode. Without a second door the admin surface could only
- * ever be exercised for the first time in production, on a deadline, against
- * real children's data.
+ * change it in local mode. Without them the private surfaces could only ever
+ * be exercised for the first time in production, on a deadline, against real
+ * children's data.
  *
- * That door is a path prefix that only opens when DEV_ADMIN_EMAIL is set.
- * DEV_ADMIN_EMAIL lives only in .dev.vars, which is gitignored and is not
- * uploaded by `wrangler deploy` — so in production this branch is unreachable
- * and /__admin is just another 404 from the public router.
+ * Each door is a path prefix that opens only on a setting that lives in
+ * .dev.vars, which is gitignored and not uploaded by `wrangler deploy`:
+ *   /__admin   DEV_ADMIN_EMAIL set (and devPrincipalEmail refuses Cf-Ray)
+ *   /__portal  DEV_PORTAL exactly "true" AND no Cf-Ray header, checked here,
+ *              so a request through Cloudflare's edge can never use it
+ * In production both are just 404s from the public router.
+ *
+ * `base` is the prefix that was stripped ('' in production), so a surface can
+ * build links that work behind its door.
  */
-function adminRequest(url, env) {
-  const configured = String(env.ADMIN_HOSTNAME || '').trim().toLowerCase();
+export function resolveSurface(request, env) {
+  const url = new URL(request.url);
+  const host = url.hostname.toLowerCase();
+  const adminHost = String(env.ADMIN_HOSTNAME || '').trim().toLowerCase();
+  const portalHost = String(env.PORTAL_HOSTNAME || '').trim().toLowerCase();
 
-  if (configured && url.hostname.toLowerCase() === configured) {
-    return { admin: true, path: url.pathname };
+  if (adminHost && host === adminHost) {
+    return { surface: 'admin', path: url.pathname, base: '' };
+  }
+  if (portalHost && host === portalHost) {
+    return { surface: 'portal', path: url.pathname, base: '' };
   }
 
   if (env.DEV_ADMIN_EMAIL && url.pathname.startsWith(DEV_ADMIN_PREFIX)) {
-    return { admin: true, path: url.pathname.slice(DEV_ADMIN_PREFIX.length) || '/' };
+    return {
+      surface: 'admin',
+      path: url.pathname.slice(DEV_ADMIN_PREFIX.length) || '/',
+      base: DEV_ADMIN_PREFIX,
+    };
   }
 
-  return { admin: false, path: url.pathname };
+  const underPortalDoor =
+    url.pathname === DEV_PORTAL_PREFIX || url.pathname.startsWith(`${DEV_PORTAL_PREFIX}/`);
+  if (underPortalDoor && flag(env, 'DEV_PORTAL', false) && !request.headers.get('Cf-Ray')) {
+    return {
+      surface: 'portal',
+      path: url.pathname.slice(DEV_PORTAL_PREFIX.length) || '/',
+      base: DEV_PORTAL_PREFIX,
+    };
+  }
+
+  return { surface: 'api', path: url.pathname, base: '' };
 }
 
 /**

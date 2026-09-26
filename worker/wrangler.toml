@@ -17,6 +17,12 @@ compatibility_date = "2026-08-08"
 routes = [
   { pattern = "api.tnsaints.com", custom_domain = true },
   { pattern = "admin.tnsaints.com", custom_domain = true }
+  # The parent portal's hostname is added at launch, with the owner's go-ahead
+  # (plan step P1.14). Deploying it creates public DNS and a certificate for
+  # portal.tnsaints.com; with PORTAL_ENABLED="false" it would only show the
+  # "not open yet" page, but it is still a new public address, so it is not
+  # created as a side effect of some other deploy:
+  #   { pattern = "portal.tnsaints.com", custom_domain = true }
 ]
 
 # One canonical hostname. Declaring these explicitly rather than letting the
@@ -87,6 +93,14 @@ ACCESS_EMAIL_MODE = "domain"
 #               send Origin: https://admin.tnsaints.com.
 # Missing or misspelled reads as "enforce".
 ADMIN_CSRF_MODE = "report"
+
+# ---------------------------------------------------------------------------
+# Parent portal (src/portal). Closed by default: PORTAL_ENABLED must be exactly
+# "true" or every path answers with the "not open yet" page (503). Locally,
+# .dev.vars opens it through the /__portal door (DEV_PORTAL=true).
+# ---------------------------------------------------------------------------
+PORTAL_HOSTNAME = "portal.tnsaints.com"
+PORTAL_ENABLED = "false"
 
 # Base for links inside emails (cancel, enrol). Read by email.js, which
 # previously fell back to the hardcoded production URL — so cancel links

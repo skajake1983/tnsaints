@@ -56,6 +56,19 @@ EMAIL_DAILY_LIMIT=0
 #      src/auth/access.js for why earlier config-based guards were dropped).
 DEV_ADMIN_EMAIL=you@example.com
 
+# --- Parent portal (local only) ----------------------------------------------
+#
+# Same problem as the admin: wrangler dev cannot simulate portal.tnsaints.com,
+# so the portal is reachable locally under a path prefix:
+#   http://127.0.0.1:8787/__portal/
+#
+# DEV_PORTAL=true opens that door. It is honoured only for requests with no
+# Cf-Ray header, so it can never be used through Cloudflare's edge, and like
+# everything here it is never deployed. PORTAL_ENABLED=true turns the portal on
+# locally; in wrangler.toml it stays "false" until launch.
+DEV_PORTAL=true
+PORTAL_ENABLED=true
+
 # --- Test clock ---------------------------------------------------------------
 #
 # The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,
