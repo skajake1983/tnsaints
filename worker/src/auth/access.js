@@ -22,9 +22,9 @@
  * subtleties — algorithm confusion, key rotation, the full set of claim checks
  * — are each a known CVE class in other people's code.
  *
- * Contrast Stripe webhook verification later on, which is one HMAC-SHA256 over
- * a known string and stays hand-rolled. Take the dependency where the crypto is
- * subtle and the failure is silent.
+ * The same reasoning will apply to PayPal webhook verification: jose parses
+ * the signing certificate, and only the CRC32 over the raw body is hand-rolled.
+ * Take the dependency where the crypto is subtle and the failure is silent.
  */
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';

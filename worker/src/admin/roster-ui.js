@@ -20,6 +20,7 @@
  */
 
 import { esc } from './ui.js';
+import { inlineScriptCsp } from '../lib/csp.js';
 
 const BODY_SCRIPT = `
 (function () {
@@ -95,24 +96,8 @@ const BODY_SCRIPT = `
 })();
 `;
 
-let cachedHash = null;
-async function scriptCspHash() {
-  if (cachedHash) return cachedHash;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(BODY_SCRIPT));
-  let binary = '';
-  for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
-  cachedHash = `'sha256-${btoa(binary)}'`;
-  return cachedHash;
-}
-
-export async function rosterCsp() {
-  const hash = await scriptCspHash();
-  return (
-    "default-src 'none'; " +
-    `script-src ${hash}; ` +
-    "style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; " +
-    "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
-  );
+export function rosterCsp() {
+  return inlineScriptCsp(BODY_SCRIPT);
 }
 
 export const ROSTER_STYLES = `

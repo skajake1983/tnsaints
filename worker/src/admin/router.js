@@ -18,8 +18,9 @@
  * separate hostname the same mistake breaks only the dashboard, and families
  * signing up never notice.
  *
- * It also keeps /api/stripe/webhook reachable later: Stripe cannot do SSO, so
- * on a path-scoped app you would be carving an exception into the policy you
+ * It also keeps machine-to-machine endpoints (the PayPal webhook) on
+ * api.tnsaints.com, outside Access entirely: a payment provider cannot do SSO,
+ * so on a path-scoped app you would be carving an exception into the policy you
  * just wrote.
  */
 
@@ -76,6 +77,8 @@ import {
 } from './roster-ui.js';
 import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
+import { crossSiteCheck, isLoopbackOrigin } from '../lib/csrf.js';
+import { choice } from '../lib/flags.js';
 
 const NAV = [
   { href: '/', label: 'Roster' },
@@ -84,6 +87,89 @@ const NAV = [
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
+
+/**
+ * May a state-changing admin request carry this Origin? Pure, so it is tested
+ * directly (tests/test_admin_csrf.py) rather than only through report mode,
+ * which lets everything through and so proves nothing.
+ *
+ * Production: exactly https://<ADMIN_HOSTNAME>, from config — never derived from
+ * the request, which is what an attacker controls.
+ *
+ * Local development, and only when the dev bypass signed the request in (which
+ * already requires DEV_ADMIN_EMAIL and no Cf-Ray header), two more:
+ *   - any loopback origin, e.g. http://localhost:8787;
+ *   - the origin wrangler reports for this request. `wrangler dev` rewrites an
+ *     Origin equal to its own listen address (http://127.0.0.1:8787) to the
+ *     first route's host, matching how it rewrites request.url — observed
+ *     2026-09-26, the browser's Origin arrived as http://api.tnsaints.com.
+ *     Without this, enforce mode would refuse every local browser POST.
+ */
+export function adminOriginAllowed(origin, { env, requestUrl, isDev }) {
+  const configured = String(env.ADMIN_HOSTNAME || '').trim().toLowerCase();
+  if (configured && origin === `https://${configured}`) return true;
+  if (!isDev) return false;
+  if (isLoopbackOrigin(origin)) return true;
+  try {
+    return origin === new URL(requestUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Refuse state changes that did not come from an admin page. See lib/csrf.js.
+ *
+ * Cloudflare Access proves WHO is asking; it says nothing about which page made
+ * the browser ask. Without this, any website a signed-in coach visits could
+ * POST to /api/eval/... or /api/batch/.../drain with their Access cookie.
+ *
+ * Two layers, rolled out separately:
+ *   - Sec-Fetch-Site is ENFORCED now. Every current browser sends it, and our
+ *     own pages always send "same-origin", so nothing legitimate is refused.
+ *     Clients that omit it (the Python suites) are unaffected.
+ *   - The Origin fallback, for requests with no Sec-Fetch-Site, starts in
+ *     REPORT mode (ADMIN_CSRF_MODE="report"): it logs what it would have
+ *     refused. Once the logs show only expected traffic it moves to "enforce",
+ *     which also means the test helpers must start sending the admin Origin.
+ *
+ * An unset or misspelled mode enforces — a protection must not switch itself
+ * off because a config line went missing.
+ *
+ * @returns {Response | null} a refusal, or null to carry on
+ */
+function adminCrossSite(request, env, ctx, principal, isDev, pathname) {
+  const check = crossSiteCheck(request, {
+    isAllowedOrigin: (origin) => adminOriginAllowed(origin, { env, requestUrl: request.url, isDev }),
+  });
+  if (check.ok) return null;
+
+  const mode = choice(env, 'ADMIN_CSRF_MODE', ['report', 'enforce'], 'enforce');
+  if (check.layer === 'origin' && mode === 'report') {
+    console.warn(
+      JSON.stringify({ event: 'admin_csrf_would_block', reason: check.reason, method: request.method })
+    );
+    return null;
+  }
+
+  console.warn(JSON.stringify({ event: 'admin_csrf_blocked', reason: check.reason, method: request.method }));
+  ctx.waitUntil(
+    audit(env, {
+      actor: principal.email,
+      action: 'admin.csrf_blocked',
+      detail: { reason: check.reason, method: request.method, path: pathname },
+    })
+  );
+
+  const message = 'This request did not come from the admin site, so it was not carried out. Reload the page and try again.';
+  if (pathname.startsWith('/api/')) {
+    return json({ ok: false, error: message }, { status: 403 });
+  }
+  return htmlResponse(
+    page({ title: 'Request refused', body: `<h1>Request refused</h1><p class="sub">${esc(message)}</p>` }),
+    { status: 403 }
+  );
+}
 
 /**
  * Everything on this hostname is gated. There is no public path here by
@@ -148,6 +234,9 @@ export async function handleAdmin(request, env, ctx, path) {
     );
     return htmlResponse(notAuthorisedPage(verified.email), { status: 403 });
   }
+
+  const forged = adminCrossSite(request, env, ctx, principal, Boolean(devEmail), pathname);
+  if (forged) return forged;
 
   if (pathname === '/' && request.method === 'GET') {
     return await renderRoster(env, principal);

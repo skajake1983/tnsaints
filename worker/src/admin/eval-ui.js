@@ -22,6 +22,7 @@
 
 import { esc, backButton } from './ui.js';
 import { DIALOG_STYLES, DIALOG_MARKUP, DIALOG_SCRIPT } from './dialog.js';
+import { inlineScriptCsp } from '../lib/csp.js';
 
 /**
  * The inline script, hashed for CSP rather than allowed with 'unsafe-inline'.
@@ -171,26 +172,8 @@ const BODY_SCRIPT = `
 /** Dialog first: the body script calls window.tnConfirm. */
 const PAGE_SCRIPT = DIALOG_SCRIPT + BODY_SCRIPT;
 
-let cachedHash = null;
-
-/** SHA-256 of the inline script, base64, for the CSP script-src directive. */
-async function scriptCspHash() {
-  if (cachedHash) return cachedHash;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PAGE_SCRIPT));
-  let binary = '';
-  for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
-  cachedHash = `'sha256-${btoa(binary)}'`;
-  return cachedHash;
-}
-
-export async function evalCsp() {
-  const hash = await scriptCspHash();
-  return (
-    "default-src 'none'; " +
-    `script-src ${hash}; ` +
-    "style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; " +
-    "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
-  );
+export function evalCsp() {
+  return inlineScriptCsp(PAGE_SCRIPT);
 }
 
 export const EVAL_STYLES = DIALOG_STYLES + `
