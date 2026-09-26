@@ -36,6 +36,7 @@ import { createSession, readCookie, hostCookie, clearedCookie } from './session.
 import { verifyTurnstile, turnstileEnabled } from '../turnstile.js';
 import { clientIp } from '../http.js';
 import { sendSignInLink } from '../email.js';
+import { googleConfigured } from './google.js';
 import {
   signInPage,
   checkEmailPage,
@@ -81,6 +82,7 @@ function signInOptions(env) {
     siteKey: env.TURNSTILE_SITE_KEY || '',
     turnstile: turnstileEnabled(env),
     signupOpen: flag(env, 'PORTAL_SIGNUP_ENABLED', false),
+    google: googleConfigured(env),
   };
 }
 
@@ -135,37 +137,47 @@ export async function requestLink(env, ctx, request, rc, form) {
   const bind = readCookie(request, BIND_COOKIE) || randomToken(32);
   const cookies = [hostCookie(BIND_COOKIE, bind, LINK_MINUTES * 60)];
 
+  // Everything that depends on whether the address has an account happens
+  // AFTER the response, so the answer and its timing are the same for every
+  // address. (Doing the lookup first made a known address a few database
+  // writes slower than an unknown one.)
   if (!limits.exceeded.length) {
-    const account = await env.DB.prepare(`SELECT id, email, status FROM accounts WHERE email_norm = ?1`)
-      .bind(emailNorm)
-      .first();
-    if (mayReceiveLink(account, env)) {
-      const token = randomToken(32);
-      const now = Date.now();
-      await env.DB.prepare(
-        `INSERT INTO auth_login_tokens (token_hash, email_norm, purpose, binding_hash, created_at, expires_at)
-         VALUES (?1, ?2, 'login', ?3, ?4, ?5)`
-      )
-        .bind(
-          await keyedHash(env, 'login', token),
-          emailNorm,
-          await keyedHash(env, 'bind', bind),
-          iso(now),
-          iso(now + LINK_MINUTES * 60 * 1000)
-        )
-        .run();
-      const url = `${portalOrigin(env)}${rc.url('/auth/email/verify')}#t=${token}`;
-      ctx.waitUntil(
-        sendSignInLink(env, { to: account?.email || typed, url, minutes: LINK_MINUTES }).then((r) => {
-          if (!r.ok) {
-            console.error(JSON.stringify({ event: 'signin_link_not_sent', budget: Boolean(r.budget) }));
-          }
-        })
-      );
-    }
+    ctx.waitUntil(issueLink(env, rc, { emailNorm, typed, bind }));
   }
 
   return checkEmailPage(rc, cookies);
+}
+
+async function issueLink(env, rc, { emailNorm, typed, bind }) {
+  try {
+    const account = await env.DB.prepare(`SELECT id, email, status FROM accounts WHERE email_norm = ?1`)
+      .bind(emailNorm)
+      .first();
+    if (!mayReceiveLink(account, env)) return;
+
+    const token = randomToken(32);
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO auth_login_tokens (token_hash, email_norm, purpose, binding_hash, created_at, expires_at)
+       VALUES (?1, ?2, 'login', ?3, ?4, ?5)`
+    )
+      .bind(
+        await keyedHash(env, 'login', token),
+        emailNorm,
+        await keyedHash(env, 'bind', bind),
+        iso(now),
+        iso(now + LINK_MINUTES * 60 * 1000)
+      )
+      .run();
+
+    const url = `${portalOrigin(env)}${rc.url('/auth/email/verify')}#t=${token}`;
+    const sent = await sendSignInLink(env, { to: account?.email || typed, url, minutes: LINK_MINUTES });
+    if (!sent.ok) {
+      console.error(JSON.stringify({ event: 'signin_link_not_sent', budget: Boolean(sent.budget) }));
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'signin_link_failed', message: err?.message }));
+  }
 }
 
 /** POST /auth/email/verify */

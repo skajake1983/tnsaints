@@ -111,6 +111,14 @@ PORTAL_SIGNUP_ENABLED = "false"
 # budget). Existing sessions keep working.
 MAGIC_LINK_ENABLED = "true"
 
+# "Sign in with Google" (src/auth/google.js). Off until the Google Cloud OAuth
+# client exists (plan item O6): External, scopes openid/email/profile only,
+# authorised redirect URI https://portal.tnsaints.com/auth/google/callback.
+# The client id is public and goes here; the secret goes in with
+#   wrangler secret put GOOGLE_CLIENT_SECRET
+GOOGLE_SIGNIN_ENABLED = "false"
+GOOGLE_CLIENT_ID = ""
+
 # Session lengths (days) and how recent a sign-in must be (hours) for export,
 # deletion, invites and claiming a subscription. Defaults shown.
 # SESSION_IDLE_DAYS = "14"
@@ -209,5 +217,6 @@ head_sampling_rate = 1
 #   wrangler secret put RESEND_API_KEY
 #   wrangler secret put AUTH_PEPPER      (parent portal: 32+ random characters;
 #                                         rotating it signs every parent out)
+#   wrangler secret put GOOGLE_CLIENT_SECRET   (when Google sign-in is set up)
 # Locally they come from .dev.vars (gitignored).
 # ---------------------------------------------------------------------------

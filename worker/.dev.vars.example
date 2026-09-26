@@ -81,6 +81,15 @@ PORTAL_ORIGIN=http://127.0.0.1:8787
 # Uncomment to test self-signup instead of the invite-only pilot.
 # PORTAL_SIGNUP_ENABLED=true
 
+# "Sign in with Google" against the mock provider that
+# tests/test_portal_google.py starts on 127.0.0.1:8798. GOOGLE_OIDC_BASE is
+# honoured only for a loopback URL behind the /__portal door, so it cannot
+# redirect production sign-in anywhere even if it were set there.
+GOOGLE_SIGNIN_ENABLED=true
+GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=local-test-secret
+GOOGLE_OIDC_BASE=http://127.0.0.1:8798
+
 # --- Test clock ---------------------------------------------------------------
 #
 # The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,

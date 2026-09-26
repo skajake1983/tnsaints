@@ -28,6 +28,7 @@ import { readForm, BodyTooLarge } from '../lib/body.js';
 import { logoResponse } from '../admin/logo.js';
 import { loadSession, revokeSession, clearedCookie, SESSION_COOKIE } from '../auth/session.js';
 import { requestLink, verifyLink, renderSignIn } from '../auth/magic.js';
+import { googleConfigured, startGoogle, finishGoogle } from '../auth/google.js';
 import { verifyPage, homePage, redirect } from './auth-pages.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
@@ -79,7 +80,18 @@ export async function handlePortal(request, env, ctx, route) {
   const session = await loadSession(env, request, ctx);
 
   if (pathname === '/' && method === 'GET') {
-    return session ? homePage(rc, session) : renderSignIn(env, rc);
+    if (!session) return renderSignIn(env, rc);
+    const google = googleConfigured(env);
+    const linked = google
+      ? Boolean(
+          await env.DB.prepare(
+            `SELECT 1 FROM account_identities WHERE account_id = ?1 AND provider = 'google' LIMIT 1`
+          )
+            .bind(session.accountId)
+            .first()
+        )
+      : false;
+    return homePage(rc, session, { google, googleLinked: linked });
   }
 
   if (pathname === '/auth/email' && method === 'POST') {
@@ -98,6 +110,24 @@ export async function handlePortal(request, env, ctx, route) {
 
   if (pathname === '/auth/email/verify' && method === 'POST') {
     return withForm(request, rc, (form) => verifyLink(env, ctx, request, rc, form));
+  }
+
+  if (pathname === '/auth/google/start' && method === 'POST') {
+    if (!googleConfigured(env)) return notFoundResponse(rc);
+    return withForm(request, rc, (form) => {
+      const mode = form.get('mode') === 'link' ? 'link' : 'signin';
+      // Connecting Google changes how this account can be signed into, so it
+      // needs a fresh proof of identity, not a three-week-old cookie.
+      if (mode === 'link' && !(session && session.recentAuth)) {
+        return problemResponse(rc, 403, 'For your security, please sign out and sign in again, then connect Google.');
+      }
+      return startGoogle(env, request, rc, { isDev, mode });
+    });
+  }
+
+  if (pathname === '/auth/google/callback' && method === 'GET') {
+    if (!googleConfigured(env)) return notFoundResponse(rc);
+    return finishGoogle(env, ctx, request, rc, { isDev, session });
   }
 
   if (pathname === '/auth/signout' && method === 'POST') {
