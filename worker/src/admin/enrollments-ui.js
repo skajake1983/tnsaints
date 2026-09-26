@@ -127,7 +127,8 @@ It opens once its monthly price, groups and waiver are in place.</div>`
     : '';
 
   return `<h1>Enrollment requests</h1>
-<p class="sub">${esc(program.name)}. Offer seats only in groups with room; the family then has until the pay-by date.</p>
+<p class="sub">${esc(program.name)}. Offer seats only in groups with room; the family then has until the pay-by date.
+<a href="${esc(base)}/programs/${esc(program.id)}">Price, groups and waiver</a></p>
 ${message && MESSAGES[message] ? `<div class="notice" role="status">${esc(MESSAGES[message])}</div>` : ''}
 ${draft}${seats}${demand}${table}`;
 }

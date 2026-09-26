@@ -86,6 +86,10 @@ import {
   decline as declineEnrollment, expireOffers, householdEmails, enrollmentWithGroup, priceLine,
 } from '../programs/enrollment.js';
 import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from './enrollments-ui.js';
+import { programBody, PROGRAM_STYLES } from './programs-ui.js';
+import {
+  listWaivers, saveProgramSettings, setProgramStatus, createGroup, updateGroup, createWaiver,
+} from '../programs/settings.js';
 import { choice } from '../lib/flags.js';
 
 const NAV = [
@@ -236,6 +240,23 @@ export async function handleAdmin(request, env, ctx, path, base = '') {
 
   if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
+  }
+
+  // --- Program settings: price, groups, waivers, open/close (events:manage) --
+  const programRoute = pathname.match(/^\/programs\/([a-z0-9-]{1,40})(?:\/(settings|status|groups|waivers)(?:\/(\d{1,12}))?)?$/);
+  if (programRoute) {
+    if (!can(principal, 'events:manage')) {
+      return htmlResponse(page({ title: 'Programs', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Only academy admins can change program settings.</p>' }), { status: 403 });
+    }
+    const program = await getProgram(env, programRoute[1]);
+    if (!program) {
+      return htmlResponse(page({ title: 'Not found', principal, nav: NAV, body: '<h1>No such program</h1>' }), { status: 404 });
+    }
+    if (!programRoute[2] && request.method === 'GET') return await renderProgram(env, principal, program, url, base);
+    if (programRoute[2] && request.method === 'POST') {
+      return await handleProgramPost(request, env, ctx, principal, program, programRoute[2], programRoute[3], base);
+    }
   }
 
   // --- Enrollment requests (admin only) --------------------------------------
@@ -1459,4 +1480,65 @@ function formatPayBy(isoString) {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric',
   }).format(new Date(isoString));
+}
+
+// --- Program settings ---------------------------------------------------------------
+//
+// Price, groups, waiver versions and the open/close switch (programs/settings.js).
+// Gated on `events:manage`, the capability the admin role has carried since the
+// start and that nothing checked until now.
+
+async function renderProgram(env, principal, program, url, base) {
+  const [groups, waivers] = await Promise.all([listGroups(env, program.id), listWaivers(env)]);
+  return htmlResponse(
+    page({
+      title: program.name,
+      principal,
+      nav: NAV,
+      current: '/enrollments',
+      body: programBody({ program, groups, waivers, message: url.searchParams.get('msg'), base }),
+      extraStyles: PROGRAM_STYLES,
+    })
+  );
+}
+
+async function handleProgramPost(request, env, ctx, principal, program, section, groupId, base) {
+  const back = (msg) =>
+    new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/programs/${program.id}?msg=${msg}` }) });
+  let form;
+  try {
+    form = await readForm(request, 32 * 1024);
+  } catch {
+    form = null;
+  }
+  if (!form) return back('invalid');
+  const log = (action, subjectType, subjectId, detail) =>
+    ctx.waitUntil(audit(env, { actor: principal.email, action, subjectType, subjectId, detail }));
+
+  if (section === 'settings' && !groupId) {
+    const result = await saveProgramSettings(env, program.id, form);
+    if (result === 'saved') log('program.update', 'program', program.id);
+    return back(result);
+  }
+  if (section === 'status' && !groupId) {
+    const result = await setProgramStatus(env, program.id, String(form.get('status') || ''));
+    if (result === 'opened' || result === 'closed') log(`program.${result === 'opened' ? 'open' : 'close'}`, 'program', program.id);
+    return back(result);
+  }
+  if (section === 'groups' && !groupId) {
+    const { result, id } = await createGroup(env, program.id, form);
+    if (id) log('group.create', 'group', id, { program: program.id });
+    return back(result);
+  }
+  if (section === 'groups' && groupId) {
+    const result = await updateGroup(env, program.id, Number(groupId), form);
+    if (result === 'group-saved') log('group.update', 'group', groupId, { program: program.id });
+    return back(result);
+  }
+  if (section === 'waivers' && !groupId) {
+    const { result, id } = await createWaiver(env, program.id, form);
+    if (id) log('waiver.create', 'waiver', id);
+    return back(result);
+  }
+  return back('invalid');
 }
