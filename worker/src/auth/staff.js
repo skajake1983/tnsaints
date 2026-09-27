@@ -43,6 +43,8 @@ const CAPABILITIES = {
     'events:manage',
     // Offer seats in scheduled groups, waitlist, decline (programs/enrollment.js).
     'enrollments:manage',
+    // Match PayPal subscriptions to children; see who paid without a seat.
+    'billing:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not

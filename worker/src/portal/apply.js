@@ -16,6 +16,7 @@ import { RELATIONSHIPS } from './forms.js';
 import { getChild } from './data.js';
 import {
   getProgram, listGroups, currentWaiver, programOpen, applicationBlockers, liveEnrollment, apply, priceLine,
+  signForExistingPlace,
 } from '../programs/enrollment.js';
 import { hashIp, clientIp } from '../http.js';
 import { audit } from '../auth/staff.js';
@@ -43,6 +44,33 @@ function groupChoices(groups, chosen) {
 </fieldset>`;
 }
 
+/** The waiver, the three agreements, photo choice, signature and relationship. */
+function waiverSection(waiver, values, errors) {
+  return `  <section class="panel" aria-labelledby="w-h">
+    <h2 id="w-h" style="margin-top:0">${esc(waiver.title)}</h2>
+    <p class="hint">Between you and ${esc(waiver.legal_entity)}. Please read it before signing.</p>
+    <div class="waiver" role="region" aria-label="${esc(waiver.title)}" tabindex="0">${esc(waiver.body_text).replace(/\n/g, '<br>')}</div>
+    <fieldset class="field${errorFor(errors, 'agree_risk') || errorFor(errors, 'agree_medical') || errorFor(errors, 'agree_esign') ? ' has-error' : ''}">
+      <legend>Agreements <span class="req">(required)</span></legend>
+      ${['agree_risk', 'agree_medical', 'agree_esign'].map((k) => errorFor(errors, k) ? `<span class="error">${esc(errorFor(errors, k))}</span>` : '').join('')}
+      <label class="choice"><input type="checkbox" name="agree_risk" id="agree_risk"${values.agree_risk ? ' checked' : ''}>
+        I understand basketball involves risk of injury, and I accept that risk for my child.</label>
+      <label class="choice"><input type="checkbox" name="agree_medical" id="agree_medical"${values.agree_medical ? ' checked' : ''}>
+        I authorise emergency medical care for my child if I cannot be reached.</label>
+      <label class="choice"><input type="checkbox" name="agree_esign" id="agree_esign"${values.agree_esign ? ' checked' : ''}>
+        I agree that typing my name below is my signature on this waiver.</label>
+    </fieldset>
+    ${radioGroup({ id: 'photo_release', legend: 'May we use photos and video of your child on our website and social media?',
+      value: values.photo_release || '', required: true, error: errorFor(errors, 'photo_release'),
+      hint: 'Either answer is fine, and you can change it later.',
+      options: [['yes', 'Yes'], ['no', 'No']] })}
+    ${field({ id: 'signature', label: 'Type your full name to sign', value: values.signature || '', required: true,
+      autocomplete: 'name', error: errorFor(errors, 'signature') })}
+    ${selectField({ id: 'relationship', label: 'Your relationship to the child', value: values.relationship || '',
+      options: RELATIONSHIPS.map((r) => [r, r]), required: true, error: errorFor(errors, 'relationship') })}
+  </section>`;
+}
+
 export function applyPage(rc, { child, program, groups, waiver, blockers = [], existing = null, values = {}, errors = [], status = 200 }) {
   const grade = currentGrade(child.grade_level, child.grade_school_year);
   const head = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
@@ -66,29 +94,7 @@ ${errorSummary(errors)}
 <form method="post" action="${esc(rc.url(`/children/${child.id}/apply/${program.id}`))}" novalidate>
   <input type="hidden" name="waiver_version" value="${esc(waiver.id)}">
   <section class="panel">${groupChoices(groups, chosen)}</section>
-  <section class="panel" aria-labelledby="w-h">
-    <h2 id="w-h" style="margin-top:0">${esc(waiver.title)}</h2>
-    <p class="hint">Between you and ${esc(waiver.legal_entity)}. Please read it before signing.</p>
-    <div class="waiver" role="region" aria-label="${esc(waiver.title)}" tabindex="0">${esc(waiver.body_text).replace(/\n/g, '<br>')}</div>
-    <fieldset class="field${errorFor(errors, 'agree_risk') || errorFor(errors, 'agree_medical') || errorFor(errors, 'agree_esign') ? ' has-error' : ''}">
-      <legend>Agreements <span class="req">(required)</span></legend>
-      ${['agree_risk', 'agree_medical', 'agree_esign'].map((k) => errorFor(errors, k) ? `<span class="error">${esc(errorFor(errors, k))}</span>` : '').join('')}
-      <label class="choice"><input type="checkbox" name="agree_risk" id="agree_risk"${values.agree_risk ? ' checked' : ''}>
-        I understand basketball involves risk of injury, and I accept that risk for my child.</label>
-      <label class="choice"><input type="checkbox" name="agree_medical" id="agree_medical"${values.agree_medical ? ' checked' : ''}>
-        I authorise emergency medical care for my child if I cannot be reached.</label>
-      <label class="choice"><input type="checkbox" name="agree_esign" id="agree_esign"${values.agree_esign ? ' checked' : ''}>
-        I agree that typing my name below is my signature on this waiver.</label>
-    </fieldset>
-    ${radioGroup({ id: 'photo_release', legend: 'May we use photos and video of your child on our website and social media?',
-      value: values.photo_release || '', required: true, error: errorFor(errors, 'photo_release'),
-      hint: 'Either answer is fine, and you can change it later.',
-      options: [['yes', 'Yes'], ['no', 'No']] })}
-    ${field({ id: 'signature', label: 'Type your full name to sign', value: values.signature || '', required: true,
-      autocomplete: 'name', error: errorFor(errors, 'signature') })}
-    ${selectField({ id: 'relationship', label: 'Your relationship to the child', value: values.relationship || '',
-      options: RELATIONSHIPS.map((r) => [r, r]), required: true, error: errorFor(errors, 'relationship') })}
-  </section>
+  ${waiverSection(waiver, values, errors)}
   <button class="btn" type="submit">Sign and apply</button>
 </form>`;
   return page(rc, program.name, body, status);
@@ -173,4 +179,58 @@ export async function applyRoutes({ env, ctx, request, rc, session, pathname, me
     }));
     return redirect(rc.url('/?notice=applied'));
   });
+}
+
+/**
+ * GET/POST /children/:id/waiver/:program — sign the waiver for a place that
+ * staff created without one. Same waiver, agreements and signature as an
+ * application; no group choice, because the place already exists.
+ * @returns {Promise<Response|null>}
+ */
+export async function waiverRoutes({ env, ctx, request, rc, session, pathname, method, readForm }) {
+  const m = /^\/children\/(\d{1,12})\/waiver\/([a-z0-9-]{1,40})$/.exec(pathname);
+  if (!m) return null;
+  const child = await getChild(env, session.accountId, Number(m[1]));
+  const program = await getProgram(env, m[2]);
+  if (!child || !program) return notFoundResponse(rc);
+  const place = await liveEnrollment(env, session.accountId, child.id, program.id);
+  if (!place || place.consent_record_id) return redirect(rc.url('/'));
+  const waiver = await currentWaiver(env, program);
+  if (!waiver) {
+    return page(rc, program.name, `<h1>${esc(program.name)}</h1>
+<p class="lede">The waiver isn't available right now. Please try again later, or email info@tnsaints.com.</p>`, 503);
+  }
+  const render = (extra = {}) => signPage(rc, { child, program, waiver, ...extra });
+  if (method === 'GET') return render();
+  if (method !== 'POST') return null;
+  return readForm(async (form) => {
+    if (String(form.get('waiver_version') || '') !== waiver.id) {
+      return render({ status: 409, errors: [{ id: 'agree_risk', message: 'The waiver was updated while you were reading. Please read it again and sign.' }] });
+    }
+    const { values, errors } = validateApplication(form, []);
+    if (errors.length) return render({ values, errors, status: 400 });
+    const signed = await signForExistingPlace(env, session.accountId, {
+      enrollmentId: place.id, waiver, signature: values.signature, relationship: values.relationship,
+      photoRelease: values.photo_release === 'yes', ipHash: await hashIp(clientIp(request), env.IP_HASH_SALT),
+    });
+    if (!signed) return redirect(rc.url('/'));
+    ctx.waitUntil(audit(env, {
+      actor: `account:${session.accountId}`, action: 'portal.waiver_signed', subjectType: 'player', subjectId: child.id,
+      detail: { program: program.id, waiver: waiver.id },
+    }));
+    return redirect(rc.url('/?notice=signed'));
+  });
+}
+
+export function signPage(rc, { child, program, waiver, values = {}, errors = [], status = 200 }) {
+  const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
+<h1>Sign the waiver: ${esc(program.name)}</h1>
+<p class="lede">${esc(child.display_name)} has a place in the academy. Before they play, a guardian needs to sign the waiver.</p>
+${errorSummary(errors)}
+<form method="post" action="${esc(rc.url(`/children/${child.id}/waiver/${program.id}`))}" novalidate>
+  <input type="hidden" name="waiver_version" value="${esc(waiver.id)}">
+  ${waiverSection(waiver, values, errors)}
+  <button class="btn" type="submit">Sign the waiver</button>
+</form>`;
+  return page(rc, program.name, body, status);
 }

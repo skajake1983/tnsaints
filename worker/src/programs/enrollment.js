@@ -172,7 +172,7 @@ export async function apply(env, accountId, { playerId, program, waiver, signatu
 /** Every enrollment for the account's family, newest first, with group details. */
 export async function familyEnrollments(env, accountId) {
   const { results } = await env.DB.prepare(
-    `SELECT e.id, e.ref, e.player_id, e.program_id, e.status, e.offer_expires_at, e.applied_at,
+    `SELECT e.id, e.ref, e.player_id, e.program_id, e.status, e.offer_expires_at, e.applied_at, e.consent_record_id,
             pr.name AS program_name, g.name AS group_name, g.schedule_summary, g.location, g.starts_on
        FROM enrollments e
        JOIN programs pr ON pr.id = e.program_id
@@ -302,4 +302,37 @@ export async function enrollmentWithGroup(env, enrollmentId) {
   )
     .bind(enrollmentId)
     .first();
+}
+
+/**
+ * Sign the waiver for a place that already exists without one — a child staff
+ * placed directly (a family who paid on the old Join page, or invited out of
+ * band). The consent and the link to the place are one transaction, and the
+ * place must be this account's family's and still unsigned.
+ * @returns {Promise<boolean>}
+ */
+export async function signForExistingPlace(env, accountId, { enrollmentId, waiver, signature, relationship, photoRelease, ipHash }) {
+  const now = iso();
+  const [consent, attached] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO consent_records (player_id, household_id, account_id, program_id, waiver_version_id,
+                                   waiver_sha256, signature, signer_relationship, esign_consent,
+                                   assumption_of_risk, medical_release, photo_release, signed_at, ip_hash)
+       SELECT e.player_id, e.household_id, ?1, e.program_id, w.id, w.body_sha256, ?4, ?5, 1, 1, 1, ?6, ?7, ?8
+         FROM enrollments e JOIN waiver_versions w ON w.id = ?3
+        WHERE e.id = ?2 AND e.consent_record_id IS NULL AND e.status IN ${LIVE}
+          AND e.household_id IN (${MEMBER_OF})`
+    ).bind(accountId, enrollmentId, waiver.id, signature, relationship, photoRelease ? 1 : 0, now, ipHash),
+    env.DB.prepare(
+      `UPDATE enrollments SET consent_record_id = (
+         SELECT c.id FROM consent_records c
+          WHERE c.id = last_insert_rowid() AND c.player_id = enrollments.player_id
+            AND c.account_id = ?1 AND c.signed_at = ?3),
+         updated_at = ?3
+        WHERE id = ?2 AND consent_record_id IS NULL AND household_id IN (${MEMBER_OF})
+          AND EXISTS (SELECT 1 FROM consent_records c WHERE c.id = last_insert_rowid()
+                        AND c.player_id = enrollments.player_id AND c.account_id = ?1 AND c.signed_at = ?3)`
+    ).bind(accountId, enrollmentId, now),
+  ]);
+  return (consent.meta?.changes || 0) === 1 && (attached.meta?.changes || 0) === 1;
 }

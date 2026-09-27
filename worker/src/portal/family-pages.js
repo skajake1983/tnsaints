@@ -62,6 +62,10 @@ function academyLine(rc, child, enrollments, academy) {
     return `<span class="badge ok">Place offered: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
   <a href="${esc(rc.url(`/pay/${e.ref}`))}">Accept and pay</a>`;
   }
+  if (['active', 'past_due'].includes(e.status) && !e.consent_record_id) {
+    return `<span class="badge warn">Action needed: sign the waiver</span>
+  <a href="${esc(rc.url(`/children/${child.id}/waiver/${e.program_id}`))}">Sign the waiver</a>`;
+  }
   if (e.status === 'past_due') return '<span class="badge warn">Academy: payment needed</span>';
   return `<span class="badge ok">Academy: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;
 }

@@ -87,6 +87,14 @@ import {
 } from '../programs/enrollment.js';
 import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from './enrollments-ui.js';
 import { programBody, PROGRAM_STYLES } from './programs-ui.js';
+import { familiesBody, medicalBody, FAMILY_STYLES } from './families-ui.js';
+import { familiesView, shirtTotals, childMedical } from '../programs/families.js';
+import { billingBody, BILLING_STYLES } from './billing-ui.js';
+import {
+  listUnlinked, listPaidWithoutSeat, linkableChildren, linkToChild, importSubscription, lookup as lookupSubscription,
+} from '../payments/reconcile.js';
+import { syncSubscription } from '../payments/billing.js';
+import { paypalEnv } from '../payments/paypal.js';
 import {
   listWaivers, saveProgramSettings, setProgramStatus, createGroup, updateGroup, createWaiver,
 } from '../programs/settings.js';
@@ -97,6 +105,8 @@ const NAV = [
   { href: '/eval', label: 'Evaluations' },
   { href: '/decisions', label: 'Decisions' },
   { href: '/enrollments', label: 'Enrollments' },
+  { href: '/families', label: 'Families' },
+  { href: '/billing', label: 'Billing' },
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -240,6 +250,50 @@ export async function handleAdmin(request, env, ctx, path, base = '') {
 
   if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
+  }
+
+  // --- Billing reconciliation (billing:manage) ---------------------------------
+  const billingRoute = pathname.match(/^\/billing(?:\/(import)|\/(\d{1,12})\/(sync|link))?$/);
+  if (billingRoute) {
+    if (!can(principal, 'billing:manage')) {
+      return htmlResponse(page({ title: 'Billing', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Billing is limited to academy admins.</p>' }), { status: 403 });
+    }
+    if (!billingRoute[1] && !billingRoute[2] && request.method === 'GET') return await renderBilling(env, ctx, principal, url, base);
+    if (request.method === 'POST' && (billingRoute[1] || billingRoute[2])) {
+      return await handleBillingPost(request, env, ctx, principal, billingRoute[1] || billingRoute[3], Number(billingRoute[2]), base);
+    }
+  }
+
+  // --- Portal families: roster:view; contacts and medical by capability ----
+  if (pathname === '/families' && request.method === 'GET') {
+    if (!can(principal, 'roster:view')) {
+      return htmlResponse(page({ title: 'Families', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Families are limited to staff with roster access.</p>' }), { status: 403 });
+    }
+    const view = await familiesView(env, principal);
+    return htmlResponse(page({ title: 'Families', principal, nav: NAV, current: '/families',
+      body: familiesBody({ ...view, totals: shirtTotals(view.families), base }), extraStyles: FAMILY_STYLES }));
+  }
+  const familyMedical = pathname.match(/^\/families\/children\/(\d{1,12})\/medical$/);
+  if (familyMedical && request.method === 'GET') {
+    const playerId = Number(familyMedical[1]);
+    if (!can(principal, 'roster:medical')) {
+      // Audited even when refused, like the roster's reveal.
+      ctx.waitUntil(audit(env, { actor: principal.email, action: 'medical.denied', subjectType: 'player',
+        subjectId: playerId, detail: { role: principal.role } }));
+      return htmlResponse(page({ title: 'Medical note', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">Medical notes are limited to academy admins.</p>' }), { status: 403 });
+    }
+    const child = await childMedical(env, playerId);
+    if (!child) {
+      return htmlResponse(page({ title: 'Not found', principal, nav: NAV, body: '<h1>No such child</h1>' }), { status: 404 });
+    }
+    // Which note, by whom; never what it said.
+    ctx.waitUntil(audit(env, { actor: principal.email, action: 'medical.read', subjectType: 'player',
+      subjectId: playerId, detail: { source: 'portal', had_note: child.status === 'declared' } }));
+    return htmlResponse(page({ title: 'Medical note', principal, nav: NAV, current: '/families',
+      body: medicalBody({ child, base }), extraStyles: FAMILY_STYLES }));
   }
 
   // --- Program settings: price, groups, waivers, open/close (events:manage) --
@@ -1541,4 +1595,79 @@ async function handleProgramPost(request, env, ctx, principal, program, section,
     return back(result);
   }
   return back('invalid');
+}
+
+// --- Billing reconciliation ---------------------------------------------------------
+//
+// Subscriptions the system could not place by itself (old Join-page families,
+// pasted ids) and places paid for without a seat. billing:manage only.
+
+const SUBSCRIPTION_ID_RE = /^I-[A-Z0-9]{6,40}$/;
+
+async function renderBilling(env, ctx, principal, url, base) {
+  let message = url.searchParams.get('msg');
+  let found = null;
+  const lookupId = String(url.searchParams.get('lookup') || '').trim().toUpperCase();
+  if (lookupId) {
+    if (!SUBSCRIPTION_ID_RE.test(lookupId)) {
+      message = 'invalid';
+    } else {
+      found = await lookupSubscription(env, lookupId);
+      if (!found) message = 'not-found';
+      // A lookup shows a payer's name and email: worth a trace, carrying only the id.
+      ctx.waitUntil(audit(env, { actor: principal.email, action: 'billing.lookup', subjectType: 'subscription', subjectId: lookupId }));
+    }
+  }
+  const program = await getProgram(env, ENROLLMENT_PROGRAM);
+  const [unlinked, paidNoSeat, children, groups] = await Promise.all([
+    listUnlinked(env), listPaidWithoutSeat(env), linkableChildren(env), program ? listGroups(env, program.id) : [],
+  ]);
+  return htmlResponse(page({
+    title: 'Billing', principal, nav: NAV, current: '/billing',
+    body: billingBody({ unlinked, paidNoSeat, children, groups, found, message, env: paypalEnv(env), base }),
+    extraStyles: BILLING_STYLES,
+  }));
+}
+
+async function handleBillingPost(request, env, ctx, principal, action, billingId, base) {
+  const back = (msg) => new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/billing?msg=${msg}` }) });
+  let form;
+  try {
+    form = await readForm(request);
+  } catch {
+    form = null;
+  }
+  if (!form) return back('state');
+  const log = (act, subjectType, subjectId, detail) =>
+    ctx.waitUntil(audit(env, { actor: principal.email, action: act, subjectType, subjectId, detail }));
+
+  if (action === 'import') {
+    const id = String(form.get('subscription_id') || '').trim().toUpperCase();
+    if (!SUBSCRIPTION_ID_RE.test(id)) return back('invalid');
+    const result = await importSubscription(env, id);
+    if (!result.ok) return back('not-found');
+    log('billing.import', 'subscription', id, { linked: Boolean(result.enrollmentId) });
+    return back('imported');
+  }
+
+  const row = await env.DB.prepare(`SELECT id, paypal_subscription_id, source FROM billing_subscriptions WHERE id = ?1`)
+    .bind(billingId)
+    .first();
+  if (!row) return back('state');
+
+  if (action === 'sync') {
+    await syncSubscription(env, row.paypal_subscription_id, { source: row.source });
+    log('billing.sync', 'subscription', row.paypal_subscription_id);
+    return back('synced');
+  }
+
+  if (action === 'link') {
+    const playerId = Number(form.get('player_id'));
+    const groupId = Number(form.get('group_id'));
+    if (!Number.isInteger(playerId) || !Number.isInteger(groupId)) return back('state');
+    const result = await linkToChild(env, { billingId: row.id, playerId, groupId, staffEmail: principal.email });
+    if (result === 'linked') log('billing.link', 'subscription', row.paypal_subscription_id, { player: playerId, group: groupId });
+    return back(result);
+  }
+  return back('state');
 }

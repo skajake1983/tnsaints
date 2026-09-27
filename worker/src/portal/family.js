@@ -25,7 +25,7 @@ import { setupPage, dashboardPage, childPage, contactsPage, accountPage } from '
 import { redirect } from './auth-pages.js';
 import { notFoundResponse } from './ui.js';
 import { guardianRoutes } from './guardians.js';
-import { applyRoutes } from './apply.js';
+import { applyRoutes, waiverRoutes } from './apply.js';
 import { payRoutes } from './pay.js';
 import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
 
@@ -33,6 +33,7 @@ const NOTICES = {
   joined: "Welcome — you've joined the family.",
   applied: "Application received. We'll email you when a place in a group is ready.",
   paid: "Payment set up. Your child's place is confirmed. Welcome to the academy!",
+  signed: 'Waiver signed. Thank you.',
   contacts: 'Emergency contacts saved.',
   claimed: 'Added to your family.',
   'not-claimed': "That child couldn't be added. They may already be in a family.",
@@ -174,6 +175,9 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
 
   const payment = await payRoutes({ env, ctx, request, rc, session, pathname, method });
   if (payment) return payment;
+
+  const signing = await waiverRoutes({ env, ctx, request, rc, session, pathname, method, readForm });
+  if (signing) return signing;
 
   const childMatch = /^\/children\/(\d{1,12})(\/medical)?$/.exec(pathname);
   if (childMatch) {
