@@ -142,6 +142,14 @@ PAYPAL_WEBHOOK_ID_SANDBOX = ""
 PAYPAL_WEBHOOK_ID_LIVE = ""
 PAYPAL_WEBHOOK_ENABLED = "false"
 
+# Website forms -> CRM (POST /api/lead). Anything but "true" answers 503 and the
+# site falls back to Formspree, so turning this off loses no inquiries.
+LEADS_ENABLED = "false"
+
+# The daily staff brief (jobs/brief.js): one email to NOTIFY_EMAIL_TO a day,
+# only when there is something to do. Costs at most one credit a day.
+STAFF_BRIEF_ENABLED = "false"
+
 # The public Turnstile site key (the same widget as the registration form).
 # portal.tnsaints.com must be added to the widget's hostnames in the
 # Cloudflare dashboard before launch (plan item O7).

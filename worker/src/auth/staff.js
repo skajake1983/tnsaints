@@ -45,6 +45,9 @@ const CAPABILITIES = {
     'enrollments:manage',
     // Match PayPal subscriptions to children; see who paid without a seat.
     'billing:manage',
+    // The CRM: see contacts and inquiries; change their state.
+    'crm:view',
+    'crm:write',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not

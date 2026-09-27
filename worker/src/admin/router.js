@@ -90,6 +90,9 @@ import { programBody, PROGRAM_STYLES } from './programs-ui.js';
 import { familiesBody, medicalBody, FAMILY_STYLES } from './families-ui.js';
 import { familiesView, shirtTotals, childMedical } from '../programs/families.js';
 import { billingBody, BILLING_STYLES } from './billing-ui.js';
+import { inboxBody, INBOX_STYLES } from './inbox-ui.js';
+import { briefSummary, briefLines, runStaffBrief } from '../jobs/brief.js';
+import { sendStaffBriefEmail } from '../email.js';
 import {
   listUnlinked, listPaidWithoutSeat, linkableChildren, linkToChild, importSubscription, lookup as lookupSubscription,
 } from '../payments/reconcile.js';
@@ -107,6 +110,7 @@ const NAV = [
   { href: '/enrollments', label: 'Enrollments' },
   { href: '/families', label: 'Families' },
   { href: '/billing', label: 'Billing' },
+  { href: '/inbox', label: 'Inbox' },
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -250,6 +254,61 @@ export async function handleAdmin(request, env, ctx, path, base = '') {
 
   if (pathname === '/profile' && request.method === 'GET') {
     return renderWhoami(principal);
+  }
+
+  // --- Daily brief: preview, and send now (events:manage) ---------------------
+  if ((pathname === '/brief' && request.method === 'GET') || (pathname === '/brief/send' && request.method === 'POST')) {
+    if (!can(principal, 'events:manage')) {
+      return htmlResponse(page({ title: 'Brief', principal, nav: NAV, body: '<h1>Not permitted</h1>' }), { status: 403 });
+    }
+    if (request.method === 'POST') {
+      const result = await runStaffBrief(env, sendStaffBriefEmail, { force: true });
+      ctx.waitUntil(audit(env, { actor: principal.email, action: 'brief.send', detail: { result: result.reason } }));
+      return new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/brief?msg=${result.reason}` }) });
+    }
+    const lines = briefLines(await briefSummary(env));
+    const msgs = { sent: 'Sent.', empty: 'Nothing to send.', budget: "Not sent: today's email allowance is used up.", error: 'Not sent: the email provider failed.' };
+    const msg = msgs[url.searchParams.get('msg')] || '';
+    const body = `<h1>Today's brief</h1><p class="sub">What the daily staff email would say right now. It is sent once a day, only when there is something here${
+      env.STAFF_BRIEF_ENABLED === 'true' ? '' : ' (the daily send is switched off: STAFF_BRIEF_ENABLED)'}.</p>
+${msg ? `<div class="notice" role="status">${esc(msg)}</div>` : ''}
+${lines.length ? `<div class="panel"><ul style="margin:0;padding:14px 32px">${lines.map((l) => `<li><a href="${esc(base + l.path)}">${esc(l.text)}</a></li>`).join('')}</ul></div>
+<form method="post" action="${esc(base)}/brief/send"><button class="bigbtn" type="submit">Send it now</button></form>` : '<div class="empty">Nothing to report today.</div>'}`;
+    return htmlResponse(page({ title: 'Brief', principal, nav: NAV, current: '/brief', body }));
+  }
+
+  // --- Inbox: website inquiries (crm:view; crm:write to mark handled) ---------
+  if (pathname === '/inbox' && request.method === 'GET') {
+    if (!can(principal, 'crm:view')) {
+      return htmlResponse(page({ title: 'Inbox', principal, nav: NAV,
+        body: '<h1>Not permitted</h1><p class="sub">The inbox is limited to academy admins.</p>' }), { status: 403 });
+    }
+    const status = url.searchParams.get('status') === 'handled' ? 'handled' : 'new';
+    const { results } = await env.DB.prepare(
+      `SELECT i.id, i.purpose, i.fields, i.message, i.received_at, i.status,
+              c.name, c.email, c.phone, c.household_id
+         FROM crm_inquiries i LEFT JOIN crm_contacts c ON c.id = i.contact_id
+        WHERE i.status = ?1 ORDER BY i.received_at DESC LIMIT 100`
+    ).bind(status).all();
+    return htmlResponse(page({ title: 'Inbox', principal, nav: NAV, current: '/inbox',
+      body: inboxBody({ rows: results || [], status, canWrite: can(principal, 'crm:write'), base }),
+      extraStyles: INBOX_STYLES }));
+  }
+  const handled = pathname.match(/^\/inbox\/(\d{1,12})\/handled$/);
+  if (handled && request.method === 'POST') {
+    if (!can(principal, 'crm:write')) {
+      return htmlResponse(page({ title: 'Inbox', principal, nav: NAV,
+        body: '<h1>Not permitted</h1>' }), { status: 403 });
+    }
+    const now = new Date().toISOString();
+    const res = await env.DB.prepare(
+      `UPDATE crm_inquiries SET status = 'handled', handled_by = ?2, handled_at = ?3 WHERE id = ?1 AND status = 'new'`
+    ).bind(Number(handled[1]), principal.email, now).run();
+    if (res.meta.changes) {
+      ctx.waitUntil(audit(env, { actor: principal.email, action: 'crm.inquiry_handled', subjectType: 'inquiry',
+        subjectId: handled[1] }));
+    }
+    return new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/inbox` }) });
   }
 
   // --- Billing reconciliation (billing:manage) ---------------------------------

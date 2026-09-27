@@ -400,6 +400,26 @@ export async function sendEnrollmentOffer(env, { to, programName, groupName, sch
   });
 }
 
+/**
+ * The daily staff brief (jobs/brief.js decides whether there is one). Alert
+ * lane, to the staff mailbox. Counts and admin links only — no child named.
+ */
+export async function sendStaffBriefEmail(env, { lines, adminUrl }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const to = env.NOTIFY_EMAIL_TO.split(',').map((x) => x.trim()).filter(Boolean);
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;font-size:18px;font-weight:800;">
+      Tennessee Saints — today's brief</div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:16px 20px;">
+      <ul style="padding-left:18px;margin:0;">${lines
+        .map((l) => `<li style="margin:6px 0;"><a href="${escapeHtml(adminUrl + l.path)}" style="color:#0b3a8d;">${escapeHtml(l.text)}</a></li>`)
+        .join('')}</ul>
+      <p style="color:#536277;font-size:13px;margin:14px 0 0;">Sent once a day, only when there is something to do.</p>
+    </div></div>`;
+  const text = ["Today's brief:", '', ...lines.map((l) => `- ${l.text}: ${adminUrl}${l.path}`)].join('\n');
+  return sendMetered(env, 'alert', { to, subject: `Today at Tennessee Saints: ${lines.length} ${lines.length === 1 ? 'thing' : 'things'} to look at`, html, text });
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>

@@ -99,6 +99,9 @@ PAYPAL_CLIENT_SECRET_SANDBOX=mock-client-secret
 PAYPAL_WEBHOOK_ID_SANDBOX=WH-MOCK-0001
 PAYPAL_WEBHOOK_ENABLED=true
 
+# Accept website inquiries locally (tests/test_leads.py).
+LEADS_ENABLED=true
+
 # --- Test clock ---------------------------------------------------------------
 #
 # The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,

@@ -13,7 +13,7 @@
  */
 
 import { corsHeaders, json, errorResponse, hashIp, clientIp, toCsv } from './http.js';
-import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert } from './email.js';
+import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert, sendStaffBriefEmail } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import { handleAdmin } from './admin/router.js';
@@ -22,6 +22,9 @@ import { cleanupExpiredAuth } from './auth/cleanup.js';
 import { expireOffers } from './programs/enrollment.js';
 import { handlePaypalWebhook } from './payments/webhook.js';
 import { sweepSubscriptions } from './payments/billing.js';
+import { handleLead } from './crm/lead-route.js';
+import { expireInquiryIpHashes } from './crm/intake.js';
+import { runStaffBrief } from './jobs/brief.js';
 import { flag } from './lib/flags.js';
 import { audit } from './auth/staff.js';
 import {
@@ -85,6 +88,11 @@ export default {
         return await handlePaypalWebhook(request, env);
       }
 
+      // Website contact and interest forms -> CRM (crm/lead-route.js).
+      if (url.pathname === '/api/lead' && request.method === 'POST') {
+        return await handleLead(request, env, cors);
+      }
+
       if (url.pathname === '/api/health') {
         return json({ ok: true }, { cors });
       }
@@ -136,6 +144,10 @@ export default {
     ctx.waitUntil(expireOffers(env));
     // Re-read the ten PayPal subscriptions we have heard least about.
     ctx.waitUntil(sweepSubscriptions(env));
+    // Inquiries keep a salted IP hash for 30 days, for rate limiting only.
+    ctx.waitUntil(expireInquiryIpHashes(env));
+    // One staff email a day, only when there is something to do.
+    ctx.waitUntil(runStaffBrief(env, sendStaffBriefEmail));
   },
 };
 
