@@ -79,7 +79,7 @@ import { usersBody, USERS_STYLES, usersCsp } from './staff-ui.js';
 import { sendStaffInvite } from '../email.js';
 import { crossSiteCheck, originAllowed } from '../lib/csrf.js';
 import { readForm } from '../lib/body.js';
-import { sendEnrollmentOffer } from '../email.js';
+import { sendEnrollmentOffer, sendPortalInvite } from '../email.js';
 import { portalOrigin } from '../auth/magic.js';
 import {
   getProgram, listGroups, queue as enrollmentQueue, offerSeat, waitlist as waitlistEnrollment,
@@ -88,9 +88,10 @@ import {
 import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from './enrollments-ui.js';
 import { programBody, PROGRAM_STYLES } from './programs-ui.js';
 import { familiesBody, medicalBody, FAMILY_STYLES } from './families-ui.js';
-import { familiesView, shirtTotals, childMedical } from '../programs/families.js';
+import { familiesView, shirtTotals, childMedical, invitedAccounts } from '../programs/families.js';
 import { billingBody, BILLING_STYLES } from './billing-ui.js';
 import { inboxBody, INBOX_STYLES } from './inbox-ui.js';
+import { privacyBody, NEXT_STATUS as PRIVACY_NEXT } from './privacy-ui.js';
 import { briefSummary, briefLines, runStaffBrief } from '../jobs/brief.js';
 import { sendStaffBriefEmail } from '../email.js';
 import {
@@ -111,6 +112,7 @@ const NAV = [
   { href: '/families', label: 'Families' },
   { href: '/billing', label: 'Billing' },
   { href: '/inbox', label: 'Inbox' },
+  { href: '/privacy', label: 'Privacy' },
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -256,6 +258,40 @@ export async function handleAdmin(request, env, ctx, path, base = '') {
     return renderWhoami(principal);
   }
 
+  // --- Privacy requests (privacy:manage) ----------------------------------------
+  const privacyRoute = pathname.match(/^\/privacy(?:\/(\d{1,12})\/(verified|scheduled|completed|rejected))?$/);
+  if (privacyRoute) {
+    if (!can(principal, 'privacy:manage')) {
+      return htmlResponse(page({ title: 'Privacy', principal, nav: NAV, body: '<h1>Not permitted</h1>' }), { status: 403 });
+    }
+    if (!privacyRoute[1] && request.method === 'GET') {
+      const { results } = await env.DB.prepare(
+        `SELECT r.id, r.kind, r.subject_id, r.requested_by, r.status, r.created_at, h.display_name AS family_name
+           FROM data_requests r LEFT JOIN households h ON CAST(h.id AS TEXT) = r.subject_id
+          ORDER BY r.created_at DESC LIMIT 200`
+      ).all();
+      const msg = url.searchParams.get('msg') === 'updated' ? 'Updated.' : '';
+      return htmlResponse(page({ title: 'Privacy', principal, nav: NAV, current: '/privacy',
+        body: privacyBody({ rows: results || [], message: msg, base }) }));
+    }
+    if (privacyRoute[1] && request.method === 'POST') {
+      const target = privacyRoute[2];
+      const allowedFrom = Object.entries(PRIVACY_NEXT).filter(([, to]) => to.includes(target)).map(([from]) => from);
+      const now = new Date().toISOString();
+      const done = ['completed', 'rejected'].includes(target);
+      const res = await env.DB.prepare(
+        `UPDATE data_requests SET status = ?2, updated_at = ?3, completed_at = CASE WHEN ?4 THEN ?3 ELSE completed_at END,
+                completed_by = CASE WHEN ?4 THEN ?5 ELSE completed_by END
+          WHERE id = ?1 AND kind = 'deletion' AND status IN (SELECT value FROM json_each(?6))`
+      ).bind(Number(privacyRoute[1]), target, now, done ? 1 : 0, principal.email, JSON.stringify(allowedFrom)).run();
+      if (res.meta.changes) {
+        ctx.waitUntil(audit(env, { actor: principal.email, action: `privacy.${target}`, subjectType: 'data_request',
+          subjectId: privacyRoute[1] }));
+      }
+      return new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/privacy?msg=updated` }) });
+    }
+  }
+
   // --- Daily brief: preview, and send now (events:manage) ---------------------
   if ((pathname === '/brief' && request.method === 'GET') || (pathname === '/brief/send' && request.method === 'POST')) {
     if (!can(principal, 'events:manage')) {
@@ -332,7 +368,30 @@ ${lines.length ? `<div class="panel"><ul style="margin:0;padding:14px 32px">${li
     }
     const view = await familiesView(env, principal);
     return htmlResponse(page({ title: 'Families', principal, nav: NAV, current: '/families',
-      body: familiesBody({ ...view, totals: shirtTotals(view.families), base }), extraStyles: FAMILY_STYLES }));
+      body: familiesBody({ ...view, totals: shirtTotals(view.families), base, message: url.searchParams.get('msg'),
+        canInvite: can(principal, 'crm:write'), invited: await invitedAccounts(env) }), extraStyles: FAMILY_STYLES }));
+  }
+  if (pathname === '/families/invite' && request.method === 'POST') {
+    if (!can(principal, 'crm:write')) {
+      return htmlResponse(page({ title: 'Families', principal, nav: NAV, body: '<h1>Not permitted</h1>' }), { status: 403 });
+    }
+    const back = (msg) => new Response(null, { status: 303, headers: adminHeaders({ Location: `${base}/families?msg=${msg}` }) });
+    let form;
+    try { form = await readForm(request); } catch { form = null; }
+    const typed = String(form?.get('email') || '').trim();
+    const emailNorm = typed.toLowerCase();
+    // The portal's own address rule (auth/magic.js), so an invited address can always sign in.
+    if (!/^[^\s@<>()[\]\\,;:"]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,}$/.test(emailNorm) || emailNorm.length > 254) return back('invalid');
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO accounts (email, email_norm, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)
+       ON CONFLICT (email_norm) DO NOTHING`
+    ).bind(typed, emailNorm, now).run();
+    const account = await env.DB.prepare(`SELECT id, status FROM accounts WHERE email_norm = ?1`).bind(emailNorm).first();
+    if (!account || account.status !== 'active') return back('invalid');
+    const sent = await sendPortalInvite(env, { to: typed, url: `${portalOrigin(env)}/` });
+    ctx.waitUntil(audit(env, { actor: principal.email, action: 'portal.family_invite', subjectType: 'account', subjectId: account.id }));
+    return back(sent.ok ? 'invited' : 'invited-no-email');
   }
   const familyMedical = pathname.match(/^\/families\/children\/(\d{1,12})\/medical$/);
   if (familyMedical && request.method === 'GET') {

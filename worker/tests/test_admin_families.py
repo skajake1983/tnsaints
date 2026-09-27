@@ -114,4 +114,69 @@ d = sql("SELECT action, subject_id FROM audit_log WHERE action='medical.denied' 
 check("and the refused attempt is audited too", d and str(d[0]["subject_id"]) == str(kids["Ava Adams"]), d)
 role("admin")
 
+print("\n=== inviting a family while the portal is invite-only ===")
+import json as _json
+import threading as _threading
+import time as _time
+from http.server import BaseHTTPRequestHandler as _H, ThreadingHTTPServer as _S
+_captured = []
+
+
+class _Sink(_H):
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self):
+        _captured.append(_json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0)))))
+        body = b'{"id":"sink"}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+_srv = _S(("127.0.0.1", 8799), _Sink)
+_threading.Thread(target=_srv.serve_forever, daemon=True).start()
+
+
+def invite_family(email):
+    import urllib.parse as _up
+    req = urllib.request.Request(BASE + "/__admin/families/invite", data=_up.urlencode({"email": email}).encode(), method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    req.add_header("Sec-Fetch-Site", "same-origin")
+    try:
+        r = urllib.request.build_opener(_NoRedirect).open(req)
+    except urllib.error.HTTPError as e:
+        r = e
+    return (getattr(r, "status", None) or r.code), r.headers.get("Location", "")
+
+
+try:
+    st, loc = invite_family("not an email")
+    check("an invitation needs a real address", "msg=invalid" in loc, loc)
+    st, loc = invite_family("New.Family@Example.com")
+    _time.sleep(1)
+    check("inviting a family creates their account", "msg=invited" in loc
+          and sql("SELECT status FROM accounts WHERE email_norm='new.family@example.com'") == [{"status": "active"}], loc)
+    mail = [m for m in _captured if "New.Family@Example.com" in (m.get("to") or [])]
+    body = (mail[0].get("text", "") + mail[0].get("html", "")) if mail else ""
+    check("and emails them where to go", mail and "parent portal" in body and "this email address" in body)
+    check("with no sign-in token in it", "#t=" not in body and "?t=" not in body)
+    check("the invitation is audited", sql("SELECT 1 FROM audit_log WHERE action='portal.family_invite'") != [])
+    st, loc = invite_family("new.family@example.com")
+    check("inviting the same family again is harmless",
+          "msg=invited" in loc and len(sql("SELECT 1 FROM accounts WHERE email_norm='new.family@example.com'")) == 1)
+    st, html = admin("/families")
+    check("families invited but not yet set up are listed (as typed)", "Invited, not set up yet" in html and "new.family@example.com" in html.lower())
+    role("coach")
+    st, loc = invite_family("coach.try@example.com")
+    check("a coach cannot invite families", st == 403 and sql("SELECT 1 FROM accounts WHERE email_norm='coach.try@example.com'") == [], st)
+    role("admin")
+finally:
+    _srv.shutdown()
+
 check.finish()

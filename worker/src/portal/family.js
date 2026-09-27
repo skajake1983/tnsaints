@@ -25,6 +25,7 @@ import { setupPage, dashboardPage, childPage, contactsPage, accountPage } from '
 import { redirect } from './auth-pages.js';
 import { notFoundResponse } from './ui.js';
 import { guardianRoutes } from './guardians.js';
+import { privacyRoutes } from './privacy.js';
 import { applyRoutes, waiverRoutes } from './apply.js';
 import { payRoutes } from './pay.js';
 import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
@@ -56,6 +57,8 @@ export function isFamilyPath(pathname) {
     pathname === '/guardians' ||
     pathname.startsWith('/guardians/') ||
     pathname === '/account/signout-others' ||
+    pathname === '/account/export' ||
+    pathname === '/account/delete-request' ||
     pathname.startsWith('/pay/')
   );
 }
@@ -78,11 +81,17 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
             .first()
         )
       : false;
-    const notice = url.searchParams.get('notice') === 'signedout' ? 'Signed out everywhere else.' : '';
+    const notice = {
+      signedout: 'Signed out everywhere else.',
+      'delete-requested': "We've received your request to delete your family's data. We'll email you to confirm, and again when it's done.",
+    }[url.searchParams.get('notice')] || '';
     return accountPage(rc, session, {
       google, googleLinked: linked, sessions: await data.listSessions(env, accountId), notice,
     });
   }
+
+  const privacy = await privacyRoutes({ env, ctx, rc, session, pathname, method });
+  if (privacy) return privacy;
 
   if (pathname === '/account/signout-others' && method === 'POST') {
     const n = await data.revokeOtherSessions(env, accountId, session.idHash);

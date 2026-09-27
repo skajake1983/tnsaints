@@ -32,6 +32,7 @@ export async function briefSummary(env, now = Date.now()) {
     one(`SELECT COUNT(*) AS n FROM enrollments WHERE status = 'past_due'`),
     one(`SELECT COUNT(*) AS n FROM billing_subscriptions WHERE enrollment_id IS NULL AND status NOT IN ('CANCELLED', 'EXPIRED')`),
     one(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'billing.paid_without_seat' AND at >= ?1`, since),
+    one(`SELECT COUNT(*) AS n FROM data_requests WHERE kind = 'deletion' AND status IN ('received', 'verified', 'scheduled')`),
   ]);
   const n = (i) => Number(results[i].results?.[0]?.n || 0);
   return {
@@ -44,6 +45,7 @@ export async function briefSummary(env, now = Date.now()) {
     pastDue: n(6),
     unlinkedSubscriptions: n(7),
     paidWithoutSeat: n(8),
+    deletionRequests: n(9),
   };
 }
 
@@ -52,6 +54,7 @@ export function briefLines(summary) {
   const lines = [];
   const add = (count, text, path) => { if (count > 0) lines.push({ text: text(count), path }); };
   add(summary.paidWithoutSeat, (c) => `${c} ${c === 1 ? 'family' : 'families'} paid but had no seat to take — refund or place them`, '/billing');
+  add(summary.deletionRequests, (c) => `${c} data deletion ${c === 1 ? 'request is' : 'requests are'} waiting`, '/privacy');
   add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due in PayPal`, '/families');
   add(summary.offersLapsingSoon, (c) => `${c} seat ${c === 1 ? 'offer lapses' : 'offers lapse'} in the next two days`, '/enrollments');
   add(summary.applied, (c) => `${c} new academy ${c === 1 ? 'application' : 'applications'} to review`, '/enrollments');

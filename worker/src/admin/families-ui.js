@@ -25,6 +25,7 @@ export const FAMILY_STYLES = `
   .tag.med { background:#f6e5e5; color: var(--danger); }
   .tag.warn { background:#fdf0dd; color:#7a4a09; }
   .sizes { font-size:15px; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 `;
 
 function sizesLine(map) {
@@ -32,7 +33,13 @@ function sizesLine(map) {
   return entries.length ? entries.map(([s, n]) => `<strong>${esc(s)}</strong> ${n}`).join(' · ') : 'None yet';
 }
 
-export function familiesBody({ families, contact, medical, totals, base = '' }) {
+const FAMILY_MESSAGES = {
+  invited: 'Invitation sent. They can now sign in with that address.',
+  'invited-no-email': "Their account is ready, but the email didn't send (daily allowance or provider). Tell them to sign in at the portal with that address.",
+  invalid: "That didn't look like an email address.",
+};
+
+export function familiesBody({ families, contact, medical, totals, base = '', message = '', canInvite = false, invited = [] }) {
   const childCount = families.reduce((n, f) => n + f.children.length, 0);
   const cards = families.length
     ? families
@@ -67,8 +74,18 @@ export function familiesBody({ families, contact, medical, totals, base = '' }) 
         .join('')
     : '<div class="empty">No families have signed up yet.</div>';
 
+  const invite = canInvite ? `<div class="panel"><h2>Invite a family</h2>
+<form method="post" action="${esc(base)}/families/invite" style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px">
+  <label class="sr" for="invite-email">Parent's email</label>
+  <input id="invite-email" name="email" type="email" required placeholder="parent@example.com" style="font:inherit;padding:8px 10px;min-width:260px">
+  <button type="submit">Send invitation</button></form>
+<p class="sub" style="padding:0 16px 12px;margin:0">While the portal is invite-only, this is how a family gets in. The email has no special link:
+they sign in at the portal with that address.</p>
+${invited.length ? `<p class="sub" style="padding:0 16px 12px;margin:0">Invited, not set up yet: ${invited.map((a) => esc(a.email)).join(', ')}</p>` : ''}</div>` : '';
   return `<h1>Families</h1>
 <p class="sub">${families.length} ${families.length === 1 ? 'family' : 'families'} and ${childCount} ${childCount === 1 ? 'child' : 'children'} on the parent portal.</p>
+${message && FAMILY_MESSAGES[message] ? `<div class="notice" role="status">${esc(FAMILY_MESSAGES[message])}</div>` : ''}
+${invite}
 <div class="panel"><h2>Practice shirts</h2><div style="padding:12px 16px" class="sizes">
   <p style="margin:0 0 6px">To order (offered or enrolled): ${sizesLine(totals.placed)}</p>
   <p style="margin:0;color:var(--muted)">All children: ${sizesLine(totals.all)}</p>

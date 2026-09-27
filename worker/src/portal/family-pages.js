@@ -7,6 +7,7 @@ import {
   esc, portalPage, portalResponse, field, errorSummary, selectField, textareaField, radioGroup,
 } from './ui.js';
 import { googleButton } from './auth-pages.js';
+import { privacySection } from './privacy.js';
 import { currentGrade, gradeLabel } from '../lib/grades.js';
 import { SHIRT_SIZES, RELATIONSHIPS } from './forms.js';
 
@@ -225,6 +226,7 @@ ${google ? `<section class="panel" aria-labelledby="so-h">
     ? '<p style="margin:0">Google is connected. You can sign in with Google or an email link.</p>'
     : `<p>Connect Google to sign in with one tap next time.</p>${googleButton(rc, { mode: 'link', label: 'Connect Google' })}`}
 </section>` : ''}
+${privacySection(rc)}
 <form method="post" action="${esc(rc.url('/auth/signout'))}">
   <button class="btn secondary" type="submit">Sign out</button>
 </form>`;

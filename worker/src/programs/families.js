@@ -104,3 +104,13 @@ export async function childMedical(env, playerId) {
     .bind(playerId)
     .first();
 }
+
+/** Accounts staff invited that have not set up a family yet (newest first). */
+export async function invitedAccounts(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT a.email, a.created_at, a.last_login_at FROM accounts a
+      WHERE a.status = 'active' AND NOT EXISTS (SELECT 1 FROM household_members m WHERE m.account_id = a.id)
+      ORDER BY a.created_at DESC LIMIT 100`
+  ).all();
+  return results || [];
+}

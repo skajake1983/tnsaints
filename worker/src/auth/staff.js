@@ -48,6 +48,8 @@ const CAPABILITIES = {
     // The CRM: see contacts and inquiries; change their state.
     'crm:view',
     'crm:write',
+    // Act on families' deletion requests.
+    'privacy:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not

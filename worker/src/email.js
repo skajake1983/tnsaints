@@ -420,6 +420,47 @@ export async function sendStaffBriefEmail(env, { lines, adminUrl }) {
   return sendMetered(env, 'alert', { to, subject: `Today at Tennessee Saints: ${lines.length} ${lines.length === 1 ? 'thing' : 'things'} to look at`, html, text });
 }
 
+/**
+ * "You're invited to the parent portal" — staff inviting a family while the
+ * portal is invite-only. Receipt lane.
+ *
+ * Deliberately not a sign-in link. It carries no token: it tells the family
+ * where to go and which address to use, and the portal's normal sign-in
+ * (email link or Google) proves they control that mailbox.
+ */
+export async function sendPortalInvite(env, { to, url }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">Tennessee Saints — parent portal</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">
+      <p style="margin-top:0;">You're invited to the Tennessee Saints parent portal, where you can add your children,
+      keep their medical and emergency details current, and apply to the academy.</p>
+      <p style="margin:18px 0;">
+        <a href="${escapeHtml(url)}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Go to the parent portal</a>
+      </p>
+      <p>Sign in with <strong>this email address</strong>. We'll email you a sign-in link, so there's no password to set.</p>
+      <p style="color:#536277;font-size:14px;">Questions: ${escapeHtml(contact)}.</p>
+    </div>
+  </div>`;
+  const text = [
+    "You're invited to the Tennessee Saints parent portal, where you can add your children,",
+    'keep their medical and emergency details current, and apply to the academy.',
+    '',
+    `Go to: ${url}`,
+    '',
+    "Sign in with this email address. We'll email you a sign-in link; there's no password to set.",
+    `Questions: ${contact}`,
+  ].join('\n');
+  return sendMetered(env, 'receipt', { to, subject: "You're invited to the Tennessee Saints parent portal", html, text, replyTo: contact });
+}
+
 function row(label, value) {
   if (value === null || value === undefined || value === '') return '';
   return `<tr>
