@@ -20,6 +20,8 @@ import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
 import { cleanupExpiredAuth } from './auth/cleanup.js';
 import { expireOffers } from './programs/enrollment.js';
+import { handlePaypalWebhook } from './payments/webhook.js';
+import { sweepSubscriptions } from './payments/billing.js';
 import { flag } from './lib/flags.js';
 import { audit } from './auth/staff.js';
 import {
@@ -78,6 +80,11 @@ export default {
     }
 
     try {
+      // Server to server: no CORS, no browser, verified by signature (payments/webhook.js).
+      if (url.pathname === '/api/paypal/webhook' && request.method === 'POST') {
+        return await handlePaypalWebhook(request, env);
+      }
+
       if (url.pathname === '/api/health') {
         return json({ ok: true }, { cors });
       }
@@ -127,6 +134,8 @@ export default {
     ctx.waitUntil(cleanupExpiredAuth(env));
     // Lapsed seat offers back to the waiting list (their seats are already free).
     ctx.waitUntil(expireOffers(env));
+    // Re-read the ten PayPal subscriptions we have heard least about.
+    ctx.waitUntil(sweepSubscriptions(env));
   },
 };
 

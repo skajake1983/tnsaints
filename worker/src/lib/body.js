@@ -11,9 +11,17 @@ export class BodyTooLarge extends Error {}
 
 /** The body as text, or throws BodyTooLarge past `maxBytes`. */
 export async function readTextCapped(request, maxBytes) {
+  return new TextDecoder().decode(await readBytesCapped(request, maxBytes));
+}
+
+/**
+ * The exact body bytes, or throws BodyTooLarge past `maxBytes`. For signature
+ * checks that must see the bytes as sent (a webhook's CRC-32), not a re-encoding.
+ */
+export async function readBytesCapped(request, maxBytes) {
   const declared = Number(request.headers.get('Content-Length') || 0);
   if (declared > maxBytes) throw new BodyTooLarge();
-  if (!request.body) return '';
+  if (!request.body) return new Uint8Array(0);
 
   const reader = request.body.getReader();
   const chunks = [];
@@ -34,7 +42,25 @@ export async function readTextCapped(request, maxBytes) {
     bytes.set(c, offset);
     offset += c.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes;
+}
+
+/**
+ * A JSON body from a portal page's own fetch(), or null if it is not one.
+ * Requiring application/json matters beyond parsing: a cross-site HTML form
+ * cannot send that content type without a CORS preflight, which this Worker
+ * never grants — one more wall behind the Sec-Fetch-Site check.
+ */
+export async function readJson(request, maxBytes = 8 * 1024) {
+  const type = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  if (type !== 'application/json') return null;
+  try {
+    const value = JSON.parse(await readTextCapped(request, maxBytes));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch (err) {
+    if (err instanceof BodyTooLarge) throw err;
+    return null;
+  }
 }
 
 /**

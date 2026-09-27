@@ -90,6 +90,15 @@ GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=local-test-secret
 GOOGLE_OIDC_BASE=http://127.0.0.1:8798
 
+# PayPal against the mock provider tests/test_portal_pay.py starts on
+# 127.0.0.1:8797. PAYPAL_API_BASE is honoured only for a loopback URL, which a
+# deployed Worker cannot reach, so it can never redirect real payments.
+PAYPAL_API_BASE=http://127.0.0.1:8797
+PAYPAL_CLIENT_ID_SANDBOX=mock-client-id
+PAYPAL_CLIENT_SECRET_SANDBOX=mock-client-secret
+PAYPAL_WEBHOOK_ID_SANDBOX=WH-MOCK-0001
+PAYPAL_WEBHOOK_ENABLED=true
+
 # --- Test clock ---------------------------------------------------------------
 #
 # The evaluation registration window is REGISTRATION_CLOSES_AT in wrangler.toml,

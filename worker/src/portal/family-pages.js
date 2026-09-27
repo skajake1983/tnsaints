@@ -59,7 +59,8 @@ function academyLine(rc, child, enrollments, academy) {
   if (e.status === 'applied') return '<span class="badge ok">Academy: application received</span>';
   if (e.status === 'waitlist') return '<span class="badge warn">Academy: on the waiting list</span>';
   if (e.status === 'offered') {
-    return `<span class="badge ok">Place offered: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>`;
+    return `<span class="badge ok">Place offered: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
+  <a href="${esc(rc.url(`/pay/${e.ref}`))}">Accept and pay</a>`;
   }
   if (e.status === 'past_due') return '<span class="badge warn">Academy: payment needed</span>';
   return `<span class="badge ok">Academy: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;

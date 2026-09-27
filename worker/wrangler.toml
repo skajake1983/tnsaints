@@ -125,6 +125,23 @@ GOOGLE_CLIENT_ID = ""
 # SESSION_MAX_DAYS = "30"
 # RECENT_AUTH_HOURS = "12"
 
+# PayPal (src/payments). "sandbox" = test money; switch to "live" only after
+# a full sandbox run and PayPal's answer about the account (plan items O4, O5).
+# Each environment has its own client id (here) and secret (wrangler secret):
+#   wrangler secret put PAYPAL_CLIENT_SECRET_SANDBOX
+#   wrangler secret put PAYPAL_CLIENT_SECRET_LIVE
+# The webhook id comes from the PayPal app's webhook settings; its URL is
+# https://api.tnsaints.com/api/paypal/webhook. While PAYPAL_WEBHOOK_ENABLED is
+# not "true" the endpoint answers 503 and PayPal keeps retrying for 3 days,
+# so nothing is lost by turning it off. Plan ids are set per program in the
+# admin (Programs -> Academy), not here.
+PAYPAL_ENV = "sandbox"
+PAYPAL_CLIENT_ID_SANDBOX = ""
+PAYPAL_CLIENT_ID_LIVE = ""
+PAYPAL_WEBHOOK_ID_SANDBOX = ""
+PAYPAL_WEBHOOK_ID_LIVE = ""
+PAYPAL_WEBHOOK_ENABLED = "false"
+
 # The public Turnstile site key (the same widget as the registration form).
 # portal.tnsaints.com must be added to the widget's hostnames in the
 # Cloudflare dashboard before launch (plan item O7).
