@@ -119,6 +119,13 @@ MAGIC_LINK_ENABLED = "true"
 GOOGLE_SIGNIN_ENABLED = "false"
 GOOGLE_CLIENT_ID = ""
 
+# Kill switch for taking on new places (src/programs/enrollment.js). Anything
+# but "true": families cannot apply or start paying, and staff cannot offer
+# seats. Still works while off: confirming a payment already made in PayPal,
+# signing the waiver for an existing place, waitlisting, declining. Each
+# program's own open/closed status gates it as well.
+ENROLLMENT_ENABLED = "false"
+
 # Session lengths (days) and how recent a sign-in must be (hours) for export,
 # deletion, invites and claiming a subscription. Defaults shown.
 # SESSION_IDLE_DAYS = "14"
@@ -141,6 +148,14 @@ PAYPAL_CLIENT_ID_LIVE = ""
 PAYPAL_WEBHOOK_ID_SANDBOX = ""
 PAYPAL_WEBHOOK_ID_LIVE = ""
 PAYPAL_WEBHOOK_ENABLED = "false"
+
+# How a webhook's signature is checked. Both check it; neither can turn it off.
+#   "self"     (default) verify PayPal's signature here with PayPal's published
+#              certificate: no call to PayPal per event.
+#   "postback" ask PayPal's verify-webhook-signature API instead: one call per
+#              event. The fallback if self-checking ever breaks on PayPal's side.
+# Anything else is read as "self".
+PAYPAL_WEBHOOK_VERIFY = "self"
 
 # Website forms -> CRM (POST /api/lead). Anything but "true" answers 503 and the
 # site falls back to Formspree, so turning this off loses no inquiries.

@@ -16,9 +16,13 @@
  * Portal functions take the signed-in accountId and embed the household check
  * in the statement, like portal/data.js. Staff functions take the staff email
  * for attribution; the admin router checks `enrollments:manage` first.
+ *
+ * PAUSING. ENROLLMENT_ENABLED is the kill switch for taking on new places
+ * (see enrollmentEnabled below); a program's own status gates it separately.
  */
 
 import { randomToken } from '../lib/crypto.js';
+import { flag } from '../lib/flags.js';
 import { currentGrade } from '../lib/grades.js';
 
 const MEMBER_OF = `SELECT household_id FROM household_members WHERE account_id = ?1`;
@@ -28,6 +32,19 @@ const iso = (ms = Date.now()) => new Date(ms).toISOString();
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const dollars = (cents) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;
+
+/**
+ * ENROLLMENT_ENABLED: exactly "true" to take on new places. Off, or missing,
+ * families cannot apply or start paying and staff cannot send offers.
+ *
+ * Deliberately NOT paused: confirming a payment a family has already made in
+ * PayPal (the money has moved; refusing would leave them paid but unplaced),
+ * signing the waiver for a place that exists, waitlisting and declining.
+ * Offers already sent keep their pay-by date and lapse on it as usual.
+ */
+export function enrollmentEnabled(env) {
+  return flag(env, 'ENROLLMENT_ENABLED', false);
+}
 
 /** What a family will pay, in words, for the apply page and the offer email. */
 export function priceLine(program) {
@@ -130,10 +147,11 @@ export async function liveEnrollment(env, accountId, playerId, programId) {
  * Record the signed waiver and the application together, or neither.
  * One batch = one transaction; the unique live-enrollment index makes a second
  * application for the same child fail, and the consent rolls back with it.
- * @returns {Promise<{ok: true, ref: string} | {ok: false, reason: 'duplicate'|'not-found'}>}
+ * @returns {Promise<{ok: true, ref: string} | {ok: false, reason: 'duplicate'|'not-found'|'paused'}>}
  */
 export async function apply(env, accountId, { playerId, program, waiver, signature, relationship, photoRelease,
   preferredGroupIds, ipHash }) {
+  if (!enrollmentEnabled(env)) return { ok: false, reason: 'paused' };
   const now = iso();
   const ref = randomToken(16);
   try {
@@ -190,9 +208,10 @@ export async function familyEnrollments(env, accountId) {
 /**
  * Offer a seat in a group. Succeeds only while the group, counted inside this
  * statement, still has room, and only from 'applied' or 'waitlist'.
- * @returns {Promise<{ok: true, expiresAt: string} | {ok: false, reason: 'full'|'state'}>}
+ * @returns {Promise<{ok: true, expiresAt: string} | {ok: false, reason: 'full'|'state'|'paused'}>}
  */
 export async function offerSeat(env, { enrollmentId, groupId, staffEmail, holdDays }) {
+  if (!enrollmentEnabled(env)) return { ok: false, reason: 'paused' };
   const nowMs = Date.now();
   const now = iso(nowMs);
   const expiresAt = iso(nowMs + holdDays * DAY_MS);

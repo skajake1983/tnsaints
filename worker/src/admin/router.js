@@ -83,7 +83,7 @@ import { sendEnrollmentOffer, sendPortalInvite } from '../email.js';
 import { portalOrigin } from '../auth/magic.js';
 import {
   getProgram, listGroups, queue as enrollmentQueue, offerSeat, waitlist as waitlistEnrollment,
-  decline as declineEnrollment, expireOffers, householdEmails, enrollmentWithGroup, priceLine,
+  decline as declineEnrollment, expireOffers, householdEmails, enrollmentWithGroup, priceLine, enrollmentEnabled,
 } from '../programs/enrollment.js';
 import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from './enrollments-ui.js';
 import { programBody, PROGRAM_STYLES } from './programs-ui.js';
@@ -1582,7 +1582,9 @@ async function renderEnrollments(env, principal, url, base) {
       principal,
       nav: NAV,
       current: '/enrollments',
-      body: enrollmentsBody({ program, groups, rows, message: url.searchParams.get('msg'), base }),
+      body: enrollmentsBody({
+        program, groups, rows, message: url.searchParams.get('msg'), base, paused: !enrollmentEnabled(env),
+      }),
       extraStyles: ENROLLMENT_STYLES,
     })
   );

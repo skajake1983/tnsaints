@@ -31,7 +31,7 @@ NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')"
 
 def require_portal():
     settings = _dev_vars()
-    for key, want in (("DEV_PORTAL", "true"), ("PORTAL_ENABLED", "true")):
+    for key, want in (("DEV_PORTAL", "true"), ("PORTAL_ENABLED", "true"), ("ENROLLMENT_ENABLED", "true")):
         if settings.get(key) != want:
             sys.exit(f"\nREFUSING TO RUN.\n  worker/.dev.vars needs {key}={want}\n")
     if len(settings.get("AUTH_PEPPER", "")) < 32:

@@ -21,6 +21,7 @@ misspelled, `"True"` — is off.
 | `PORTAL_SIGNUP_ENABLED` | only invited families (and co-guardians they invite) can sign in | yes |
 | `MAGIC_LINK_ENABLED` | email sign-in links paused; existing sessions keep working | yes |
 | `GOOGLE_SIGNIN_ENABLED` | the Google button disappears | yes |
+| `ENROLLMENT_ENABLED` | families can't apply or start paying; staff can't offer seats. Still works: confirming a payment already made, signing a waiver for an existing place, waitlist, decline | yes — offers already sent keep their pay-by date and lapse on it |
 | `PAYPAL_WEBHOOK_ENABLED` | the webhook answers 503; PayPal retries for 3 days, nothing lost | yes |
 | `LEADS_ENABLED` | website forms fall back to Formspree | yes |
 | `STAFF_BRIEF_ENABLED` | no daily staff email | yes |
@@ -28,6 +29,11 @@ misspelled, `"True"` — is off.
 
 `PAYPAL_ENV` is `"sandbox"` (test money, TEST MODE banner on the portal) or
 `"live"`.
+
+`PAYPAL_WEBHOOK_VERIFY` is how a webhook's signature is checked: `"self"`
+(default — checked here against PayPal's certificate, no call to PayPal) or
+`"postback"` (PayPal's verify API is asked, one call per event). Both check the
+signature; no value turns checking off, and anything else reads as `"self"`.
 
 Changing a switch = edit `wrangler.toml`, commit, `npx wrangler deploy`.
 
@@ -132,7 +138,7 @@ costs no email at all.
 
 1. **Staff only, sandbox.** Add the portal route in `wrangler.toml` (the
    commented `portal.tnsaints.com` line), `PORTAL_ENABLED = "true"`, leave
-   `PORTAL_SIGNUP_ENABLED = "false"`. Deploy. Invite staff from Admin → Families →
+   `PORTAL_SIGNUP_ENABLED = "false"`, `ENROLLMENT_ENABLED = "true"`. Deploy. Invite staff from Admin → Families →
    *Invite a family*, and run the whole journey as a family would.
 2. **Live payments, 3–5 invited families.** Switch PayPal to live (step 5.6).
    Invite each family from Admin → Families → *Invite a family*.
@@ -166,6 +172,13 @@ brief. To act on one:
   queue, or refund in PayPal.
 - **Webhook errors**: PayPal retries for 3 days. Turning
   `PAYPAL_WEBHOOK_ENABLED` off is safe; turning it back on catches up.
+- **Every webhook rejected** (`paypal_webhook_rejected` in the logs with
+  reason `signature` or `cert-unavailable`, after PayPal changed something):
+  set `PAYPAL_WEBHOOK_VERIFY = "postback"` and deploy, so PayPal checks its own
+  signatures; then find out what changed.
+- **Something wrong with enrollment** (offers, the pay page):
+  `ENROLLMENT_ENABLED = "false"` stops new applications, payments and offers
+  while payments already made are still recorded.
 - **Someone draining sign-in emails**: `MAGIC_LINK_ENABLED = "false"`; Google
   sign-in and existing sessions keep working.
 - **A leaked session or link**: rotate `AUTH_PEPPER` (signs everyone out).

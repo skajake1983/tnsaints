@@ -9,6 +9,11 @@
  * subrequest in the steady state (the certificate is cached per isolate) and
  * under two milliseconds of CPU.
  *
+ * Or, with PAYPAL_WEBHOOK_VERIFY = "postback", by asking PayPal's
+ * verify-webhook-signature API: one call per event, for the day self-checking
+ * breaks on PayPal's side. The same header checks come first either way, and
+ * no setting skips the signature.
+ *
  * AND THEN NOT TRUSTED ANYWAY. A verified event only tells us WHICH
  * subscription or sale to look at; its state is re-read from PayPal
  * (billing.js). So a replayed, reordered or somehow-forged event can only cause
@@ -22,9 +27,9 @@
 
 import { importX509 } from 'jose';
 import { crc32 } from '../lib/crc32.js';
-import { flag } from '../lib/flags.js';
+import { flag, choice } from '../lib/flags.js';
 import { readBytesCapped, BodyTooLarge } from '../lib/body.js';
-import { paypalConfig, paypalConfigured, certUrlAllowed } from './paypal.js';
+import { paypalConfig, paypalConfigured, certUrlAllowed, verifyWebhookByPostback } from './paypal.js';
 import { syncSubscription, recordSale } from './billing.js';
 
 const MAX_BODY = 64 * 1024;
@@ -53,19 +58,30 @@ async function certKey(url) {
   return key;
 }
 
+/** The signature headers, checked the same way whichever method verifies them. */
+function signatureFields(headers, config) {
+  const fields = {
+    id: headers.get('paypal-transmission-id'),
+    time: headers.get('paypal-transmission-time'),
+    sig: headers.get('paypal-transmission-sig'),
+    certUrl: headers.get('paypal-cert-url'),
+    algo: headers.get('paypal-auth-algo'),
+  };
+  if (Object.values(fields).some((v) => !v)) return { ok: false, reason: 'missing-headers' };
+  if (fields.algo !== 'SHA256withRSA') return { ok: false, reason: 'algorithm' };
+  if (!config.webhookId) return { ok: false, reason: 'no-webhook-id' };
+  if (!certUrlAllowed(fields.certUrl, config)) return { ok: false, reason: 'cert-host' };
+  return { ok: true, fields };
+}
+
 /**
+ * Self-verification ("self", the default).
  * @returns {Promise<{ok: true} | {ok: false, reason: string}>}
  */
 export async function verifyPaypalSignature(headers, bodyBytes, config) {
-  const id = headers.get('paypal-transmission-id');
-  const time = headers.get('paypal-transmission-time');
-  const sig = headers.get('paypal-transmission-sig');
-  const certUrl = headers.get('paypal-cert-url');
-  const algo = headers.get('paypal-auth-algo');
-  if (!id || !time || !sig || !certUrl || !algo) return { ok: false, reason: 'missing-headers' };
-  if (algo !== 'SHA256withRSA') return { ok: false, reason: 'algorithm' };
-  if (!config.webhookId) return { ok: false, reason: 'no-webhook-id' };
-  if (!certUrlAllowed(certUrl, config)) return { ok: false, reason: 'cert-host' };
+  const checked = signatureFields(headers, config);
+  if (!checked.ok) return checked;
+  const { id, time, sig, certUrl } = checked.fields;
   let key;
   try {
     key = await certKey(certUrl);
@@ -81,6 +97,45 @@ export async function verifyPaypalSignature(headers, bodyBytes, config) {
   const message = new TextEncoder().encode(`${id}|${time}|${config.webhookId}|${crc32(bodyBytes)}`);
   const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, message);
   return valid ? { ok: true } : { ok: false, reason: 'signature' };
+}
+
+/**
+ * Asking PayPal ("postback"). The body must be a UTF-8 JSON object, because it
+ * is placed into PayPal's request as-is (paypal.js explains why).
+ * @returns {Promise<{ok: true} | {ok: false, reason: string}>}
+ */
+export async function verifyByPostback(headers, bodyBytes, config) {
+  const checked = signatureFields(headers, config);
+  if (!checked.ok) return checked;
+  let raw;
+  try {
+    // fatal: invalid UTF-8 is refused, not silently replaced (which would
+    // change the bytes PayPal checks). ignoreBOM: a BOM is kept, and then
+    // fails the parse below, rather than being stripped unseen.
+    raw = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bodyBytes);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false, reason: 'body-format' };
+  } catch {
+    return { ok: false, reason: 'body-format' };
+  }
+  try {
+    const good = await verifyWebhookByPostback(config, checked.fields, raw);
+    return good ? { ok: true } : { ok: false, reason: 'signature' };
+  } catch {
+    return { ok: false, reason: 'postback-unavailable' };
+  }
+}
+
+/** PAYPAL_WEBHOOK_VERIFY: "self" unless exactly "postback". */
+export function webhookVerifyMode(env) {
+  return choice(env, 'PAYPAL_WEBHOOK_VERIFY', ['self', 'postback'], 'self');
+}
+
+/** Check a webhook's signature by the configured method. */
+export function verifyWebhook(env, headers, bodyBytes, config) {
+  return webhookVerifyMode(env) === 'postback'
+    ? verifyByPostback(headers, bodyBytes, config)
+    : verifyPaypalSignature(headers, bodyBytes, config);
 }
 
 async function processEvent(env, event) {
@@ -116,10 +171,14 @@ export async function handlePaypalWebhook(request, env) {
     if (err instanceof BodyTooLarge) return plain(413, 'too large');
     throw err;
   }
-  const verified = await verifyPaypalSignature(request.headers, bytes, config);
+  const verified = await verifyWebhook(env, request.headers, bytes, config);
   if (!verified.ok) {
-    console.warn(JSON.stringify({ event: 'paypal_webhook_rejected', reason: verified.reason }));
-    return plain(400, 'rejected');
+    // Could not check (PayPal's certificate or API unreachable): 503, and
+    // PayPal sends it again. Checked and wrong: 400.
+    console.warn(JSON.stringify({
+      event: 'paypal_webhook_rejected', reason: verified.reason, mode: webhookVerifyMode(env),
+    }));
+    return verified.reason.endsWith('-unavailable') ? plain(503, 'try again') : plain(400, 'rejected');
   }
 
   let event;

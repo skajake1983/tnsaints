@@ -16,7 +16,7 @@ import { RELATIONSHIPS } from './forms.js';
 import { getChild } from './data.js';
 import {
   getProgram, listGroups, currentWaiver, programOpen, applicationBlockers, liveEnrollment, apply, priceLine,
-  signForExistingPlace,
+  signForExistingPlace, enrollmentEnabled,
 } from '../programs/enrollment.js';
 import { hashIp, clientIp } from '../http.js';
 import { audit } from '../auth/staff.js';
@@ -26,6 +26,13 @@ const NAV = [{ href: '/', label: 'Family' }, { href: '/account', label: 'Account
 const errorFor = (errors, id) => errors.find((e) => e.id === id)?.message || '';
 function page(rc, title, body, status = 200) {
   return portalResponse(portalPage({ rc, title, body, nav: NAV, current: '/', signedIn: true }), { status });
+}
+
+/** ENROLLMENT_ENABLED is off: the same answer for every child and program. */
+export function applicationsPausedPage(rc) {
+  return page(rc, 'Applications paused', `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
+<h1>Applications are paused</h1>
+<p class="lede">We've paused new applications for a moment. Nothing you've already done is lost. Please try again later, or email info@tnsaints.com.</p>`, 503);
 }
 
 function groupChoices(groups, chosen) {
@@ -129,6 +136,7 @@ export function validateApplication(form, groups) {
 export async function applyRoutes({ env, ctx, request, rc, session, pathname, method, readForm }) {
   const m = /^\/children\/(\d{1,12})\/apply\/([a-z0-9-]{1,40})$/.exec(pathname);
   if (!m) return null;
+  if (!enrollmentEnabled(env)) return applicationsPausedPage(rc);
   const child = await getChild(env, session.accountId, Number(m[1]));
   const program = await getProgram(env, m[2]);
   if (!child || !program) return notFoundResponse(rc);
@@ -169,6 +177,7 @@ export async function applyRoutes({ env, ctx, request, rc, session, pathname, me
       preferredGroupIds: values.groups.map(Number),
       ipHash: await hashIp(clientIp(request), env.IP_HASH_SALT),
     });
+    if (!result.ok && result.reason === 'paused') return applicationsPausedPage(rc);
     if (!result.ok && result.reason === 'duplicate') {
       return applyPage(rc, { child, program, groups, waiver, existing: true, status: 409 });
     }

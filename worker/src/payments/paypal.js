@@ -103,6 +103,39 @@ async function get(config, path) {
   return res.json();
 }
 
+/**
+ * Ask PayPal whether a webhook's signature is good (PAYPAL_WEBHOOK_VERIFY =
+ * "postback"; webhook.js). PayPal recomputes the CRC-32 over `webhook_event`
+ * exactly as it receives it, so the raw body goes into the request byte for
+ * byte -- never parsed and re-serialised, which could reorder keys or re-escape
+ * text and fail every event. `rawEvent` must already be known to be a JSON
+ * object. Throws if PayPal cannot be asked; the caller answers 503 (retried).
+ * @returns {Promise<boolean>} true only for PayPal's "SUCCESS"
+ */
+export async function verifyWebhookByPostback(config, fields, rawEvent) {
+  const head = JSON.stringify({
+    auth_algo: fields.algo,
+    cert_url: fields.certUrl,
+    transmission_id: fields.id,
+    transmission_sig: fields.sig,
+    transmission_time: fields.time,
+    webhook_id: config.webhookId,
+  });
+  const res = await fetch(`${config.base}/v1/notifications/verify-webhook-signature`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${await accessToken(config)}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: `${head.slice(0, -1)},"webhook_event":${rawEvent}}`,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`paypal verify ${res.status}`);
+  const answer = await res.json();
+  return answer?.verification_status === 'SUCCESS';
+}
+
 const SUBSCRIPTION_ID = /^I-[A-Z0-9]{6,40}$/;
 const SALE_ID = /^[A-Z0-9]{6,40}$/;
 

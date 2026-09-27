@@ -68,6 +68,8 @@ DEV_ADMIN_EMAIL=you@example.com
 # locally; in wrangler.toml it stays "false" until launch.
 DEV_PORTAL=true
 PORTAL_ENABLED=true
+# New places (apply, pay, offers); "false" in wrangler.toml until launch.
+ENROLLMENT_ENABLED=true
 
 # Signs and hashes every portal secret (sign-in links, sessions, invites).
 # Without it the portal refuses to run. Generate a local one:

@@ -1,7 +1,7 @@
 """Paying for an offered place (src/portal/pay.js, src/payments/*), against a mock PayPal.
 
-The mock serves OAuth, subscriptions, sales and a signing certificate on
-127.0.0.1:8797. Webhooks are signed exactly as PayPal signs them
+The mock serves OAuth, subscriptions, sales, a signing certificate and
+PayPal's verify-webhook-signature API on 127.0.0.1:8797. Webhooks are signed exactly as PayPal signs them
 (<transmission id>|<time>|<webhook id>|<CRC-32 of the body>, SHA256withRSA)
 with a key and certificate generated for this run by openssl, and the Worker's
 real verifier checks them. Nothing about checking is mocked.
@@ -11,6 +11,9 @@ a subscription activates a place only if PayPal confirms the plan, the ref and
 the status; the webhook refuses anything not signed by a certificate from an
 allowed host; state always follows what PayPal says, not what an event claims;
 a family who closed the tab is still enrolled; payments land once, in cents.
+The other checking method (PAYPAL_WEBHOOK_VERIFY=postback) is proved against a
+mock that verifies exactly as PayPal does: the CRC-32 of the event bytes as
+they arrive, and the RSA signature, checked with openssl.
 """
 import base64
 import hashlib
@@ -54,9 +57,38 @@ KEY, CERT = os.path.join(TMP, "key.pem"), os.path.join(TMP, "cert.pem")
 subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", KEY, "-out", CERT,
                 "-days", "2", "-subj", "/CN=mock-paypal-webhooks"], check=True, capture_output=True)
 CERT_PEM = open(CERT, encoding="ascii").read()
+PUB = os.path.join(TMP, "pub.pem")
+subprocess.run(["openssl", "x509", "-pubkey", "-noout", "-in", CERT, "-out", PUB], check=True, capture_output=True)
 CERT_PATH = f"/v1/notifications/certs/CERT-{uuid.uuid4().hex[:12]}"  # fresh per run: the Worker caches by URL
 
-state = {"subs": {}, "sales": {}, "cert_fetches": 0}
+state = {"subs": {}, "sales": {}, "cert_fetches": 0, "postbacks": 0}
+
+
+def paypal_verifies(raw):
+    """PayPal's verify-webhook-signature: take webhook_event AS RECEIVED (never
+    re-serialised), CRC-32 it, and check the RSA signature over
+    <transmission id>|<time>|<the webhook id in the request>|<crc>."""
+    marker = b',"webhook_event":'
+    i = raw.find(marker)
+    if i < 0 or not raw.endswith(b"}"):
+        return 400, {"name": "VALIDATION_ERROR"}
+    try:
+        json.loads(raw)
+        head = json.loads(raw[:i] + b"}")
+    except ValueError:
+        return 400, {"name": "VALIDATION_ERROR"}
+    if str(head.get("transmission_id", "")).startswith("UNAVAILABLE-"):
+        return 500, {"name": "INTERNAL_SERVICE_ERROR"}
+    event_bytes = raw[i + len(marker):-1]
+    message = (f"{head['transmission_id']}|{head['transmission_time']}|{head['webhook_id']}|"
+               f"{zlib.crc32(event_bytes) & 0xffffffff}").encode()
+    sig_file = os.path.join(TMP, f"sig-{uuid.uuid4().hex}")
+    with open(sig_file, "wb") as f:
+        f.write(base64.b64decode(head["transmission_sig"]))
+    good = subprocess.run(["openssl", "dgst", "-sha256", "-verify", PUB, "-signature", sig_file],
+                          input=message, capture_output=True).returncode == 0
+    good = good and head.get("auth_algo") == "SHA256withRSA" and head.get("cert_url") == MOCK + CERT_PATH
+    return 200, {"verification_status": "SUCCESS" if good else "FAILURE"}
 
 
 class PayPal(BaseHTTPRequestHandler):
@@ -72,7 +104,12 @@ class PayPal(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if self.path == "/v1/notifications/verify-webhook-signature":
+            if self.headers.get("Authorization") != "Bearer mock-access-token":
+                return self._send(401)
+            state["postbacks"] += 1
+            return self._send(*paypal_verifies(raw))
         if self.path == "/v1/oauth2/token":
             expected = "Basic " + base64.b64encode(f"{CLIENT[0]}:{CLIENT[1]}".encode()).decode()
             if self.headers.get("Authorization") != expected:
@@ -105,12 +142,19 @@ def subscription(sid, ref, status="ACTIVE", plan=PLAN):
                           "billing_info": {"next_billing_time": "2026-11-06T14:00:00Z"}}
 
 
-def webhook(event, *, sign=True, cert_url=None, algo="SHA256withRSA", tamper=False, webhook_id=None):
-    body = json.dumps(event).encode()
-    tid, ttime = str(uuid.uuid4()), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+def signed_headers(body, *, webhook_id=None, cert_url=None, algo="SHA256withRSA", tid=None):
+    """The headers PayPal sends with a webhook, signed as PayPal signs them."""
+    tid, ttime = tid or str(uuid.uuid4()), time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     message = f"{tid}|{ttime}|{webhook_id or WEBHOOK_ID}|{zlib.crc32(body) & 0xffffffff}".encode()
     sig = base64.b64encode(subprocess.run(["openssl", "dgst", "-sha256", "-sign", KEY], input=message,
                                           capture_output=True, check=True).stdout).decode()
+    return {"PAYPAL-TRANSMISSION-ID": tid, "PAYPAL-TRANSMISSION-TIME": ttime, "PAYPAL-TRANSMISSION-SIG": sig,
+            "PAYPAL-CERT-URL": cert_url or MOCK + CERT_PATH, "PAYPAL-AUTH-ALGO": algo}
+
+
+def webhook(event, *, sign=True, cert_url=None, algo="SHA256withRSA", tamper=False, webhook_id=None):
+    body = json.dumps(event).encode()
+    headers = signed_headers(body, webhook_id=webhook_id, cert_url=cert_url, algo=algo)
     if tamper:
         tampered = body.replace(b"ACTIVATED", b"ACTIVATEX")
         assert tampered != body, "the tamper must change the bytes, or this check proves nothing"
@@ -118,11 +162,8 @@ def webhook(event, *, sign=True, cert_url=None, algo="SHA256withRSA", tamper=Fal
     req = urllib.request.Request(BASE + "/api/paypal/webhook", data=body, method="POST")
     req.add_header("Content-Type", "application/json")
     if sign:
-        req.add_header("PAYPAL-TRANSMISSION-ID", tid)
-        req.add_header("PAYPAL-TRANSMISSION-TIME", ttime)
-        req.add_header("PAYPAL-TRANSMISSION-SIG", sig)
-        req.add_header("PAYPAL-CERT-URL", cert_url or MOCK + CERT_PATH)
-        req.add_header("PAYPAL-AUTH-ALGO", algo)
+        for k, v in headers.items():
+            req.add_header(k, v)
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, r.read().decode()
@@ -337,6 +378,86 @@ try:
     check("a Join-page subscription is recorded, unlinked, for staff to match", j == [{"source": "joinpage", "enrollment_id": None}], j)
     st, text = webhook(event("BILLING.SUBSCRIPTION.ACTIVATED", {"id": "I-NOBODYKNOWS01"}))
     check("an event for a subscription PayPal does not know is acknowledged and ignored", st == 200 and text == "ignored", (st, text))
+
+    print("\n=== the other checking method: asking PayPal (PAYPAL_WEBHOOK_VERIFY=postback, imported directly) ===")
+    # Python's json.dumps spaces its separators and escapes non-ASCII (caf\u00e9),
+    # so any re-serialising on the way to PayPal would change these bytes and
+    # fail the CRC. Only a byte-for-byte pass-through verifies.
+    BODY = json.dumps({"id": "WH-POSTBACK00000001", "event_type": "BILLING.SUBSCRIPTION.ACTIVATED",
+                       "resource": {"id": "I-POSTBACK0000001", "note": "caf\u00e9 \u2014 ok"}}).encode()
+    cases = {
+        "good": (signed_headers(BODY), BODY),
+        "tampered": (signed_headers(BODY), BODY.replace(b"ACTIVATED", b"ACTIVATEX")),
+        "otherWebhook": (signed_headers(BODY, webhook_id="WH-SOMEONE-ELSES"), BODY),
+        "evilHost": (signed_headers(BODY, cert_url="https://evil.example/v1/notifications/certs/CERT-1"), BODY),
+        "sha1": (signed_headers(BODY, algo="SHA1withRSA"), BODY),
+        "notObject": (signed_headers(b"[1,2]"), b"[1,2]"),
+        "unavailable": (signed_headers(BODY, tid=f"UNAVAILABLE-{uuid.uuid4()}"), BODY),
+    }
+    assert cases["tampered"][1] != BODY
+    case_file = os.path.join(TMP, "postback-cases.json")
+    with open(case_file, "w", encoding="utf-8") as f:
+        json.dump({
+            "cases": {k: {"headers": h, "body": base64.b64encode(b).decode()} for k, (h, b) in cases.items()},
+            "env": {"PAYPAL_API_BASE": MOCK, "PAYPAL_CLIENT_ID_SANDBOX": CLIENT[0],
+                    "PAYPAL_CLIENT_SECRET_SANDBOX": CLIENT[1], "PAYPAL_WEBHOOK_ID_SANDBOX": WEBHOOK_ID,
+                    "PAYPAL_WEBHOOK_ENABLED": "true", "PAYPAL_WEBHOOK_VERIFY": "postback"},
+        }, f)
+    POSTBACK = r"""
+import { readFileSync } from 'node:fs';
+import { verifyWebhook, webhookVerifyMode, handlePaypalWebhook } from './src/payments/webhook.js';
+import { paypalConfig } from './src/payments/paypal.js';
+const input = JSON.parse(readFileSync(process.env.TNS_CASES, 'utf8'));
+const env = input.env;
+const config = paypalConfig(env);
+const bytesOf = (c) => Uint8Array.from(Buffer.from(c.body, 'base64'));
+const out = { results: {} };
+for (const [name, c] of Object.entries(input.cases)) {
+  out.results[name] = await verifyWebhook(env, new Headers(c.headers), bytesOf(c), config);
+}
+const selfEnv = { ...env, PAYPAL_WEBHOOK_VERIFY: 'self' };
+out.goodSelf = await verifyWebhook(selfEnv, new Headers(input.cases.good.headers), bytesOf(input.cases.good), config);
+out.modes = [{}, { PAYPAL_WEBHOOK_VERIFY: 'postback' }, { PAYPAL_WEBHOOK_VERIFY: 'POSTBACK' },
+  { PAYPAL_WEBHOOK_VERIFY: 'off' }, { PAYPAL_WEBHOOK_VERIFY: 'none' }].map(webhookVerifyMode);
+// Through the handler, with no database given: refusals end before one is needed.
+const through = async (c) => (await handlePaypalWebhook(new Request('https://api.tnsaints.com/api/paypal/webhook',
+  { method: 'POST', headers: c.headers, body: bytesOf(c) }), env)).status;
+out.handlerRejected = await through(input.cases.tampered);
+out.handlerUnavailable = await through(input.cases.unavailable);
+console.log(JSON.stringify(out));
+"""
+    asked = state["postbacks"]
+    res = subprocess.run(["node", "--input-type=module", "-e", POSTBACK], capture_output=True, cwd=WORKER_DIR,
+                         env={**os.environ, "TNS_CASES": case_file})
+    try:
+        pb = json.loads((res.stdout or b"").decode().strip().splitlines()[-1])
+    except Exception:
+        pb = None
+    check("postback harness ran", pb is not None, (res.stderr or b"").decode()[-400:])
+    if pb:
+        r = pb["results"]
+        check("a genuine event: PayPal says SUCCESS -- the body reached it byte for byte", r["good"] == {"ok": True}, r["good"])
+        check("a body changed after signing: PayPal says FAILURE, refused", r["tampered"] == {"ok": False, "reason": "signature"},
+              r["tampered"])
+        check("signed for a different webhook id: refused", r["otherWebhook"] == {"ok": False, "reason": "signature"},
+              r["otherWebhook"])
+        check("a certificate host that is not PayPal: refused without asking",
+              r["evilHost"] == {"ok": False, "reason": "cert-host"}, r["evilHost"])
+        check("any algorithm but SHA256withRSA: refused without asking", r["sha1"] == {"ok": False, "reason": "algorithm"},
+              r["sha1"])
+        check("a body that is not a JSON object: refused without asking",
+              r["notObject"] == {"ok": False, "reason": "body-format"}, r["notObject"])
+        check("PayPal unreachable: 'could not check', not 'good'",
+              r["unavailable"] == {"ok": False, "reason": "postback-unavailable"}, r["unavailable"])
+        check("PayPal was asked only about the events that passed the header checks",
+              state["postbacks"] - asked == 6, state["postbacks"] - asked)
+        check("the same genuine event also passes self-checking: the two methods agree", pb["goodSelf"] == {"ok": True},
+              pb["goodSelf"])
+        check("'self' unless the setting is exactly 'postback'; nothing turns checking off",
+              pb["modes"] == ["self", "postback", "self", "self", "self"], pb["modes"])
+        check("through the webhook: refused is 400; could not check is 503, so PayPal sends it again",
+              pb["handlerRejected"] == 400 and pb["handlerUnavailable"] == 503,
+              (pb["handlerRejected"], pb["handlerUnavailable"]))
 
 finally:
     server.shutdown()

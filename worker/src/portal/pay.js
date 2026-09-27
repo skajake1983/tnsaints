@@ -23,7 +23,7 @@ import { json } from '../http.js';
 import { audit } from '../auth/staff.js';
 import { paypalConfig, paypalConfigured } from '../payments/paypal.js';
 import { approveFromPortal } from '../payments/billing.js';
-import { priceLine } from '../programs/enrollment.js';
+import { priceLine, enrollmentEnabled } from '../programs/enrollment.js';
 
 const NAV = [{ href: '/', label: 'Family' }, { href: '/account', label: 'Account' }];
 const REF = /^[A-Za-z0-9_-]{16,43}$/;
@@ -172,6 +172,11 @@ export async function payRoutes({ env, ctx, request, rc, session, pathname, meth
     }
     if (offer.status !== 'offered' || !offer.offer_expires_at || Date.parse(offer.offer_expires_at) <= Date.now()) {
       return message(rc, 'This offer has ended', 'The time to accept this place has passed. Your child is still on the waiting list, and we will be in touch when another place opens.', 410);
+    }
+    // Paused: no new PayPal subscription starts here. The confirmation below is
+    // not paused, so a family already mid-payment is still placed.
+    if (!enrollmentEnabled(env)) {
+      return message(rc, 'Payments are paused', "We've paused new enrollments for a moment. Your offer is still yours until its pay-by date. Please try again later, or email info@tnsaints.com.", 503);
     }
     if (!paypalConfigured(env) || !offer.plan_id) {
       return message(rc, 'Payments are not set up yet', 'Please try again later, or email info@tnsaints.com and we will help.', 503);

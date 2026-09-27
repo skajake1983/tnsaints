@@ -10,12 +10,15 @@ otherwise-green baseline run.
 """
 import os
 import subprocess
+import sys
 import time
 
 WORKER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 ATTEMPTS = 6
 BUSY_MARKERS = ("SQLITE_BUSY", "database is locked")
+# A mistake in the SQL itself: retrying cannot help, so return at once.
+SQL_ERRORS = ("SQLITE_ERROR", "SQLITE_CONSTRAINT")
 
 
 def wrangler_local(command, json_output=False):
@@ -36,8 +39,18 @@ def wrangler_local(command, json_output=False):
         result = subprocess.run(args, capture_output=True, shell=(os.name == "nt"), cwd=WORKER_DIR)
         stdout = (result.stdout or b"").decode("utf-8", "replace")
         stderr = (result.stderr or b"").decode("utf-8", "replace")
+        # Completed means wrangler printed its result, success or not. A run can
+        # also stop after its banner with no result and no busy marker (seen
+        # twice on 2026-09-27, not reproduced in five runs since); that was
+        # read as "no such row" and cascaded. Retry it like busy, and say so.
+        completed = '"success": true' in stdout
+        sql_error = any(marker in stderr for marker in SQL_ERRORS)
         busy = any(marker in stdout + stderr for marker in BUSY_MARKERS)
-        if not busy or attempt == ATTEMPTS:
+        if completed or (sql_error and not busy):
+            return stdout
+        if attempt == ATTEMPTS:
+            tail = " ".join((stderr or stdout)[-300:].split())
+            print(f"  [d1] gave up after {ATTEMPTS} attempts ({command[:60]}): {tail}", file=sys.stderr)
             return stdout
         time.sleep(attempt * 0.5)
     return stdout

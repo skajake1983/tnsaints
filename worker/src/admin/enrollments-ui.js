@@ -24,6 +24,7 @@ const MESSAGES = {
   state: 'That request has already moved on. Nothing was changed.',
   waitlisted: 'Moved to the waiting list.',
   declined: 'Declined.',
+  paused: 'Enrollment is paused (ENROLLMENT_ENABLED is off), so no offer was made and no email was sent.',
 };
 
 export const ENROLLMENT_STYLES = `
@@ -45,7 +46,7 @@ function prefs(row, groupsById) {
   return ids.map((id) => groupsById.get(Number(id))?.name || `#${id}`).join(', ');
 }
 
-export function enrollmentsBody({ program, groups, rows, message, base = '' }) {
+export function enrollmentsBody({ program, groups, rows, message, base = '', paused = false }) {
   const groupsById = new Map(groups.map((g) => [Number(g.id), g]));
   const active = groups.filter((g) => g.status === 'active');
 
@@ -126,9 +127,14 @@ export function enrollmentsBody({ program, groups, rows, message, base = '' }) {
 It opens once its monthly price, groups and waiver are in place.</div>`
     : '';
 
+  const pausedNotice = paused
+    ? `<div class="notice"><strong>Enrollment is paused.</strong> Families cannot apply or start paying, and seats cannot be
+offered, until ENROLLMENT_ENABLED is switched back on. Offers already sent keep their pay-by date.</div>`
+    : '';
+
   return `<h1>Enrollment requests</h1>
 <p class="sub">${esc(program.name)}. Offer seats only in groups with room; the family then has until the pay-by date.
 <a href="${esc(base)}/programs/${esc(program.id)}">Price, groups and waiver</a></p>
 ${message && MESSAGES[message] ? `<div class="notice" role="status">${esc(MESSAGES[message])}</div>` : ''}
-${draft}${seats}${demand}${table}`;
+${pausedNotice}${draft}${seats}${demand}${table}`;
 }

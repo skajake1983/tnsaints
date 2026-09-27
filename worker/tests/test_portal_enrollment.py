@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import threading
 import time
@@ -22,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _harness import preflight, staff_email
-from _portal import (BASE, P, Checker, get, make_account, mint_session, post, require_portal,
+from _portal import (BASE, P, WORKER_DIR, Checker, get, make_account, mint_session, post, require_portal,
                      session_cookies, sql)
 
 preflight(BASE)
@@ -265,5 +266,89 @@ try:
 
 finally:
     server.shutdown()
+
+print("\n=== ENROLLMENT_ENABLED: pausing new places (imported directly) ===")
+# The paused paths are given NO database: touching one would throw, so these
+# prove the switch is checked before anything else happens.
+UNIT = r"""
+import { applyRoutes } from './src/portal/apply.js';
+import { payRoutes } from './src/portal/pay.js';
+import { apply, offerSeat, enrollmentEnabled } from './src/programs/enrollment.js';
+import { enrollmentsBody } from './src/admin/enrollments-ui.js';
+import { requestContext } from './src/portal/ui.js';
+const rc = requestContext({});
+const session = { accountId: 1 };
+const ctx = { waitUntil() {} };
+const off = { ENROLLMENT_ENABLED: 'false' };
+const call = async (fn) => {
+  try {
+    const r = await fn();
+    return r instanceof Response ? { status: r.status, text: await r.text() } : r;
+  } catch (e) { return { error: String(e && e.message) }; }
+};
+const out = {};
+out.flags = [{}, { ENROLLMENT_ENABLED: 'true' }, off, { ENROLLMENT_ENABLED: 'True' }, { ENROLLMENT_ENABLED: '1' }]
+  .map(enrollmentEnabled);
+const applyAt = (method) => applyRoutes({
+  env: off, ctx, rc, session, method, pathname: '/children/5/apply/academy',
+  request: new Request('https://portal.tnsaints.com/children/5/apply/academy', { method }),
+  readForm: async () => { throw new Error('the form was read while paused'); },
+});
+out.applyGet = await call(() => applyAt('GET'));
+out.applyPost = await call(() => applyAt('POST'));
+out.applyFn = await call(() => apply(off, 1, { playerId: 5, program: { id: 'academy' } }));
+out.offerFn = await call(() => offerSeat(off, { enrollmentId: 1, groupId: 1, staffEmail: 'staff', holdDays: 7 }));
+const ref = 'r'.repeat(22);
+const offerRow = (status) => ({
+  id: 1, ref, status, offer_expires_at: new Date(Date.now() + 86400000).toISOString(), child_name: 'Kid',
+  group_name: 'Tuesday group', program_name: 'Academy', billing: 'subscription', price_cents: 15000,
+  setup_fee_cents: 4000, plan_id: 'P-X',
+});
+const dbReturning = (row) => ({ prepare: () => ({ bind: () => ({ first: async () => row }) }) });
+const pay = (env, approved, body) => {
+  const path = `/pay/${ref}${approved ? '/approved' : ''}`;
+  const method = approved ? 'POST' : 'GET';
+  return payRoutes({
+    env, ctx, rc, session, pathname: path, method,
+    request: new Request(`https://portal.tnsaints.com${path}`, approved
+      ? { method, headers: { 'Content-Type': 'application/json' }, body } : { method }),
+  });
+};
+out.payOffered = await call(() => pay({ ...off, DB: dbReturning(offerRow('offered')) }, false));
+out.payActive = await call(() => pay({ ...off, DB: dbReturning(offerRow('active')) }, false));
+// No such place in this stub, so a confirmation that gets past the switch ends
+// in "not found" from the real approve path -- not in a "paused" refusal.
+out.approve = await call(() => pay({ ...off, DB: dbReturning(null) }, true, JSON.stringify({ subscription_id: 'I-ABCDEF123456' })));
+out.admin = enrollmentsBody({ program: { id: 'academy', name: 'Academy', status: 'open' }, groups: [], rows: [],
+  message: 'paused', paused: true });
+out.adminOn = enrollmentsBody({ program: { id: 'academy', name: 'Academy', status: 'open' }, groups: [], rows: [] });
+console.log(JSON.stringify(out));
+"""
+res = subprocess.run(["node", "--input-type=module", "-e", UNIT], capture_output=True, cwd=WORKER_DIR)
+try:
+    u = json.loads((res.stdout or b"").decode().strip().splitlines()[-1])
+except Exception:
+    u = None
+check("unit harness ran", u is not None, (res.stderr or b"").decode()[-400:])
+if u:
+    check("on only when exactly 'true'; missing or misspelled is off", u["flags"] == [False, True, False, False, False],
+          u["flags"])
+    check("paused: the application page says so, for any child (503)",
+          u["applyGet"].get("status") == 503 and "Applications are paused" in u["applyGet"].get("text", ""), u["applyGet"])
+    check("and an application sent anyway is refused before its form is read",
+          u["applyPost"].get("status") == 503 and "error" not in u["applyPost"], u["applyPost"])
+    check("apply() itself refuses while paused, touching nothing", u["applyFn"] == {"ok": False, "reason": "paused"},
+          u["applyFn"])
+    check("so does offering a seat", u["offerFn"] == {"ok": False, "reason": "paused"}, u["offerFn"])
+    check("the pay page will not start a new payment while paused (503)",
+          u["payOffered"].get("status") == 503 and "Payments are paused" in u["payOffered"].get("text", "")
+          and "still yours" in u["payOffered"].get("text", ""), u["payOffered"])
+    check("a place already paid for still shows as confirmed",
+          u["payActive"].get("status") == 200 and "all set" in u["payActive"].get("text", ""), u["payActive"])
+    check("confirming a payment already made in PayPal is NOT paused (it reaches the real check)",
+          u["approve"].get("status") == 404 and "find that place" in u["approve"].get("text", ""), u["approve"])
+    check("staff see that enrollment is paused, and why an offer was refused",
+          "Enrollment is paused." in u["admin"] and "no offer was made" in u["admin"], u["admin"][:300])
+    check("and no pause notice while it is on", "Enrollment is paused" not in u["adminOn"])
 
 check.finish()
