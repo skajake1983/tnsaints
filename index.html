@@ -1850,11 +1850,6 @@
                   <option value="coaching-interest">Coaching Interest</option>
                   <option value="sponsor-interest">Sponsorship</option>
                   <option value="volunteer-interest">Volunteering</option>
-                  <!-- Temporarily hidden pending revisions. The 'academy-onboarding' template
-                       and its evaluation-gate logic below remain intact; re-enable by
-                       restoring this option:
-                  <option value="academy-onboarding">Academy Registration (After Evaluation)</option>
-                  -->
                 </select>
               </div>
 
@@ -2012,7 +2007,6 @@
     const REGISTRATION_CLOSES_AT = new Date('2026-08-27T23:59:59-05:00');
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const evaluationGateMessage = 'Registration requires a completed free evaluation first. Please submit the "Free Player Evaluation Request" form and we will schedule your date.';
 
     const formTemplates = {
       general: `
@@ -2285,127 +2279,6 @@
           <label for="evaluation-signature">Parent / Guardian Signature</label>
           <input id="evaluation-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
         </div>
-      `,
-      'academy-onboarding': `
-        <fieldset class="field-group">
-          <legend>Did you already complete an evaluation?</legend>
-          <div class="checkbox-row">
-            <input id="onboarding-eval-yes" name="evaluation_completed" type="radio" value="Yes" required />
-            <label for="onboarding-eval-yes">Yes</label>
-          </div>
-          <div class="checkbox-row">
-            <input id="onboarding-eval-no" name="evaluation_completed" type="radio" value="No" required />
-            <label for="onboarding-eval-no">No</label>
-          </div>
-        </fieldset>
-        <div id="onboarding-eval-date-wrap" style="display:none;">
-          <label for="onboarding-eval-date">If yes, which evaluation date?</label>
-          <input id="onboarding-eval-date" name="evaluation_date" type="date" max="${todayIso}" />
-        </div>
-        <div id="onboarding-eval-required-note" role="alert" style="display:none; color: #b42318; font-size: 0.95rem;">
-          ${evaluationGateMessage}
-        </div>
-        <div class="form-grid">
-          <div>
-            <label for="onboarding-player-name">Player Name</label>
-            <input id="onboarding-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
-          </div>
-          <div>
-            <label for="onboarding-grade">Grade</label>
-            <select id="onboarding-grade" name="grade" required>
-              <option value="" selected disabled>Select grade</option>
-              <option value="3rd">3rd</option>
-              <option value="4th">4th</option>
-              <option value="5th">5th</option>
-              <option value="6th">6th</option>
-              <option value="7th">7th</option>
-              <option value="8th">8th</option>
-              <option value="9th">9th</option>
-              <option value="10th">10th</option>
-              <option value="11th">11th</option>
-              <option value="12th">12th</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-grid">
-          <div>
-            <label for="onboarding-dob">Date of Birth</label>
-            <input id="onboarding-dob" name="dob" type="date" required max="${todayIso}" />
-          </div>
-          <div>
-            <label for="onboarding-school">School</label>
-            <input id="onboarding-school" name="school" type="text" placeholder="Current school" required pattern="${schoolPattern}" title="Please enter a valid school name." />
-          </div>
-        </div>
-        <div>
-          <label for="onboarding-parent-name">Parent / Guardian Name</label>
-          <input id="onboarding-parent-name" name="parent_name" type="text" placeholder="Legal parent / guardian" required pattern="${namePattern}" title="Please enter a valid parent or guardian name using letters only." autocomplete="name" />
-        </div>
-        <div class="form-grid">
-          <div>
-            <label for="onboarding-parent-email">Parent Email</label>
-            <input id="onboarding-parent-email" name="parent_email" type="email" placeholder="Parent email" required autocomplete="email" />
-          </div>
-          <div>
-            <label for="onboarding-parent-phone">Parent Phone</label>
-            <input id="onboarding-parent-phone" name="parent_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
-          </div>
-        </div>
-        <div>
-          <label for="onboarding-address">Home Address</label>
-          <input id="onboarding-address" name="home_address" type="text" placeholder="Street, city, state, zip" required minlength="8" maxlength="160" />
-        </div>
-        <div class="form-grid">
-          <div>
-            <label for="onboarding-emergency-name">Emergency Contact Name</label>
-            <input id="onboarding-emergency-name" name="emergency_contact_name" type="text" placeholder="Emergency contact full name" required pattern="${namePattern}" title="Please enter a valid emergency contact name using letters only." />
-          </div>
-          <div>
-            <label for="onboarding-emergency-phone">Emergency Contact Phone</label>
-            <input id="onboarding-emergency-phone" name="emergency_contact_phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid emergency contact phone number." autocomplete="tel" />
-          </div>
-        </div>
-        <div>
-          <label for="onboarding-medical">Medical Notes (Required)</label>
-          <textarea id="onboarding-medical" name="medical_notes" placeholder="List allergies, asthma, injuries, medications, and anything coaches should know." required minlength="15" maxlength="1000"></textarea>
-        </div>
-        <div>
-          <label for="onboarding-options">Seasonal Competition Interest</label>
-          <select id="onboarding-options" name="competition_interest" required>
-            <option value="" selected disabled>Select option</option>
-            <option value="Player Development only">Player Development only right now</option>
-            <option value="Player Development + Tournaments">Player Development + Tournaments</option>
-            <option value="Player Development + Leagues">Player Development + Leagues</option>
-            <option value="Player Development + Tournaments + Leagues">Player Development + Tournaments + Leagues</option>
-          </select>
-        </div>
-        <div class="checkbox-row">
-          <input id="onboarding-risk" name="assumption_of_risk" type="checkbox" required />
-          <label for="onboarding-risk">I acknowledge basketball activities involve inherent risk, including injury, and I accept those risks on behalf of my child.</label>
-        </div>
-        <div class="checkbox-row">
-          <input id="onboarding-medical-release" name="medical_release" type="checkbox" required />
-          <label for="onboarding-medical-release">I authorize emergency medical care if needed and confirm I have communicated relevant health conditions.</label>
-        </div>
-        <div class="checkbox-row">
-          <input id="onboarding-media" name="photo_video_release" type="checkbox" required />
-          <label for="onboarding-media">I grant permission for Tennessee Saints to use photos or video of my child for academy, website, and social media promotion.</label>
-        </div>
-        <div>
-          <label for="onboarding-payment">Payment Method</label>
-          <input id="onboarding-payment" name="payment_method" type="text" value="Venmo Business" readonly aria-readonly="true" aria-describedby="onboarding-payment-note" />
-          <p id="onboarding-payment-note" style="margin-top:8px; font-size:0.95rem; line-height:1.5; opacity:0.85;">
-            Tennessee Saints processes all academy payments through <strong>Venmo Business</strong>. After you submit this registration, we will email you the amount due and payment instructions.
-          </p>
-        </div>
-        <div class="checkbox-row">
-          <input id="onboarding-payment-ack" name="payment_acknowledgement" type="checkbox" required />
-          <label for="onboarding-payment-ack">I understand academy payments are made through Venmo Business, and my player's spot is confirmed once payment is received.</label>
-        </div>
-        <div>
-          <label for="onboarding-signature">Parent / Guardian Signature</label>
-          <input id="onboarding-signature" name="signature" type="text" placeholder="Type full legal name" required pattern="${namePattern}" title="Please type your full legal name." autocomplete="name" />
-        </div>
       `
     };
 
@@ -2418,10 +2291,6 @@
       dynamicFields.innerHTML = formTemplates[selected] || formTemplates.general;
       formRenderedAt = Date.now();
       clearFormError();
-
-      if (selected === 'academy-onboarding') {
-        setupOnboardingEvaluationGate();
-      }
 
       if (selected === 'evaluation') {
         renderAvailability();
@@ -2495,42 +2364,6 @@
       if (label) label.textContent = `Grade (${grades[0]}–${grades[grades.length - 1]})`;
     }
 
-    function setupOnboardingEvaluationGate() {
-      const yesRadio = document.getElementById('onboarding-eval-yes');
-      const noRadio = document.getElementById('onboarding-eval-no');
-      const evalDateWrap = document.getElementById('onboarding-eval-date-wrap');
-      const evalDateInput = document.getElementById('onboarding-eval-date');
-      const requiredNote = document.getElementById('onboarding-eval-required-note');
-
-      if (!yesRadio || !noRadio || !evalDateWrap || !evalDateInput || !requiredNote) {
-        return;
-      }
-
-      const syncGateState = () => {
-        if (yesRadio.checked) {
-          evalDateWrap.style.display = 'block';
-          requiredNote.style.display = 'none';
-          evalDateInput.required = true;
-          return;
-        }
-
-        evalDateWrap.style.display = 'none';
-        evalDateInput.required = false;
-        evalDateInput.value = '';
-
-        if (noRadio.checked) {
-          requiredNote.textContent = evaluationGateMessage;
-          requiredNote.style.display = 'block';
-        } else {
-          requiredNote.style.display = 'none';
-        }
-      };
-
-      yesRadio.addEventListener('change', syncGateState);
-      noRadio.addEventListener('change', syncGateState);
-      syncGateState();
-    }
-
     purposeSelect.addEventListener('change', renderDynamicForm);
 
     const formError = document.getElementById('form-error');
@@ -2549,36 +2382,6 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       clearFormError();
-
-      if (purposeSelect.value === 'academy-onboarding') {
-        const evalCompleted = form.querySelector('input[name="evaluation_completed"]:checked');
-        const evalDate = document.getElementById('onboarding-eval-date');
-        const requiredNote = document.getElementById('onboarding-eval-required-note');
-
-        // role="alert" on the note means assistive tech announces these without
-        // an alert() stealing focus from the form.
-        const showGateError = (message, focusTarget) => {
-          if (requiredNote) {
-            requiredNote.textContent = message;
-            requiredNote.style.display = 'block';
-          }
-          focusTarget?.focus();
-        };
-
-        if (!evalCompleted || evalCompleted.value !== 'Yes') {
-          showGateError(evaluationGateMessage, document.getElementById('onboarding-eval-yes'));
-          return;
-        }
-
-        if (!evalDate || !evalDate.value) {
-          showGateError('Please provide the completed evaluation date to continue registration.', evalDate);
-          return;
-        }
-
-        if (requiredNote) {
-          requiredNote.style.display = 'none';
-        }
-      }
 
       if (!form.checkValidity()) {
         form.reportValidity();
