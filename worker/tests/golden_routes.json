@@ -1,0 +1,835 @@
+{
+ "DELETE /users": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   404,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /": {
+  "admin": [
+   200,
+   "html",
+   "script"
+  ],
+  "coach": [
+   200,
+   "html",
+   "script"
+  ],
+  "viewer": [
+   200,
+   "html",
+   "script"
+  ]
+ },
+ "GET /api/batch/no-such-batch/preflight": {
+  "admin": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "GET /api/health": {
+  "admin": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   200,
+   "json",
+   "no-script"
+  ]
+ },
+ "GET /api/message/999999/preview": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "GET /api/roster": {
+  "admin": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   200,
+   "json",
+   "no-script"
+  ]
+ },
+ "GET /api/roster/999999/medical": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "GET /billing": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /brief": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /decisions": {
+  "admin": [
+   200,
+   "html",
+   "script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /enrollments": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /eval": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /eval/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /families": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   200,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /families/children/999999/medical": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /inbox": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /inbox?status=handled": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /logo.png": {
+  "admin": [
+   200,
+   "image/png",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "image/png",
+   "no-script"
+  ],
+  "viewer": [
+   200,
+   "image/png",
+   "no-script"
+  ]
+ },
+ "GET /no-such-page": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   404,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /privacy": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /profile": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   200,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /programs/academy": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /programs/no-such-program": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /users": {
+  "admin": [
+   200,
+   "html",
+   "script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /api/batch/no-such-batch/approve": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/batch/no-such-batch/reopen": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/batch/no-such-batch/replace": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/batch/no-such-batch/send": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/decision/999999": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/eval/999999": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/eval/999999/author/delete": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/message/999999/edit": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/message/999999/review": {
+  "admin": [
+   409,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/registration/999999/cancel": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/registration/999999/delete": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/staff": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/staff/activate": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/staff/deactivate": {
+  "admin": [
+   400,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /api/staff/reinvite": {
+  "admin": [
+   404,
+   "json",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "json",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "json",
+   "no-script"
+  ]
+ },
+ "POST /billing/999999/link": {
+  "admin": [
+   303,
+   "redirect /billing?msg=state",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /billing/999999/sync": {
+  "admin": [
+   303,
+   "redirect /billing?msg=state",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /billing/import": {
+  "admin": [
+   303,
+   "redirect /billing?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /enrollments/999999/decline": {
+  "admin": [
+   303,
+   "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /enrollments/999999/offer": {
+  "admin": [
+   303,
+   "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /enrollments/999999/waitlist": {
+  "admin": [
+   303,
+   "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /families/invite": {
+  "admin": [
+   303,
+   "redirect /families?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /inbox/999999/handled": {
+  "admin": [
+   303,
+   "redirect /inbox",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /privacy/999999/verified": {
+  "admin": [
+   303,
+   "redirect /privacy?msg=updated",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /programs/academy/groups/999999": {
+  "admin": [
+   303,
+   "redirect /programs/academy?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ }
+}

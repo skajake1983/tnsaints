@@ -65,6 +65,11 @@ const CAPABILITIES = {
   'token:automation': new Set(['roster:view', 'roster:contact', 'roster:export']),
 };
 
+/** Every capability any role carries: what a route may name (admin/routes/index.js checks at load). */
+export function knownCapabilities() {
+  return new Set(Object.values(CAPABILITIES).flatMap((set) => [...set]));
+}
+
 export function can(principal, capability) {
   const set = CAPABILITIES[principal?.role];
   return Boolean(set && set.has(capability));

@@ -211,10 +211,17 @@ check("never cached, no script, not frameable",
 
 print("\n=== grades advance by themselves (lib/grades.js) ===")
 UNIT = r"""
-import { schoolYearOf, currentGrade, gradeLabel, parseLegacyGrade, ageOn } from './src/lib/grades.js';
+import { schoolYearOf, currentGrade, gradeLabel, parseLegacyGrade, ageOn, configureSchoolYear, parseMonthDay } from './src/lib/grades.js';
 const d = (s) => new Date(s);
+const years = [schoolYearOf(d('2027-07-01T04:59:00Z')), schoolYearOf(d('2027-07-01T05:01:00Z')), schoolYearOf(d('2027-01-15T12:00:00Z'))];
+configureSchoolYear({ SCHOOL_YEAR_STARTS: '08-05' });
+const august = [schoolYearOf(d('2027-08-05T04:59:00Z')), schoolYearOf(d('2027-08-05T05:01:00Z')), currentGrade(4, 2026, d('2027-07-20T12:00:00Z'))];
+configureSchoolYear({ SCHOOL_YEAR_STARTS: '02-30' });
+const malformed = schoolYearOf(d('2027-07-01T05:01:00Z'));
+configureSchoolYear({});
 console.log(JSON.stringify({
-  years: [schoolYearOf(d('2027-07-01T04:59:00Z')), schoolYearOf(d('2027-07-01T05:01:00Z')), schoolYearOf(d('2027-01-15T12:00:00Z'))],
+  years, august, malformed,
+  monthDays: ['07-01', '12-31', '02-29', '13-01', '7-1', 'July 1', ''].map((v) => parseMonthDay(v)),
   grades: [currentGrade(4, 2026, d('2026-09-01T12:00:00Z')), currentGrade(4, 2026, d('2027-07-02T12:00:00Z')),
            currentGrade(12, 2026, d('2027-08-01T12:00:00Z')), currentGrade(null, 2026)],
   labels: [gradeLabel(0), gradeLabel(1), gradeLabel(2), gradeLabel(3), gradeLabel(11)],
@@ -230,6 +237,11 @@ except Exception:
 check("unit harness ran", u is not None, (res.stderr or b"").decode()[-300:])
 if u:
     check("the school year turns over at midnight Central on July 1", u["years"] == [2026, 2027, 2026], u["years"])
+    check("SCHOOL_YEAR_STARTS moves the turnover (08-05): grades advance on that day, not before",
+          u["august"] == [2026, 2027, 4], u["august"])
+    check("a date that does not exist every year keeps July 1", u["malformed"] == 2027, u["malformed"])
+    check("only real MM-DD days are accepted",
+          u["monthDays"] == [{"month": 7, "day": 1}, {"month": 12, "day": 31}, None, None, None, None, None], u["monthDays"])
     check("a 4th grader in 2026-27 is a 5th grader from July 2027; past 12th is graduated",
           u["grades"] == [4, 5, None, None], u["grades"])
     check("grade labels read naturally", u["labels"] == ["Kindergarten", "1st grade", "2nd grade", "3rd grade", "11th grade"],

@@ -13,19 +13,16 @@
  */
 
 import { corsHeaders, json, errorResponse, hashIp, clientIp, toCsv } from './http.js';
-import { sendRegistrationEmails, sendRosterDigest, sendCancellationAlert, sendStaffBriefEmail } from './email.js';
+import { sendRegistrationEmails, sendCancellationAlert } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
 import { validateRegistration, botSignals } from './validate.js';
 import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
-import { cleanupExpiredAuth } from './auth/cleanup.js';
-import { expireOffers } from './programs/enrollment.js';
 import { handlePaypalWebhook } from './payments/webhook.js';
-import { sweepSubscriptions } from './payments/billing.js';
 import { handleLead } from './crm/lead-route.js';
-import { expireInquiryIpHashes } from './crm/intake.js';
-import { runStaffBrief } from './jobs/brief.js';
+import { runJobs } from './jobs/runner.js';
 import { flag } from './lib/flags.js';
+import { configureSchoolYear } from './lib/grades.js';
 import { audit } from './auth/staff.js';
 import {
   getAvailability,
@@ -41,6 +38,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 
 export default {
   async fetch(request, env, ctx) {
+    configureSchoolYear(env);
     const url = new URL(request.url);
 
     // Hostname dispatch happens before anything else, including CORS. The
@@ -129,25 +127,14 @@ export default {
   },
 
   /**
-   * Cron handler — emails the final roster as a CSV attachment.
-   *
-   * The token-protected export endpoint still exists for on-demand pulls, but
-   * the roster that matters is the one on event weekend, and that should not
-   * depend on anyone remembering to run a command with a token on the right
-   * evening. This pushes it instead.
+   * Cron handler (hourly): the job runner decides what is due — the roster
+   * digest and staff brief once a day from 8 AM Central, cleanup and offer
+   * expiry every hour, the PayPal sweep a few at a time — and keeps every run
+   * inside D1's per-invocation query limit. See jobs/runner.js.
    */
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(sendRosterDigest(env, { reason: event.cron || 'scheduled' }));
-    // Spent sign-in links, sessions and rate-limit windows. Bounded per run.
-    ctx.waitUntil(cleanupExpiredAuth(env));
-    // Lapsed seat offers back to the waiting list (their seats are already free).
-    ctx.waitUntil(expireOffers(env));
-    // Re-read the ten PayPal subscriptions we have heard least about.
-    ctx.waitUntil(sweepSubscriptions(env));
-    // Inquiries keep a salted IP hash for 30 days, for rate limiting only.
-    ctx.waitUntil(expireInquiryIpHashes(env));
-    // One staff email a day, only when there is something to do.
-    ctx.waitUntil(runStaffBrief(env, sendStaffBriefEmail));
+    configureSchoolYear(env);
+    ctx.waitUntil(runJobs(env));
   },
 };
 

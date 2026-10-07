@@ -132,6 +132,10 @@ ENROLLMENT_ENABLED = "false"
 # SESSION_MAX_DAYS = "30"
 # RECENT_AUTH_HOURS = "12"
 
+# The day each child's grade goes up by one ("MM-DD", Central time). Default
+# shown. A date that is not in every year (02-29) or malformed keeps July 1.
+# SCHOOL_YEAR_STARTS = "07-01"
+
 # PayPal (src/payments). "sandbox" = test money; switch to "live" only after
 # a full sandbox run and PayPal's answer about the account (plan items O4, O5).
 # Each environment has its own client id (here) and secret (wrangler secret):
@@ -224,14 +228,14 @@ database_name = "tnsaints"
 # Filled in by `npm run db:create` — see README step 2.
 database_id = "8f449ac8-d165-4db1-b267-b10e6d55d9b0"
 
-# Scheduled roster emails. Cron is always UTC; 13:00 UTC = 8:00 AM Central.
-#
-# Year-round on purpose. The previous "0 13 * 8 *" only fired during August,
-# so it would have silently stopped on Sept 1 — taking the roster digest with
-# it, and leaving no scheduled vehicle for anything that runs after the event.
-# The handler decides whether there is work; an empty event sends nothing.
+# Scheduled work: hourly, year-round. The job runner (src/jobs/runner.js)
+# decides what is due each hour by the Central-time clock — the roster digest
+# and staff brief once a day from 8 AM Central (the old fixed "0 13 * * *" was
+# 8 AM only in summer time), cleanup and offer expiry every hour, the PayPal
+# sweep a few subscriptions at a time — and keeps each run inside D1's
+# 50-queries-per-invocation limit. Still one trigger.
 [triggers]
-crons = ["0 13 * * *"]
+crons = ["0 * * * *"]
 
 [observability]
 enabled = true

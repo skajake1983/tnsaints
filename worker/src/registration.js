@@ -360,19 +360,31 @@ export async function adminDeleteRegistration(env, registrationId) {
     return { ok: false, code: 'already-messaged' };
   }
 
-  await env.DB.prepare(`DELETE FROM eval_notes_internal WHERE registration_id = ?1`)
-    .bind(registrationId)
-    .run();
-  await env.DB.prepare(`DELETE FROM eval_feedback WHERE registration_id = ?1`)
-    .bind(registrationId)
-    .run();
-  await env.DB.prepare(`DELETE FROM parent_messages WHERE registration_id = ?1`)
-    .bind(registrationId)
-    .run();
-  await env.DB.prepare(`DELETE FROM decisions WHERE registration_id = ?1`)
-    .bind(registrationId)
-    .run();
-  await env.DB.prepare(`DELETE FROM registrations WHERE id = ?1`).bind(registrationId).run();
+  // One transaction: the player and everything about them go together, or
+  // nothing does. Each statement repeats the "never mailed" condition, so a
+  // message sent between the check above and this batch stops the whole delete
+  // instead of leaving a half-erased record.
+  const NOT_MAILED = `NOT EXISTS (SELECT 1 FROM parent_messages
+                                    WHERE registration_id = ?1 AND send_state = 'sent')`;
+  const results = await env.DB.batch(
+    [
+      `DELETE FROM eval_notes_internal WHERE registration_id = ?1 AND ${NOT_MAILED}`,
+      `DELETE FROM eval_feedback WHERE registration_id = ?1 AND ${NOT_MAILED}`,
+      `DELETE FROM decisions WHERE registration_id = ?1 AND ${NOT_MAILED}`,
+      // parent_messages last but one: the condition reads it.
+      `DELETE FROM parent_messages WHERE registration_id = ?1 AND ${NOT_MAILED}`,
+      `DELETE FROM registrations WHERE id = ?1 AND ${NOT_MAILED}`,
+    ].map((sql) => env.DB.prepare(sql).bind(registrationId))
+  );
+  if ((results[results.length - 1].meta?.changes || 0) !== 1) {
+    // Either a message went out in the meantime, or someone else deleted it first.
+    const nowSent = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM parent_messages WHERE registration_id = ?1 AND send_state = 'sent'`
+    )
+      .bind(registrationId)
+      .first();
+    return { ok: false, code: Number(nowSent?.n || 0) > 0 ? 'already-messaged' : 'not-found' };
+  }
 
   const promoted =
     existing.status === 'confirmed'

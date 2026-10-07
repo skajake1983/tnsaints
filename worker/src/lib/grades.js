@@ -8,24 +8,53 @@
  *
  * 0 is kindergarten. Past 12th grade a child has graduated and is no longer a
  * youth player; `currentGrade` returns null.
+ *
+ * THE ROLLOVER DATE is a setting, SCHOOL_YEAR_STARTS = "MM-DD" (default
+ * "07-01"), applied by configureSchoolYear(env) at the start of every request
+ * and cron run (index.js). It lives in module state rather than being passed
+ * to every caller because it is deployment-wide: every request in an isolate
+ * carries the same value, so no request can see another's.
  */
 
-const ROLLOVER_MONTH = 7; // July
+const DEFAULT_ROLLOVER = { month: 7, day: 1 }; // July 1
+let rollover = DEFAULT_ROLLOVER;
+let warnedRollover = false;
 
-/** Year and month in America/Chicago, independent of where the Worker runs. */
-function centralYearMonth(date) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', year: 'numeric', month: 'numeric' })
-    .formatToParts(date);
-  return {
-    year: Number(parts.find((p) => p.type === 'year').value),
-    month: Number(parts.find((p) => p.type === 'month').value),
-  };
+/** "MM-DD" -> {month, day}, or null unless it is a real calendar day (Feb 29 refused: not every year has one). */
+export function parseMonthDay(value) {
+  const m = /^(\d{2})-(\d{2})$/.exec(String(value ?? '').trim());
+  if (!m) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] ? { month, day } : null;
+}
+
+/** Read SCHOOL_YEAR_STARTS from the environment; anything malformed keeps July 1 and is logged once. */
+export function configureSchoolYear(env) {
+  const raw = env?.SCHOOL_YEAR_STARTS;
+  const parsed = raw === undefined || raw === null || raw === '' ? null : parseMonthDay(raw);
+  if (raw && !parsed && !warnedRollover) {
+    warnedRollover = true;
+    console.warn(JSON.stringify({ event: 'flag_invalid', name: 'SCHOOL_YEAR_STARTS' }));
+  }
+  rollover = parsed || DEFAULT_ROLLOVER;
+}
+
+/** Year, month and day in America/Chicago, independent of where the Worker runs. */
+function centralDate(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', year: 'numeric', month: 'numeric', day: 'numeric',
+  }).formatToParts(date);
+  const part = (type) => Number(parts.find((p) => p.type === type).value);
+  return { year: part('year'), month: part('month'), day: part('day') };
 }
 
 /** The school year a date falls in, named by its starting year: 2026 = 2026-27. */
 export function schoolYearOf(date = new Date()) {
-  const { year, month } = centralYearMonth(date);
-  return month >= ROLLOVER_MONTH ? year : year - 1;
+  const { year, month, day } = centralDate(date);
+  const started = month > rollover.month || (month === rollover.month && day >= rollover.day);
+  return started ? year : year - 1;
 }
 
 /** Today's grade (0-12) from a stored grade and the school year it was true for; null once graduated. */
