@@ -96,6 +96,10 @@ export async function createProgram(env, form) {
  * Name, description, visibility, joining mode, waiting list, sign-up window.
  * @returns {Promise<'details-saved'|'invalid'>}
  */
+// A link-preview image is a page on the academy's own website, so the shared
+// card can only ever be one the academy published. No query strings.
+const PREVIEW_IMAGE_RE = /^https:\/\/(www\.)?tnsaints\.com\/[A-Za-z0-9._~\/-]{1,250}$/;
+
 export async function saveProgramDetails(env, program, form) {
   const name = text(form, 'name', 120);
   const description = String(form.get('description') || '').trim().slice(0, 801);
@@ -109,10 +113,19 @@ export async function saveProgramDetails(env, program, form) {
   const closes = closesRaw ? centralToIso(closesRaw) : null;
   if (!name || name.length > 120 || description.length > 800 || !['approval', 'self_serve'].includes(mode)) return 'invalid';
   if ((opensRaw && !opens) || (closesRaw && !closes) || (opens && closes && opens >= closes)) return 'invalid';
+  // Only an evaluation has a link preview; other kinds leave the columns alone.
+  const previewTitle = String(form.get('preview_title') || '').trim();
+  const previewImage = String(form.get('preview_image') || '').trim();
+  if (program.kind === 'evaluation' && (previewTitle.length > 120 || (previewImage && !PREVIEW_IMAGE_RE.test(previewImage)))) {
+    return 'preview-invalid';
+  }
   const res = await env.DB.prepare(
     `UPDATE programs SET name = ?2, description = ?3, public = ?4, waitlist_enabled = ?5, enrollment_mode = ?6,
-            registration_opens_at = ?7, registration_closes_at = ?8, updated_at = ?9
+            registration_opens_at = ?7, registration_closes_at = ?8, updated_at = ?9,
+            preview_title = CASE WHEN kind = 'evaluation' THEN ?10 ELSE preview_title END,
+            preview_image = CASE WHEN kind = 'evaluation' THEN ?11 ELSE preview_image END
       WHERE id = ?1`
-  ).bind(program.id, name, description || null, isPublic, waitlist, mode, opens, closes, iso()).run();
+  ).bind(program.id, name, description || null, isPublic, waitlist, mode, opens, closes, iso(),
+    previewTitle || null, previewImage || null).run();
   return res.meta?.changes ? 'details-saved' : 'invalid';
 }

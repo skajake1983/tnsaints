@@ -12,7 +12,8 @@
  *   EVENT_ID                the program's id (a legacy id like
  *                           '2026-08-29-evaluation' fits unchanged)
  *   EVENT_LABEL             its name
- *   EVENT_SHORT_LABEL       its short title, if set
+ *   EVENT_SHORT_LABEL       "Saturday's evaluation", from its first
+ *                           session's date (feedback email subjects)
  *   SESSION_TIMES           its active groups' names, in start-time order
  *   SLOT_CAPACITY           the smallest of their capacities (never overbook)
  *   ALLOWED_GRADES          its grade range, as "3rd,4th,..."
@@ -38,12 +39,25 @@ export function gradeList(min, max) {
   return out.join(',');
 }
 
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * "Saturday's evaluation" — the wording feedback emails have always used —
+ * from the earliest session date, or null when no session has one.
+ */
+export function shortLabel(sessions) {
+  const dates = sessions.map((s) => String(s.starts_on || '')).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (!dates.length) return null;
+  const day = new Date(`${dates[0]}T12:00:00Z`).getUTCDay();
+  return Number.isNaN(day) ? null : `${WEEKDAYS[day]}'s evaluation`;
+}
+
 /** The current evaluation program with its sessions, or null. */
 export async function currentEvaluation(env) {
   const row = await env.DB.prepare(
-    `SELECT p.id, p.name, p.preview_title, p.grade_min, p.grade_max, p.registration_closes_at, p.status,
-            (SELECT json_group_array(json_object('name', s.name, 'capacity', s.capacity))
-               FROM (SELECT g.name, g.capacity FROM program_groups g
+    `SELECT p.id, p.name, p.grade_min, p.grade_max, p.registration_closes_at, p.status,
+            (SELECT json_group_array(json_object('name', s.name, 'capacity', s.capacity, 'starts_on', s.starts_on))
+               FROM (SELECT g.name, g.capacity, g.starts_on FROM program_groups g
                       WHERE g.program_id = p.id AND g.status = 'active'
                       ORDER BY g.start_time IS NULL, g.start_time, g.name) s) AS sessions
        FROM programs p
@@ -73,7 +87,7 @@ export async function withActiveEvent(env) {
     ...env,
     EVENT_ID: ev.id,
     EVENT_LABEL: ev.name,
-    EVENT_SHORT_LABEL: ev.preview_title || env.EVENT_SHORT_LABEL,
+    EVENT_SHORT_LABEL: shortLabel(ev.sessions) || env.EVENT_SHORT_LABEL,
     // An evaluation with no sessions, or closed, takes no registrations:
     // validation finds no session to accept, and the window says closed.
     SESSION_TIMES: ev.sessions.map((s) => s.name).join(','),

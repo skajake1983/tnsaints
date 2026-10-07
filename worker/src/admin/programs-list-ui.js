@@ -48,6 +48,25 @@ ${message ? `<div class="notice" role="status">${esc(message)}</div>` : ''}
 }
 
 /** The program page's "About this program" panel. */
+/**
+ * While an evaluation's sign-up is open and it has a preview image, links to
+ * tnsaints.com shared on social media show this card (the website's
+ * eval-preview Action reads it from /api/programs).
+ */
+function previewFields(program) {
+  return `<fieldset style="border:1px solid #d9dee8;border-radius:8px;padding:8px 12px;display:grid;gap:8px">
+    <legend style="font-weight:600;padding:0 4px">Link preview while sign-up is open</legend>
+    <div class="sub" style="margin:0">When someone shares tnsaints.com, this card shows instead of the usual one until
+      sign-up closes. Put the image on the website first; a new file name makes Facebook fetch it again.</div>
+    <div><label for="pd-ptitle" style="font-weight:600">Preview title</label> <span class="sub">(optional)</span><br>
+      <input id="pd-ptitle" name="preview_title" maxlength="120" value="${esc(program.preview_title || '')}" style="width:100%"></div>
+    <div><label for="pd-pimage" style="font-weight:600">Preview image address</label>
+      <span class="sub" id="pd-pimage-hint">(optional; must start https://tnsaints.com/)</span><br>
+      <input id="pd-pimage" name="preview_image" type="url" maxlength="300" aria-describedby="pd-pimage-hint"
+        placeholder="https://tnsaints.com/social-card-spring.jpg" value="${esc(program.preview_image || '')}" style="width:100%"></div>
+  </fieldset>`;
+}
+
 export function detailsPanel({ program, base = '' }) {
   const academy = program.kind === 'academy';
   return `<div class="panel"><h2>About this program</h2>
@@ -68,6 +87,6 @@ export function detailsPanel({ program, base = '' }) {
     <div><label for="pd-close" style="font-weight:600">Sign-up closes (Central)</label><br>
       <input id="pd-close" name="registration_closes_at" type="datetime-local" value="${esc(isoToCentral(program.registration_closes_at))}"></div>
   </div>
-  <div><button type="submit">Save details</button></div>
+${program.kind === 'evaluation' ? previewFields(program) : ''}  <div><button type="submit">Save details</button></div>
 </form></div>`;
 }

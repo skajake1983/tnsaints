@@ -366,6 +366,28 @@ try:
           and one(f"SELECT status FROM enrollments WHERE player_id={BEA} AND program_id='free-clinic'")["status"] == "active",
           h.get("Location"))
 
+    print("\n=== an evaluation's link preview ===")
+    admin("POST", "/programs/new", {"name": "Spring Evaluation", "kind": "evaluation", "billing": "free", "id": "2099-03-07-evaluation"})
+    E = "/programs/2099-03-07-evaluation"
+    pv = lambda: one("SELECT preview_title, preview_image FROM programs WHERE id='2099-03-07-evaluation'")
+    st, h, _ = admin("POST", E + "/details", {"name": "Spring Evaluation", "preview_title": "Free Spring Evaluation | Tennessee Saints",
+                                              "preview_image": "https://tnsaints.com/social-card-spring.jpg"})
+    check("an evaluation keeps a preview title and image", "msg=details-saved" in h.get("location", "") and pv()
+          == {"preview_title": "Free Spring Evaluation | Tennessee Saints", "preview_image": "https://tnsaints.com/social-card-spring.jpg"},
+          (h.get("location"), pv()))
+    for bad in ("https://evil.example/card.jpg", "http://tnsaints.com/card.jpg", "javascript:alert(1)",
+                "https://tnsaints.com.evil.example/card.jpg", "https://tnsaints.com/card.jpg?x=1"):
+        st, h, _ = admin("POST", E + "/details", {"name": "Spring Evaluation", "preview_image": bad})
+        check(f"a preview image at {bad[:40]} is refused and nothing changes", "msg=preview-invalid" in h.get("location", "")
+              and pv()["preview_image"] == "https://tnsaints.com/social-card-spring.jpg", (h.get("location"), pv()))
+    _, _, html = admin("GET", E)
+    _, _, camp_html = admin("GET", C)
+    check("only an evaluation's form has the preview fields", 'name="preview_image"' in html and 'name="preview_image"' not in camp_html)
+    admin("POST", C + "/details", {"name": "Summer Camp 2027", "description": "A week of skills.", "public": "1",
+                                   "waitlist_enabled": "1", "enrollment_mode": "self_serve",
+                                   "registration_closes_at": "2099-06-01T18:00", "preview_title": "Sneaked in"})
+    check("other kinds ignore preview fields", one("SELECT preview_title FROM programs WHERE id='summer-camp-2027'")["preview_title"] is None)
+
     print("\n=== staff see each program's queue ===")
     st, _, html = admin("GET", "/enrollments?program=summer-camp-2027")
     check("the camp's waiting list is in its own queue", st == 200 and "Bea Camper" in html and "Summer Camp 2027" in html, st)

@@ -11,7 +11,7 @@
  *   node --no-warnings tests/test_evaluation_overlay.mjs
  */
 import { fakeD1, checker } from './_d1_fake.mjs';
-import { withActiveEvent, setCurrentEvaluation, gradeList, publicPrograms } from '../src/programs/evaluation.js';
+import { withActiveEvent, setCurrentEvaluation, gradeList, publicPrograms, shortLabel } from '../src/programs/evaluation.js';
 
 const check = checker();
 const DB = fakeD1();
@@ -50,7 +50,13 @@ check('its active groups are the sessions, in time order', ev.SESSION_TIMES === 
 check('the session size is the smallest, so no session is overbooked', ev.SLOT_CAPACITY === '20', ev.SLOT_CAPACITY);
 check('its grade range is the form\'s grades', ev.ALLOWED_GRADES === '3rd,4th,5th,6th', ev.ALLOWED_GRADES);
 check('everything else is unchanged', ev.DB === DB && ev.EVALUATION_SOURCE === 'program' && env.EVENT_ID === 'from-toml');
-check('without a short title, the configured one stays', ev.EVENT_SHORT_LABEL === undefined);
+check('with no session dates, the configured short label stays', ev.EVENT_SHORT_LABEL === undefined);
+run(`UPDATE programs SET preview_title = 'Free Academy Evaluation | Tennessee Saints' WHERE id = '2027-03-06-evaluation'`);
+run(`UPDATE program_groups SET starts_on = '2027-03-06' WHERE program_id = '2027-03-06-evaluation'`);
+check('the feedback emails\' short label comes from the first session\'s day, never the social preview title',
+  (await withActiveEvent(env)).EVENT_SHORT_LABEL === "Saturday's evaluation", (await withActiveEvent(env)).EVENT_SHORT_LABEL);
+check('a Sunday session reads as Sunday', shortLabel([{ starts_on: '2027-03-07' }, { starts_on: '2027-03-14' }]) === "Sunday's evaluation"
+  && shortLabel([{ starts_on: null }]) === null && shortLabel([]) === null);
 run(`UPDATE programs SET status = 'closed' WHERE id = '2027-03-06-evaluation'`);
 check('a closed evaluation takes no registrations', Date.parse((await withActiveEvent(env)).REGISTRATION_CLOSES_AT) < Date.now());
 check('going back to wrangler.toml', (await setCurrentEvaluation({ DB }, null, 'admin')) === 'cleared' && (await withActiveEvent(env)) === env);

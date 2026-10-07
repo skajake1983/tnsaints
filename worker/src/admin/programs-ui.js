@@ -44,6 +44,7 @@ const MESSAGES = {
   'group-saved': 'Group saved.',
   'waiver-saved': 'Waiver version saved. Choose it in the settings above to use it.',
   invalid: 'Something in that form was not valid. Nothing was changed.',
+  'preview-invalid': 'The preview image must be an address on tnsaints.com starting https://, and the title at most 120 characters. Nothing was changed.',
   'waiver-exists': 'A waiver with that name already exists. Waivers cannot be edited; add a new version instead.',
 };
 
