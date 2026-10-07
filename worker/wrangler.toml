@@ -132,6 +132,12 @@ ENROLLMENT_ENABLED = "false"
 # SESSION_MAX_DAYS = "30"
 # RECENT_AUTH_HOURS = "12"
 
+# Donation receipts (src/donations/donations.js). Gifts can always be
+# recorded; a receipt saying a gift is tax-deductible is only true once the
+# IRS determination letter has arrived. Then: enter the organisation's legal
+# name, EIN and letter date on Admin -> Donations, and set this to "true".
+DONATIONS_ENABLED = "false"
+
 # Retention (src/privacy/retention.js). "report" (the default; anything but
 # exactly "enforce") counts what each rule would remove and shows it on
 # Admin -> Privacy, removing nothing. The periods are defaults PENDING THE

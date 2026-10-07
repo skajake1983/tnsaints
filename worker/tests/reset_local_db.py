@@ -29,6 +29,18 @@ from _d1 import WORKER_DIR, execute_local
 
 # Children before parents.
 TABLES = [
+    # Donations (017)
+    "donations",
+    # Governance (016)
+    "motion_votes",
+    "board_motions",
+    "meeting_attendance",
+    "board_action_items",
+    "coi_disclosures",
+    "board_meetings",
+    "board_documents",
+    "board_members",
+    "compliance_items",
     # Privacy and safety (014)
     "legal_holds",
     "clearances",
@@ -85,11 +97,17 @@ TABLES = [
 ]
 
 # Re-applied after the delete to restore their seed rows.
-SEED_MIGRATIONS = ["009_programs_enrollment.sql", "012_crm_intake.sql"]
+SEED_MIGRATIONS = ["009_programs_enrollment.sql", "012_crm_intake.sql", "016_governance.sql", "017_donations.sql"]
+
+
+# A receipted donation cannot be deleted (migration 017's trigger), which is
+# right everywhere but here. The reset drops that trigger, clears the table,
+# and re-applying 017 below puts the trigger back.
+DROP_FIRST = ["donations_no_delete"]
 
 
 def main():
-    command = " ".join(f"DELETE FROM {t};" for t in TABLES)
+    command = " ".join([f"DROP TRIGGER IF EXISTS {t};" for t in DROP_FIRST] + [f"DELETE FROM {t};" for t in TABLES])
     ok, attempt, output = execute_local(command=command)
     if not ok:
         sys.stderr.write(output[-2000:])

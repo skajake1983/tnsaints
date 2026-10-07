@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS staff (
   -- derived, because "Coach " + surname is wrong often enough to matter and a
   -- parent-facing label is not something to guess at.
   author_label TEXT    NOT NULL,
-  role         TEXT    NOT NULL CHECK (role IN ('admin', 'coach', 'viewer')),
+  role         TEXT    NOT NULL CHECK (role IN ('admin', 'coach', 'viewer', 'board')),  -- 'board': migration 018
   -- Soft revocation. Deleting the row would orphan authored notes; this keeps
   -- attribution intact while ending access immediately.
   active       INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),

@@ -26,6 +26,8 @@ misspelled, `"True"` — is off.
 | `LEADS_ENABLED` | website forms fall back to Formspree | yes |
 | `STAFF_BRIEF_ENABLED` | no daily staff email | yes |
 | `ADMIN_CSRF_MODE` | `"report"` logs cross-site admin posts with no Sec-Fetch-Site; `"enforce"` refuses them | — |
+| `RETENTION_MODE` | `"report"` counts what the retention rules would remove; `"enforce"` removes it (section 10) | yes — back to `"report"` stops removal |
+| `DONATIONS_ENABLED` | gifts can still be recorded, but no receipt saying a gift is tax-deductible can be issued (section 19) | yes — keep it `"false"` until the IRS determination letter |
 
 `PAYPAL_ENV` is `"sandbox"` (test money, TEST MODE banner on the portal) or
 `"live"`.
@@ -65,6 +67,32 @@ kills every outstanding sign-in link and invitation at once.
 Rollback: `npx wrangler rollback` returns to the previous version. Migrations
 only ever add tables and columns, so the older code runs fine against them.
 
+**First deploy of the portal and admin work:** production has migrations
+001–006. Before that deploy, apply 007 to 018 in order. Rehearse it on a
+local copy of production first
+(`npx wrangler d1 export tnsaints --remote --output=prod.sql`, import it
+locally, apply the migrations there and run the suites). Then apply them to
+production:
+
+| # | File | Adds |
+|---|---|---|
+| 007 | `identity_households.sql` | parent accounts, sign-in, households, contacts, medical |
+| 008 | `player_profile.sql` | date of birth, grade, school, shirt size on players |
+| 009 | `programs_enrollment.sql` | waivers, programs, groups, consents, enrollments |
+| 010 | `billing.sql` | PayPal subscriptions, events, payments |
+| 011 | `platform.sql` | settings, job runs |
+| 012 | `crm_intake.sql` | website inquiries and contacts |
+| 013 | `crm_screens.sql` | CRM activities and owners |
+| 014 | `privacy_safety.sql` | legal holds, clearances |
+| 015 | `programs_teams.sql` | one-time PayPal orders, team coaches and events, calendar links |
+| 016 | `governance.sql` | board, meetings, motions, votes, documents, disclosures, compliance calendar |
+| 017 | `donations.sql` | donations and receipts |
+| 018 | `staff_board_role.sql` | the `board` staff role (rebuilds the `staff` table; export it first, as the file says) |
+
+All of them are safe to re-run except 008 and 015 (018 re-runs harmlessly). Those end in ALTERs, so a
+re-run fails with "duplicate column name", which means the file was already
+applied.
+
 ## 4. Google sign-in (plan item O6)
 
 1. Google Cloud Console → APIs & Services → OAuth consent screen: External;
@@ -96,7 +124,9 @@ moving the account to the non-profit's EIN.
 4. App → Webhooks → Add webhook: URL
    `https://api.tnsaints.com/api/paypal/webhook`; events:
    all `BILLING.SUBSCRIPTION.*` and `PAYMENT.SALE.COMPLETED`,
-   `PAYMENT.SALE.REFUNDED`, `PAYMENT.SALE.REVERSED`. Copy the webhook ID →
+   `PAYMENT.SALE.REFUNDED`, `PAYMENT.SALE.REVERSED`. Camps, clinics and other
+   one-time programs need `CHECKOUT.ORDER.APPROVED`,
+   `PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.REFUNDED`. Copy the webhook ID →
    `PAYPAL_WEBHOOK_ID_SANDBOX`. Then `PAYPAL_WEBHOOK_ENABLED = "true"`, deploy.
 5. Sandbox run: apply for a test child, offer a seat from the admin, pay with a
    sandbox buyer, and check the place shows *Enrolled*, the payment appears,
@@ -245,3 +275,119 @@ failed is retried next hour.
 - **Someone draining sign-in emails**: `MAGIC_LINK_ENABLED = "false"`; Google
   sign-in and existing sessions keep working.
 - **A leaked session or link**: rotate `AUTH_PEPPER` (signs everyone out).
+
+## 15. Programs: camps, clinics, tournaments, teams, evaluations
+
+Admin → Programs → *New program*. A program's id, kind and billing are fixed
+when it is created; everything else can be changed later.
+
+- **Details**: the name and description families see, whether it is listed
+  (on the portal's Programs page and the website's `/api/programs`), the
+  waiting list, how families join, and when sign-up opens and closes
+  (Central time).
+- **How families join**:
+  - **By application**: staff offer a seat, as for the academy. The academy
+    always works this way.
+  - **Sign up and pay**: the family picks a group with room. The seat is held
+    for 30 minutes while they pay. If they don't finish, the hold lapses and
+    the seat returns. When a group is full, families can join the waiting
+    list, if the program keeps one.
+- **Billing**: `subscription` (a PayPal plan, as for the academy),
+  `one_time` (a PayPal order this Worker creates for the program's price, then
+  checks once paid; no child's name is sent to PayPal), or `free` (the place
+  is confirmed at once).
+- **Opening** is refused until it has what it needs: a waiver, and a price (and
+  for a subscription, a PayPal plan).
+- One-time payments use the order webhooks in section 5. If a family closes
+  the tab mid-payment, an hourly job asks PayPal about unfinished orders from
+  the last two days, three at a time.
+
+## 16. Teams
+
+A team is a group of a `team` program (Admin → Teams).
+
+- **Roster**: the children with a place in that group. Coaches see names,
+  grades, shirt sizes and whether a medical note exists; nothing else (plan
+  item O16).
+- **Coaches**: only someone whose clearances are all current can be assigned
+  (section 12).
+- **Schedule**: practices, games and tournaments. Families see the next few
+  on their family page.
+- **Calendar link**: each team has a subscribe link (Google, Apple, Outlook).
+  It carries the team's schedule only, never a child. Anyone with the link
+  can read the schedule. If it gets out, *Replace the link*: the old one stops
+  working and families get the new one from their family page.
+
+## 17. Evaluations as programs
+
+The 8/29 evaluation ran from `EVENT_*` settings in `wrangler.toml`. The next
+one can instead be a program of kind `evaluation`:
+
+1. Admin → Programs → *New program*, kind *Evaluation* (always free, by
+   application). Add one group per session: the session time as the group's
+   name, its date, and its seats.
+2. Set the grade range and the sign-up close time, and add a waiver.
+3. Open it, then *Make this the current evaluation*. From then on the
+   registration form, coach notes, decisions and feedback emails all use it.
+   The admin roster says "Running from the evaluation program". *Stop: go
+   back to the settings in wrangler.toml* does what it says.
+4. **Link preview**: on the program's details, give it a preview title and an
+   image address on `https://tnsaints.com/` (put the image on the website
+   first; a new file name makes Facebook fetch it again). While sign-up is
+   open, the website's hourly link-preview job shows that card when someone
+   shares tnsaints.com. This needs the website change on the
+   `launch/site-portal` branch.
+
+## 18. The board
+
+Board members sign in like staff. Two steps for each person:
+
+1. Cloudflare Access must let their email in (plan item O13). Then Admin →
+   Users → add them with role **board**. The board role sees the board's
+   records and its own disclosures, and **no children's data**: every roster,
+   family and CRM page refuses it.
+2. Admin → Board → Members: their office, whether they vote, and their term.
+   The **secretary** may also take attendance, record motions and votes, and
+   draft and circulate minutes.
+
+- **Meetings**: agenda, then attendance. Quorum is worked out when attendance
+  is taken: a majority of the voting members serving. A motion cannot be
+  decided without quorum. A motion carries when more members vote yes than
+  no. Both rules are defaults until the bylaws say otherwise.
+- **Votes and minutes**: a recusal needs a reason. Votes on a decided motion,
+  and approved minutes, are locked by the database and cannot be edited.
+- **Documents** stay in SharePoint. The admin keeps links only, and only to
+  `sharepoint.com`. To allow other hosts, set `BOARD_DOC_HOSTS` (comma-separated).
+- **Disclosures**: each member files their annual conflict-of-interest
+  disclosure on Board → Disclosures.
+- **Compliance calendar** (Board → Compliance) comes seeded with the 990,
+  the Tennessee annual report, charitable solicitation registration,
+  insurance renewals, 1099s, the disclosures and clearance reviews. The
+  seeded items have **no dates**. Set each date with the accountant (plan
+  item O15): the daily brief lists items due within 30 days or overdue, so an
+  item with no date never reaches it. Marking a recurring item done schedules
+  the next one.
+
+## 19. Donations (after the IRS determination letter)
+
+Admin → Donations. Gifts can be recorded at any time; only academy admins
+record them, and only admins and the board treasurer can see them. Program
+fees are never recorded as donations.
+
+**Receipts** say a gift is tax-deductible, which is only true after the
+letter. They are off (`DONATIONS_ENABLED = "false"`) until:
+
+1. The IRS determination letter has arrived, and the Tennessee charitable
+   solicitation registration is done.
+2. On Admin → Donations, enter the organisation's legal name, EIN,
+   determination date, and who signs receipts.
+3. The accountant has reviewed the receipt wording (plan item O15). It follows
+   IRS Publication 1771. A gift of $250 or more needs one for the donor to
+   deduct it. If anything was given in return, the receipt says what, and its
+   value.
+4. Set `DONATIONS_ENABLED = "true"` and deploy.
+
+An issued receipt and its gift's details cannot be changed. If something is
+wrong, void it with a reason and record the gift again. Print a receipt, or
+save it as a PDF, and send it from your own email. A donor's yearly summary
+lists all their gifts that year, for their tax records.

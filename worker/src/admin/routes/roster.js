@@ -12,12 +12,15 @@ import { can, audit, rosterView } from '../../auth/staff.js';
 import { getAvailability, registrationWindow, slotCapacity, sessionTimes } from '../../registration.js';
 import { page, esc, htmlResponse, adminHeaders } from '../ui.js';
 import { rowActions, registrationTemplate, fmtRegDate, ROSTER_STYLES, ROSTER_MARKUP, ROSTER_SCRIPT, rosterCsp } from '../roster-ui.js';
-import { NAV, denyHtml, denyJson } from '../nav.js';
+import { NAV, denyHtml, denyJson, seeOther } from '../nav.js';
+
+const denyRoster = denyHtml('Roster', 'The roster is limited to staff with roster access.');
 
 export const routes = [
   {
     method: 'GET', path: '/', cap: 'roster:view',
-    deny: denyHtml('Roster', 'The roster is limited to staff with roster access.'),
+    // A board member has no roster; their home is the board.
+    deny: (rc) => (can(rc.principal, 'board:view') ? seeOther(rc.base, '/board') : denyRoster(rc)),
     handler: ({ env, principal }) => renderRoster(env, principal),
   },
   {

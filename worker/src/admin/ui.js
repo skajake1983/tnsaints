@@ -12,6 +12,7 @@
  */
 
 import { BRAND_TOKENS } from '../lib/brand.js';
+import { can } from '../auth/staff.js';
 
 /** Escape for HTML text and quoted attributes. Applied to every interpolation. */
 export function esc(value) {
@@ -199,7 +200,9 @@ const STYLES = `${BRAND_TOKENS}
  * external request is another thing that can hang there.
  */
 export function page({ title, principal, nav = [], current = '', body, extraStyles = '' }) {
+  // A link to a page this person cannot open is noise; leave it out.
   const links = nav
+    .filter((n) => !n.cap || n.cap === 'staff' || !principal || can(principal, n.cap))
     .map(
       (n) =>
         `<a href="${esc(n.href)}"${n.href === current ? ' aria-current="page"' : ''}>${esc(n.label)}</a>`

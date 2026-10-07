@@ -28,7 +28,7 @@ ADMIN = "/__admin"
 GOLDEN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden_routes.json")
 preflight(BASE)
 ME = staff_email()
-ROLES = ["admin", "coach", "viewer"]
+ROLES = ["admin", "coach", "viewer", "board"]
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -127,7 +127,38 @@ ROUTES = [
     ("POST", "/teams/999999/coaches", FORM, {"email": "x@example.com", "role": "head"}),
     ("POST", "/teams/999999/events", FORM, {}),
     ("POST", "/teams/999999/calendar/rotate", FORM, {}),
+    # Governance (N1).
+    ("GET", "/board", None, None),
+    ("GET", "/board/members", None, None),
+    ("POST", "/board/members", FORM, {}),
+    ("POST", "/board/members/999999/end", FORM, {}),
+    ("GET", "/board/meetings", None, None),
+    ("POST", "/board/meetings", FORM, {}),
+    ("GET", "/board/meetings/999999", None, None),
+    ("POST", "/board/meetings/999999/attendance", FORM, {}),
+    ("POST", "/board/meetings/999999/motions/999999/votes", FORM, {}),
+    ("POST", "/board/meetings/999999/minutes/approve", FORM, {}),
+    ("POST", "/board/actions/999999/done", FORM, {}),
+    ("GET", "/board/documents", None, None),
+    ("POST", "/board/documents", FORM, {}),
+    ("POST", "/board/documents/999999/archive", FORM, {}),
+    ("GET", "/board/compliance", None, None),
+    ("POST", "/board/compliance", FORM, {}),
+    ("POST", "/board/compliance/999999/done", FORM, {}),
+    ("GET", "/board/disclosures", None, None),
+    ("POST", "/board/disclosures", FORM, {}),
+    # Donations (D1).
+    ("GET", "/donations", None, None),
+    ("POST", "/donations", FORM, {}),
+    ("POST", "/donations/settings", FORM, {}),
+    ("GET", "/donations/999999", None, None),
+    ("POST", "/donations/999999/receipt", FORM, {}),
+    ("GET", "/donations/summary", None, None),
 ]
+
+# What the board role may reach. Everything else -- every roster, family, CRM,
+# program, team, billing and privacy route -- must refuse it (checked below).
+BOARD_REACHES = ("/board", "/donations", "/profile", "/api/health", "/logo.png", "/no-such-page", "/")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -214,11 +245,40 @@ for key in sorted(set(golden) | set(seen)):
             print(f"  FAIL  {key} as {role}: expected {want}, got {got}")
 print(f"  PASS  {len(passed)} of {len(passed) + len(failed)} route/role answers unchanged")
 
+print("\n=== the board role reaches no child data ===")
+leaks = []
+for key, answers in sorted(seen.items()):
+    path = key.split(" ", 1)[1].split("?")[0]
+    if path == "/" or any(path == p or path.startswith(p + "/") for p in BOARD_REACHES if p != "/"):
+        continue
+    # Refused (403), or no such route at all (404): either way, nothing shown.
+    if answers.get("board", [0])[0] not in (403, 404):
+        leaks.append((key, answers.get("board")))
+(failed if leaks else passed).append(("board refused everywhere else", ""))
+print(f"  {'FAIL' if leaks else 'PASS'}  every other admin route refuses a board member (403/404)" + (f"   {leaks[:5]}" if leaks else ""))
+home = seen.get("GET /", {}).get("board")
+(passed if home and home[0] == 303 and home[1] == "redirect /board" else failed).append(("board home", ""))
+print(f"  {'PASS' if home and home[1] == 'redirect /board' else 'FAIL'}  a board member's home is the board, not the roster   {home}")
+
 
 def unit(label, cond, detail=""):
     (passed if cond else failed).append((label, ""))
     print(f"  {'PASS' if cond else 'FAIL'}  {label}" + ("" if cond or not detail else f"   {detail}"))
 
+
+print("\n=== every menu link names its page's capability (admin/nav.js) ===")
+import subprocess  # noqa: E402
+NAVCHECK = r"""
+import { matchRoute } from './src/admin/routes/index.js';
+import { NAV } from './src/admin/nav.js';
+const wrong = NAV.filter((n) => matchRoute('GET', n.href)?.route.cap !== n.cap).map((n) => n.href);
+console.log(JSON.stringify(wrong));
+"""
+_worker = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_out = subprocess.run(["node", "--input-type=module", "-e", NAVCHECK], cwd=_worker, capture_output=True, text=True)
+_wrong = json.loads(_out.stdout.strip() or "null") if _out.returncode == 0 else None
+(passed if _wrong == [] else failed).append(("nav caps", ""))
+print(f"  {'PASS' if _wrong == [] else 'FAIL'}  each menu link shows only to those its page admits   {_wrong if _wrong else _out.stderr[-300:]}")
 
 print("\n=== the route table fails closed, at load (admin/routes/index.js) ===")
 UNIT = r"""

@@ -6,20 +6,26 @@
 import { json } from '../http.js';
 import { page, esc, htmlResponse, adminHeaders } from './ui.js';
 
+// Each link carries the capability its page needs, so the menu shows a role
+// only what it can open (ui.js page()). tests/test_routes.py checks every cap
+// here against the route it links to.
 export const NAV = [
-  { href: '/', label: 'Roster' },
-  { href: '/eval', label: 'Evaluations' },
-  { href: '/decisions', label: 'Decisions' },
-  { href: '/programs', label: 'Programs' },
-  { href: '/enrollments', label: 'Enrollments' },
-  { href: '/teams', label: 'Teams' },
-  { href: '/families', label: 'Families' },
-  { href: '/billing', label: 'Billing' },
-  { href: '/crm', label: 'CRM' },
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/users', label: 'Users' },
-  { href: '/clearances', label: 'Clearances' },
-  { href: '/profile', label: 'Profile' },
+  { href: '/', label: 'Roster', cap: 'roster:view' },
+  { href: '/eval', label: 'Evaluations', cap: 'notes:write' },
+  { href: '/decisions', label: 'Decisions', cap: 'decisions:set' },
+  { href: '/programs', label: 'Programs', cap: 'events:manage' },
+  { href: '/enrollments', label: 'Enrollments', cap: 'enrollments:manage' },
+  { href: '/teams', label: 'Teams', cap: 'teams:view' },
+  { href: '/families', label: 'Families', cap: 'roster:view' },
+  { href: '/billing', label: 'Billing', cap: 'billing:manage' },
+  { href: '/crm', label: 'CRM', cap: 'crm:view' },
+  { href: '/privacy', label: 'Privacy', cap: 'privacy:manage' },
+  { href: '/users', label: 'Users', cap: 'staff:manage' },
+  { href: '/clearances', label: 'Clearances', cap: 'clearances:manage' },
+  { href: '/board', label: 'Board', cap: 'board:view' },
+  // Admins and the board treasurer; another board member is told why not.
+  { href: '/donations', label: 'Donations', cap: 'board:view' },
+  { href: '/profile', label: 'Profile', cap: 'staff' },
 ];
 
 /** A route's refusal for a page: 403 with the admin shell. `sub` is plain text. */

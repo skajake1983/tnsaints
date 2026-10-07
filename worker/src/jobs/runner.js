@@ -103,7 +103,7 @@ export const JOBS = [
   },
   {
     // One staff email a day, only when there is something to do.
-    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 16,
+    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 17,
     run: async (env) => {
       const r = await runStaffBrief(env, sendStaffBriefEmail);
       // Not sent because the provider failed or the day's allowance is gone:

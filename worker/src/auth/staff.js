@@ -58,6 +58,13 @@ const CAPABILITIES = {
     // Teams: every roster and schedule; assign coaches, schedule, calendar links.
     'teams:view',
     'teams:manage',
+    // The board's records: read, keep (members, meetings, documents,
+    // compliance), and sign one's own conflict-of-interest disclosure.
+    'board:view',
+    'board:manage',
+    'board:disclose',
+    // Gifts to the academy and their receipts (donations/donations.js).
+    'donations:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not
@@ -65,6 +72,11 @@ const CAPABILITIES = {
   coach: new Set(['roster:view', 'notes:write', 'teams:view']),
 
   viewer: new Set(['roster:view']),
+
+  // Board members: the board's records and their own disclosure — and nothing
+  // about children. Every roster, family and CRM page needs a capability this
+  // role does not carry (the route table refuses it).
+  board: new Set(['board:view', 'board:disclose']),
 
   // The ADMIN_TOKEN runbook path. It is a shared bearer token with no human
   // behind it, so it can read the roster it was built to export and can do
@@ -145,7 +157,7 @@ export async function countActiveAdmins(env) {
   return Number(row?.n || 0);
 }
 
-const ROLES = new Set(['admin', 'coach', 'viewer']);
+const ROLES = new Set(['admin', 'coach', 'viewer', 'board']);
 
 /**
  * Create or update a staff member.
@@ -165,7 +177,7 @@ export async function addOrUpdateStaff(env, { email, displayName, authorLabel, r
     return { ok: false, error: 'Enter a valid email address.' };
   }
   if (!ROLES.has(role)) {
-    return { ok: false, error: 'Role must be admin, coach, or viewer.' };
+    return { ok: false, error: 'Role must be admin, coach, viewer, or board.' };
   }
   const name = String(displayName || '').trim();
   const label = String(authorLabel || '').trim();

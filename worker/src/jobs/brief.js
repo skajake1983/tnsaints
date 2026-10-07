@@ -10,6 +10,7 @@
  * mailbox, and the admin behind the links is where the details belong.
  */
 
+import { complianceAttention } from '../governance/board.js';
 import { clearanceAttention } from '../safety/clearances.js';
 import { flag } from '../lib/flags.js';
 
@@ -18,6 +19,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** What the brief would say right now. Every count is one small indexed query. */
 export async function briefSummary(env, now = Date.now()) {
   const clearancesDue = await clearanceAttention(env, { now });
+  const compliance = await complianceAttention(env);
   const since = new Date(now - DAY_MS).toISOString();
   const soon = new Date(now + 2 * DAY_MS).toISOString();
   const nowIso = new Date(now).toISOString();
@@ -49,6 +51,8 @@ export async function briefSummary(env, now = Date.now()) {
     paidWithoutSeat: n(8),
     deletionRequests: n(9),
     clearancesDue,
+    complianceDue: compliance.due,
+    complianceUndated: compliance.undated,
   };
 }
 
@@ -57,6 +61,7 @@ export function briefLines(summary) {
   const lines = [];
   const add = (count, text, path) => { if (count > 0) lines.push({ text: text(count), path }); };
   add(summary.paidWithoutSeat, (c) => `${c} ${c === 1 ? 'family' : 'families'} paid but had no seat to take — refund or place them`, '/billing');
+  add(summary.complianceDue, (c) => `${c} filing ${c === 1 ? 'deadline is' : 'deadlines are'} due within 30 days or overdue`, '/board/compliance');
   add(summary.clearancesDue, (c) => `${c} ${c === 1 ? 'person has' : 'people have'} a clearance lapsed or lapsing within 30 days`, '/clearances');
   add(summary.deletionRequests, (c) => `${c} data deletion ${c === 1 ? 'request is' : 'requests are'} waiting`, '/privacy');
   add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due in PayPal`, '/families');

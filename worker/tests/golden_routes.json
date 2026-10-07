@@ -5,6 +5,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   404,
+   "html",
+   "no-script"
+  ],
   "coach": [
    404,
    "html",
@@ -21,6 +26,11 @@
    200,
    "html",
    "script"
+  ],
+  "board": [
+   303,
+   "redirect /board",
+   "no-script"
   ],
   "coach": [
    200,
@@ -39,6 +49,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -52,6 +67,11 @@
  },
  "GET /api/health": {
   "admin": [
+   200,
+   "json",
+   "no-script"
+  ],
+  "board": [
    200,
    "json",
    "no-script"
@@ -73,6 +93,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -87,6 +112,11 @@
  "GET /api/roster": {
   "admin": [
    200,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -107,6 +137,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -120,6 +155,165 @@
  },
  "GET /billing": {
   "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/compliance": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/disclosures": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/documents": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/meetings": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/meetings/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /board/members": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
    200,
    "html",
    "no-script"
@@ -141,6 +335,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -155,6 +354,11 @@
  "GET /clearances": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -175,6 +379,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -189,6 +398,11 @@
  "GET /crm": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -209,6 +423,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -223,6 +442,11 @@
  "GET /crm/contacts/new": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -243,6 +467,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -257,6 +486,11 @@
  "GET /crm/families/999999": {
   "admin": [
    404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -277,6 +511,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -291,6 +530,11 @@
  "GET /crm/list": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -311,6 +555,11 @@
    "text/csv",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -325,6 +574,11 @@
  "GET /crm/tasks": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -345,6 +599,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -362,6 +621,77 @@
    "html",
    "script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /donations": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /donations/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /donations/summary": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -376,6 +706,11 @@
  "GET /enrollments": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -396,6 +731,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -410,6 +750,11 @@
  "GET /eval": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -430,6 +775,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    404,
    "html",
@@ -444,6 +794,11 @@
  "GET /families": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -464,6 +819,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -478,6 +838,11 @@
  "GET /inbox": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -498,6 +863,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -511,6 +881,11 @@
  },
  "GET /logo.png": {
   "admin": [
+   200,
+   "image/png",
+   "no-script"
+  ],
+  "board": [
    200,
    "image/png",
    "no-script"
@@ -532,6 +907,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   404,
+   "html",
+   "no-script"
+  ],
   "coach": [
    404,
    "html",
@@ -549,6 +929,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -562,6 +947,11 @@
  },
  "GET /profile": {
   "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
    200,
    "html",
    "no-script"
@@ -583,6 +973,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -597,6 +992,11 @@
  "GET /programs/academy": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -617,6 +1017,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -631,6 +1036,11 @@
  "GET /teams": {
   "admin": [
    200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -651,6 +1061,11 @@
    "html",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    404,
    "html",
@@ -668,6 +1083,11 @@
    "html",
    "script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -682,6 +1102,11 @@
  "POST /api/batch/no-such-batch/approve": {
   "admin": [
    400,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -702,6 +1127,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -716,6 +1146,11 @@
  "POST /api/batch/no-such-batch/replace": {
   "admin": [
    400,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -736,6 +1171,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -750,6 +1190,11 @@
  "POST /api/decision/999999": {
   "admin": [
    400,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -770,6 +1215,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    404,
    "json",
@@ -784,6 +1234,11 @@
  "POST /api/eval/999999/author/delete": {
   "admin": [
    400,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -804,6 +1259,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -818,6 +1278,11 @@
  "POST /api/message/999999/review": {
   "admin": [
    409,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -838,6 +1303,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -852,6 +1322,11 @@
  "POST /api/registration/999999/delete": {
   "admin": [
    404,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -872,6 +1347,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -886,6 +1366,11 @@
  "POST /api/staff/activate": {
   "admin": [
    400,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -906,6 +1391,11 @@
    "json",
    "no-script"
   ],
+  "board": [
+   403,
+   "json",
+   "no-script"
+  ],
   "coach": [
    403,
    "json",
@@ -920,6 +1410,11 @@
  "POST /api/staff/reinvite": {
   "admin": [
    404,
+   "json",
+   "no-script"
+  ],
+  "board": [
+   403,
    "json",
    "no-script"
   ],
@@ -940,6 +1435,11 @@
    "redirect /billing?msg=state",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -955,6 +1455,11 @@
   "admin": [
    303,
    "redirect /billing?msg=state",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -974,6 +1479,275 @@
    "redirect /billing?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/actions/999999/done": {
+  "admin": [
+   303,
+   "redirect /board?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/compliance": {
+  "admin": [
+   303,
+   "redirect /board/compliance?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/compliance/999999/done": {
+  "admin": [
+   303,
+   "redirect /board/compliance?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/disclosures": {
+  "admin": [
+   303,
+   "redirect /board/disclosures?msg=not-member",
+   "no-script"
+  ],
+  "board": [
+   303,
+   "redirect /board/disclosures?msg=not-member",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/documents": {
+  "admin": [
+   303,
+   "redirect /board/documents?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/documents/999999/archive": {
+  "admin": [
+   303,
+   "redirect /board/documents?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/meetings": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/meetings/999999/attendance": {
+  "admin": [
+   303,
+   "redirect /board/meetings/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/meetings/999999/minutes/approve": {
+  "admin": [
+   303,
+   "redirect /board/meetings/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/meetings/999999/motions/999999/votes": {
+  "admin": [
+   303,
+   "redirect /board/meetings/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/members": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /board/members/999999/end": {
+  "admin": [
+   303,
+   "redirect /board/members?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -988,6 +1762,11 @@
  "POST /clearances": {
   "admin": [
    400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -1008,6 +1787,11 @@
    "redirect /clearances?msg=not-found",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1023,6 +1807,11 @@
   "admin": [
    303,
    "redirect /crm?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1042,6 +1831,11 @@
    "redirect /crm/contacts/999999?msg=not-found",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1059,6 +1853,11 @@
    "redirect /crm/contacts/999999?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1073,6 +1872,11 @@
  "POST /crm/contacts/new": {
   "admin": [
    400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -1093,6 +1897,11 @@
    "redirect /crm/families/999999?msg=not-found",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1108,6 +1917,11 @@
   "admin": [
    303,
    "redirect /crm/tasks?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1127,6 +1941,77 @@
    "redirect /crm/tasks?msg=not-found",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /donations": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /donations/999999/receipt": {
+  "admin": [
+   303,
+   "redirect /donations/999999?msg=settings",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /donations/settings": {
+  "admin": [
+   303,
+   "redirect /donations?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1142,6 +2027,11 @@
   "admin": [
    303,
    "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1161,6 +2051,11 @@
    "redirect /enrollments?msg=state",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1176,6 +2071,11 @@
   "admin": [
    303,
    "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1195,6 +2095,11 @@
    "redirect /families?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1210,6 +2115,11 @@
   "admin": [
    303,
    "redirect /inbox",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1229,6 +2139,11 @@
    "redirect /privacy?msg=updated",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1244,6 +2159,11 @@
   "admin": [
    303,
    "redirect /privacy?msg=hold-not-found",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1263,6 +2183,11 @@
    "redirect /privacy?msg=updated",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1278,6 +2203,11 @@
   "admin": [
    303,
    "redirect /privacy?msg=report-run",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1297,6 +2227,11 @@
    "redirect /programs/academy?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1312,6 +2247,11 @@
   "admin": [
    303,
    "redirect /programs/academy?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
    "no-script"
   ],
   "coach": [
@@ -1331,6 +2271,11 @@
    "redirect /programs/academy?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1345,6 +2290,11 @@
  "POST /programs/new": {
   "admin": [
    400,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],
@@ -1365,6 +2315,11 @@
    "redirect /teams/999999?msg=invalid",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1382,6 +2337,11 @@
    "redirect /teams/999999?msg=not-staff",
    "no-script"
   ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
   "coach": [
    403,
    "html",
@@ -1396,6 +2356,11 @@
  "POST /teams/999999/events": {
   "admin": [
    404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
    "html",
    "no-script"
   ],

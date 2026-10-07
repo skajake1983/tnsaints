@@ -171,7 +171,7 @@ export const USERS_STYLES =
 `;
 
 function roleOptions(current) {
-  return ['admin', 'coach', 'viewer']
+  return ['admin', 'coach', 'viewer', 'board']
     .map((r) => `<option value="${r}"${r === current ? ' selected' : ''}>${r}</option>`)
     .join('');
 }
@@ -188,7 +188,7 @@ export function usersBody({ staff, me, accessMode }) {
           <span class="who2">${esc(s.email_norm)} · shown to parents as ${esc(s.author_label)}</span>
         </td>
         <td data-label="Role">
-          <select class="rolesel" data-role-for="${esc(s.email_norm)}" data-was="${esc(s.role)}"
+          <select class="rolesel" aria-label="Role for ${esc(s.display_name)}" data-role-for="${esc(s.email_norm)}" data-was="${esc(s.role)}"
             data-name="${esc(s.display_name)}" data-label="${esc(s.author_label)}"${inactive ? ' disabled' : ''}>
             ${roleOptions(s.role)}
           </select>
@@ -235,7 +235,7 @@ export function usersBody({ staff, me, accessMode }) {
     <h2>Add someone</h2>
     <form id="addForm">
       <div class="grid">
-        <div class="fld"><label for="newEmail">Work email (@tnsaints.com)</label>
+        <div class="fld"><label for="newEmail">Email they sign in with (@tnsaints.com; a board member may use their own)</label>
           <input id="newEmail" type="email" autocomplete="off" placeholder="name@tnsaints.com" required></div>
         <div class="fld"><label for="newName">Full name</label>
           <input id="newName" type="text" autocomplete="off" placeholder="Jane Coach" required></div>
@@ -246,6 +246,7 @@ export function usersBody({ staff, me, accessMode }) {
             <option value="coach">coach — evaluate players; no contacts, no medical, no sending</option>
             <option value="admin">admin — full access, decisions, sending, user management</option>
             <option value="viewer">viewer — read the basketball roster only</option>
+            <option value="board">board — board records and their own disclosure; no children's data</option>
           </select></div>
       </div>
       <div class="addrow">

@@ -70,6 +70,8 @@ DEV_PORTAL=true
 PORTAL_ENABLED=true
 # New places (apply, pay, offers); "false" in wrangler.toml until launch.
 ENROLLMENT_ENABLED=true
+# Donation receipts locally (tests/test_donations.py); "false" in wrangler.toml until the IRS letter.
+DONATIONS_ENABLED=true
 
 # Signs and hashes every portal secret (sign-in links, sessions, invites).
 # Without it the portal refuses to run. Generate a local one:

@@ -30,6 +30,8 @@ import { routes as privacy } from './privacy.js';
 import { routes as brief } from './brief.js';
 import { routes as clearances } from './clearances.js';
 import { routes as teams } from './teams.js';
+import { routes as board } from './board.js';
+import { routes as donations } from './donations.js';
 
 const METHODS = new Set(['GET', 'POST']);
 
@@ -52,7 +54,7 @@ export function validateRoutes(table, capabilities = knownCapabilities()) {
 
 export const ROUTES = validateRoutes([
   ...roster, ...evaluation, ...decisions, ...users, ...enrollments,
-  ...families, ...billing, ...crm, ...privacy, ...brief, ...clearances, ...teams,
+  ...families, ...billing, ...crm, ...privacy, ...brief, ...clearances, ...teams, ...board, ...donations,
 ]);
 
 /** The first route for this method and path, with its RegExp match (or [path]). */
