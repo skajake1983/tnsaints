@@ -55,11 +55,14 @@ const CAPABILITIES = {
     'privacy:manage',
     // Record and withdraw background checks and trainings (safety/clearances.js).
     'clearances:manage',
+    // Teams: every roster and schedule; assign coaches, schedule, calendar links.
+    'teams:view',
+    'teams:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not
   // inputs to that job, so the role does not carry them — see rosterView().
-  coach: new Set(['roster:view', 'notes:write']),
+  coach: new Set(['roster:view', 'notes:write', 'teams:view']),
 
   viewer: new Set(['roster:view']),
 

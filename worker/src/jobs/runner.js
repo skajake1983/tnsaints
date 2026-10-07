@@ -29,6 +29,7 @@
 import { cleanupExpiredAuth } from '../auth/cleanup.js';
 import { expireOffers } from '../programs/enrollment.js';
 import { sweepSubscriptions } from '../payments/billing.js';
+import { sweepOrders } from '../payments/orders.js';
 import { expireInquiryIpHashes } from '../crm/intake.js';
 import { runStaffBrief } from './brief.js';
 import { sendRosterDigest, sendStaffBriefEmail } from '../email.js';
@@ -133,7 +134,9 @@ export const JOBS = [
     // Re-read the PayPal subscriptions we have heard least about. Webhooks are
     // the main path; this catches anything they missed, a few an hour.
     name: 'paypal-sweep', cadence: 'hourly', minQueries: 6,
-    run: async (env) => ({ detail: { synced: await sweepSubscriptions(env, SWEEP_PER_RUN) } }),
+    run: async (env) => ({
+      detail: { synced: await sweepSubscriptions(env, SWEEP_PER_RUN), orders: await sweepOrders(env, SWEEP_PER_RUN) },
+    }),
   },
   {
     // Retention (privacy/retention.js): counts every day; removes only when

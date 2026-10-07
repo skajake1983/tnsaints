@@ -20,6 +20,9 @@ import {
 import { page, htmlResponse } from '../ui.js';
 import { enrollmentsBody, ENROLLMENT_STYLES, DECLINE_REASONS } from '../enrollments-ui.js';
 import { programBody, PROGRAM_STYLES } from '../programs-ui.js';
+import { programsListBody } from '../programs-list-ui.js';
+import { listPrograms, createProgram, saveProgramDetails } from '../../programs/manage.js';
+import { setCurrentEvaluation } from '../../programs/evaluation.js';
 import { NAV, denyHtml, seeOther, notFoundPage } from '../nav.js';
 
 /** The academy is the one approval-mode program in Phase 1. */
@@ -29,6 +32,28 @@ const denyEnrollments = denyHtml('Enrollments', 'Only academy admins can offer s
 const denyPrograms = denyHtml('Programs', 'Only academy admins can change program settings.');
 
 export const routes = [
+  {
+    method: 'GET', path: '/programs', cap: 'events:manage', deny: denyPrograms,
+    handler: async ({ env, principal, base }) => htmlResponse(page({ title: 'Programs', principal, nav: NAV, current: '/programs',
+      body: programsListBody({ programs: await listPrograms(env), base }), extraStyles: PROGRAM_STYLES })),
+  },
+  {
+    method: 'POST', path: '/programs/new', cap: 'events:manage', deny: denyPrograms,
+    handler: async ({ request, env, ctx, principal, base }) => {
+      let form;
+      try { form = await readForm(request); } catch { form = null; }
+      if (!form) return seeOther(base, '/programs');
+      const { result, id, errors } = await createProgram(env, form);
+      if (result === 'created') {
+        ctx.waitUntil(audit(env, { actor: principal.email, action: 'program.create', subjectType: 'program', subjectId: id }));
+        return seeOther(base, `/programs/${id}?msg=created`);
+      }
+      const values = { id: String(form.get('id') || ''), name: String(form.get('name') || ''), kind: String(form.get('kind') || ''),
+        billing: String(form.get('billing') || '') };
+      return htmlResponse(page({ title: 'Programs', principal, nav: NAV, current: '/programs',
+        body: programsListBody({ programs: await listPrograms(env), base, values, errors }), extraStyles: PROGRAM_STYLES }), { status: 400 });
+    },
+  },
   {
     method: 'GET', path: '/enrollments', cap: 'enrollments:manage', deny: denyEnrollments,
     handler: ({ env, principal, url, base }) => renderEnrollments(env, principal, url, base),
@@ -48,7 +73,7 @@ export const routes = [
     },
   },
   {
-    method: 'POST', path: /^\/programs\/([a-z0-9-]{1,40})\/(settings|status|groups|waivers)(?:\/(\d{1,12}))?$/,
+    method: 'POST', path: /^\/programs\/([a-z0-9-]{1,40})\/(settings|status|groups|waivers|details|current)(?:\/(\d{1,12}))?$/,
     cap: 'events:manage', deny: denyPrograms,
     handler: async ({ request, env, ctx, principal, base }, m) => {
       const program = await getProgram(env, m[1]);
@@ -59,7 +84,8 @@ export const routes = [
 ];
 
 async function renderEnrollments(env, principal, url, base) {
-  const program = await getProgram(env, ENROLLMENT_PROGRAM);
+  const wanted = String(url.searchParams.get('program') || ENROLLMENT_PROGRAM);
+  const program = (/^[a-z0-9-]{1,40}$/.test(wanted) && await getProgram(env, wanted)) || await getProgram(env, ENROLLMENT_PROGRAM);
   if (!program) {
     return htmlResponse(page({ title: 'Enrollments', principal, nav: NAV, current: '/enrollments',
       body: '<h1>Enrollment requests</h1><p class="sub">The academy program has not been set up.</p>' }));
@@ -76,6 +102,7 @@ async function renderEnrollments(env, principal, url, base) {
       current: '/enrollments',
       body: enrollmentsBody({
         program, groups, rows, message: url.searchParams.get('msg'), base, paused: !enrollmentEnabled(env),
+        programs: (await listPrograms(env)).filter((p) => p.kind !== 'evaluation'),
       }),
       extraStyles: ENROLLMENT_STYLES,
     })
@@ -83,7 +110,7 @@ async function renderEnrollments(env, principal, url, base) {
 }
 
 async function handleEnrollmentAction(request, env, ctx, principal, enrollmentId, action, base) {
-  const back = (msg) => seeOther(base, `/enrollments?msg=${msg}`);
+  let back = (msg) => seeOther(base, `/enrollments?msg=${msg}`);
   let form;
   try {
     form = await readForm(request);
@@ -96,6 +123,9 @@ async function handleEnrollmentAction(request, env, ctx, principal, enrollmentId
     .bind(enrollmentId)
     .first();
   if (!enrollment) return back('state');
+  if (enrollment.program_id !== ENROLLMENT_PROGRAM) {
+    back = (msg) => seeOther(base, `/enrollments?program=${enrollment.program_id}&msg=${msg}`);
+  }
   const log = (act, detail) =>
     ctx.waitUntil(audit(env, { actor: principal.email, action: act, subjectType: 'enrollment', subjectId: enrollmentId, detail }));
 
@@ -148,14 +178,18 @@ function formatPayBy(isoString) {
 }
 
 async function renderProgram(env, principal, program, url, base) {
-  const [groups, waivers] = await Promise.all([listGroups(env, program.id), listWaivers(env)]);
+  const [groups, waivers, current] = await Promise.all([
+    listGroups(env, program.id), listWaivers(env),
+    env.DB.prepare(`SELECT value FROM app_settings WHERE key = 'evaluation.current'`).first(),
+  ]);
   return htmlResponse(
     page({
       title: program.name,
       principal,
       nav: NAV,
       current: '/enrollments',
-      body: programBody({ program, groups, waivers, message: url.searchParams.get('msg'), base }),
+      body: programBody({ program, groups, waivers, message: url.searchParams.get('msg'), base,
+        evaluationCurrent: current?.value === program.id }),
       extraStyles: PROGRAM_STYLES,
     })
   );
@@ -191,6 +225,16 @@ async function handleProgramPost(request, env, ctx, principal, program, section,
   if (section === 'groups' && groupId) {
     const result = await updateGroup(env, program.id, Number(groupId), form);
     if (result === 'group-saved') log('group.update', 'group', groupId, { program: program.id });
+    return back(result);
+  }
+  if (section === 'current' && !groupId) {
+    const result = await setCurrentEvaluation(env, form.get('current') === 'on' ? program.id : null, principal.email);
+    if (result !== 'invalid') log(`evaluation.${result}`, 'program', program.id);
+    return back(result);
+  }
+  if (section === 'details' && !groupId) {
+    const result = await saveProgramDetails(env, program, form);
+    if (result === 'details-saved') log('program.details', 'program', program.id);
     return back(result);
   }
   if (section === 'waivers' && !groupId) {

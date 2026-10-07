@@ -43,7 +43,7 @@ export function enrollmentStatusFor(paypalStatus) {
 }
 
 /** Offered/past-due -> active, only while the seat is still this family's. */
-async function activate(env, enrollmentId) {
+export async function activateEnrollment(env, enrollmentId) {
   const now = iso();
   const res = await env.DB.prepare(
     `UPDATE enrollments
@@ -63,7 +63,7 @@ async function activate(env, enrollmentId) {
 async function applyStatus(env, enrollmentId, paypalStatus) {
   const target = enrollmentStatusFor(paypalStatus);
   const now = iso();
-  if (target === 'active') return activate(env, enrollmentId);
+  if (target === 'active') return activateEnrollment(env, enrollmentId);
   if (target === 'past_due') {
     const res = await env.DB.prepare(
       `UPDATE enrollments SET status = 'past_due', updated_at = ?2 WHERE id = ?1 AND status = 'active'`
@@ -162,7 +162,7 @@ export async function syncSubscription(env, subscriptionId, { source = 'webhook'
   return { ok: true, enrollmentId, activated: changed && enrollmentStatusFor(sub.status) === 'active' };
 }
 
-async function flagNoSeat(env, subscriptionId, enrollmentId) {
+export async function flagNoSeat(env, subscriptionId, enrollmentId) {
   console.error(JSON.stringify({ event: 'billing_paid_without_seat', enrollment: enrollmentId }));
   await audit(env, {
     actor: 'system:paypal',
@@ -203,7 +203,7 @@ export async function approveFromPortal(env, accountId, ref, subscriptionId) {
   if (!(await link(env, row.id, enrollment, `account:${accountId}`))) return { ok: false, reason: 'taken' };
 
   if (enrollment.status === 'active') return { ok: true };
-  if (await activate(env, enrollment.id)) return { ok: true };
+  if (await activateEnrollment(env, enrollment.id)) return { ok: true };
   await flagNoSeat(env, sub.id, enrollment.id);
   return { ok: false, reason: 'no-seat' };
 }

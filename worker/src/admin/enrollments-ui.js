@@ -46,7 +46,7 @@ function prefs(row, groupsById) {
   return ids.map((id) => groupsById.get(Number(id))?.name || `#${id}`).join(', ');
 }
 
-export function enrollmentsBody({ program, groups, rows, message, base = '', paused = false }) {
+export function enrollmentsBody({ program, groups, rows, message, base = '', paused = false, programs = [] }) {
   const groupsById = new Map(groups.map((g) => [Number(g.id), g]));
   const active = groups.filter((g) => g.status === 'active');
 
@@ -132,7 +132,15 @@ It opens once its monthly price, groups and waiver are in place.</div>`
 offered, until ENROLLMENT_ENABLED is switched back on. Offers already sent keep their pay-by date.</div>`
     : '';
 
+  const picker = programs.length > 1
+    ? `<form method="get" action="${esc(base)}/enrollments" style="margin:0 0 14px;display:flex;gap:8px;align-items:center">
+  <label for="prog" style="font-weight:700">Program</label>
+  <select id="prog" name="program">${programs.map((p) => `<option value="${esc(p.id)}"${p.id === program.id ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
+  <button type="submit">Show</button></form>`
+    : '';
+
   return `<h1>Enrollment requests</h1>
+${picker}
 <p class="sub">${esc(program.name)}. Offer seats only in groups with room; the family then has until the pay-by date.
 <a href="${esc(base)}/programs/${esc(program.id)}">Price, groups and waiver</a></p>
 ${message && MESSAGES[message] ? `<div class="notice" role="status">${esc(MESSAGES[message])}</div>` : ''}

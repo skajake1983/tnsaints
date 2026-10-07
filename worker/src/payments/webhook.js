@@ -31,6 +31,7 @@ import { flag, choice } from '../lib/flags.js';
 import { readBytesCapped, BodyTooLarge } from '../lib/body.js';
 import { paypalConfig, paypalConfigured, certUrlAllowed, verifyWebhookByPostback } from './paypal.js';
 import { syncSubscription, recordSale } from './billing.js';
+import { syncOrder, captureFromWebhook, recordOrderRefund } from './orders.js';
 
 const MAX_BODY = 64 * 1024;
 const certs = new Map();
@@ -152,6 +153,17 @@ async function processEvent(env, event) {
     const r = await recordSale(env, saleId);
     if (r.ok && r.subscriptionId) await syncSubscription(env, r.subscriptionId, { source: 'webhook' });
     return r.ok ? 'synced' : 'ignored';
+  }
+  // One-time payments (payments/orders.js). Each re-reads PayPal; the event
+  // only says which order or refund to look at.
+  if (type === 'CHECKOUT.ORDER.APPROVED') {
+    return (await captureFromWebhook(env, resource.id)).ok ? 'synced' : 'ignored';
+  }
+  if (type === 'PAYMENT.CAPTURE.COMPLETED') {
+    return (await syncOrder(env, resource.supplementary_data?.related_ids?.order_id)).ok ? 'synced' : 'ignored';
+  }
+  if (type === 'PAYMENT.CAPTURE.REFUNDED') {
+    return (await recordOrderRefund(env, resource.id)).ok ? 'synced' : 'ignored';
   }
   return 'ignored';
 }

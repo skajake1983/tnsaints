@@ -22,7 +22,7 @@ import { hashIp, clientIp } from '../http.js';
 import { audit } from '../auth/staff.js';
 import { currentGrade, gradeLabel } from '../lib/grades.js';
 
-const NAV = [{ href: '/', label: 'Family' }, { href: '/account', label: 'Account' }];
+const NAV = [{ href: '/', label: 'Family' }, { href: '/programs', label: 'Programs' }, { href: '/account', label: 'Account' }];
 const errorFor = (errors, id) => errors.find((e) => e.id === id)?.message || '';
 function page(rc, title, body, status = 200) {
   return portalResponse(portalPage({ rc, title, body, nav: NAV, current: '/', signedIn: true }), { status });
@@ -52,7 +52,7 @@ function groupChoices(groups, chosen) {
 }
 
 /** The waiver, the three agreements, photo choice, signature and relationship. */
-function waiverSection(waiver, values, errors) {
+export function waiverSection(waiver, values, errors) {
   return `  <section class="panel" aria-labelledby="w-h">
     <h2 id="w-h" style="margin-top:0">${esc(waiver.title)}</h2>
     <p class="hint">Between you and ${esc(waiver.legal_entity)}. Please read it before signing.</p>

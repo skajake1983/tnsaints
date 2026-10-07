@@ -218,7 +218,9 @@ async function renderRoster(env, principal) {
     extraStyles: ROSTER_STYLES,
     body: `
   <h1>${esc(env.EVENT_LABEL || env.EVENT_ID)}</h1>
-  <p class="sub">${windowNote}</p>
+  <p class="sub">${windowNote}${env.EVALUATION_SOURCE === 'program'
+    ? ` Running from the evaluation program <a href="programs/${esc(env.EVENT_ID)}">${esc(env.EVENT_ID)}</a>.`
+    : ' Running from the settings in wrangler.toml.'}</p>
 
   <div class="cards">${cards}</div>
 

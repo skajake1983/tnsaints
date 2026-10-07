@@ -151,6 +151,49 @@ export async function fetchSale(env, id) {
   return get(paypalConfig(env), `/v1/payments/sale/${id}`);
 }
 
+/** POST (or other) with a JSON body; PayPal-Request-Id makes it idempotent. */
+async function send(config, method, path, body, requestId) {
+  const headers = {
+    Authorization: `Bearer ${await accessToken(config)}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Prefer: 'return=representation',
+  };
+  if (requestId) headers['PayPal-Request-Id'] = requestId;
+  const res = await fetch(`${config.base}${path}`, {
+    method, headers, body: JSON.stringify(body ?? {}), signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`paypal ${path.split('/')[3] || 'api'} ${res.status}`);
+  return res.json();
+}
+
+const ORDER_ID = /^[A-Z0-9]{10,40}$/;
+const REFUND_ID = /^[A-Z0-9]{6,40}$/;
+
+/** Create a one-time order (payments/orders.js builds the body; the amount comes from the program row). */
+export async function createPaypalOrder(env, body, requestId) {
+  return send(paypalConfig(env), 'POST', '/v2/checkout/orders', body, requestId);
+}
+
+/** An order as PayPal has it now, or null. */
+export async function fetchPaypalOrder(env, id) {
+  if (!ORDER_ID.test(String(id || ''))) return null;
+  return get(paypalConfig(env), `/v2/checkout/orders/${id}`);
+}
+
+/** Capture an approved order. */
+export async function capturePaypalOrder(env, id, requestId) {
+  if (!ORDER_ID.test(String(id || ''))) return null;
+  return send(paypalConfig(env), 'POST', `/v2/checkout/orders/${id}/capture`, {}, requestId);
+}
+
+/** A refund (of an order's capture) as PayPal has it now, or null. */
+export async function fetchPaypalRefund(env, id) {
+  if (!REFUND_ID.test(String(id || ''))) return null;
+  return get(paypalConfig(env), `/v2/payments/refunds/${id}`);
+}
+
 /**
  * PayPal amounts are decimal STRINGS ("40.00"). Parse to integer cents
  * exactly, never through a float. Returns null for anything malformed.

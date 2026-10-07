@@ -12,6 +12,7 @@
  */
 
 import { esc } from './ui.js';
+import { detailsPanel } from './programs-list-ui.js';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -32,6 +33,10 @@ export const PROGRAM_STYLES = `
 `;
 
 const MESSAGES = {
+  created: 'Program created as a draft. Fill in its details, price, groups and waiver, then open it.',
+  'details-saved': 'Details saved.',
+  current: 'This is now the current evaluation.',
+  cleared: 'The evaluation runs from the settings in wrangler.toml again.',
   saved: 'Settings saved.',
   opened: 'The program is open. Families can apply.',
   closed: 'The program is closed to new applications.',
@@ -48,7 +53,7 @@ const dollars = (cents) => (cents === null || cents === undefined ? '' : (cents 
 export function missingToOpen(program) {
   const missing = [];
   if (program.billing !== 'free' && (program.price_cents === null || program.price_cents === undefined)) {
-    missing.push('A monthly price');
+    missing.push(program.billing === 'subscription' ? 'A monthly price' : 'A price');
   }
   if (program.billing === 'subscription' && !program.paypal_plan_id_live && !program.paypal_plan_id_sandbox) {
     missing.push('A PayPal plan ID');
@@ -88,7 +93,22 @@ function groupForm(action, g = {}, base) {
 </div><div class="form-actions"><button type="submit">${g.id ? 'Save group' : 'Add group'}</button></div></form>`;
 }
 
-export function programBody({ program, groups, waivers, message, base = '' }) {
+function evaluationPanel(program, current, base) {
+  if (program.kind !== 'evaluation') return '';
+  return `<div class="panel"><h2>The current evaluation</h2><div style="padding:12px 16px">
+${current
+    ? `<p style="margin:0 0 8px"><strong>This is the current evaluation.</strong> Registration, the roster, notes, decisions and
+emails all use it: its groups are the sessions, its seats the session size, its grades and close time the form's.</p>
+<form method="post" action="${esc(base)}/programs/${esc(program.id)}/current"><input type="hidden" name="current" value="off">
+<div class="form-actions" style="padding:0"><button class="secondary" type="submit">Stop: go back to the settings in wrangler.toml</button></div></form>`
+    : `<p style="margin:0 0 8px">Make this the evaluation registration, the roster, notes and decisions use. Its groups are the
+sessions (name them by time, e.g. "9:00 AM"), each group's seats the session size.</p>
+<form method="post" action="${esc(base)}/programs/${esc(program.id)}/current"><input type="hidden" name="current" value="on">
+<div class="form-actions" style="padding:0"><button type="submit">Make this the current evaluation</button></div></form>`}
+</div></div>`;
+}
+
+export function programBody({ program, groups, waivers, message, base = '', evaluationCurrent = false }) {
   const missing = missingToOpen(program);
   const statusLine = program.status === 'open'
     ? '<strong>Open</strong> — families can apply.'
@@ -101,17 +121,18 @@ export function programBody({ program, groups, waivers, message, base = '' }) {
   <div class="form-actions" style="padding:0"><button type="submit"${missing.length ? ' disabled' : ''}>Open to families</button></div></form>`;
 
   const settings = `<form method="post" action="${esc(base)}/programs/${esc(program.id)}/settings"><div class="form-grid">
-  ${input('price', program.billing === 'subscription' ? 'Monthly price ($)' : 'Price ($)', dollars(program.price_cents),
-    { attrs: 'inputmode="decimal" pattern="[0-9]+(\\.[0-9]{2})?"', hint: 'Must match the PayPal plan exactly.' })}
-  ${input('setup_fee', 'One-time setup fee ($)', dollars(program.setup_fee_cents),
+  ${program.billing === 'free' ? '' : input('price', program.billing === 'subscription' ? 'Monthly price ($)' : 'Price ($)', dollars(program.price_cents),
+    { attrs: 'inputmode="decimal" pattern="[0-9]+(\\.[0-9]{2})?"',
+      hint: program.billing === 'subscription' ? 'Must match the PayPal plan exactly.' : 'One payment, charged when the family signs up or accepts.' })}
+  ${program.billing !== 'subscription' ? '' : input('setup_fee', 'One-time setup fee ($)', dollars(program.setup_fee_cents),
     { attrs: 'inputmode="decimal" pattern="[0-9]+(\\.[0-9]{2})?"', hint: 'Covers the practice shirt.' })}
   ${input('offer_hold_days', 'Days a family has to accept an offered seat', program.offer_hold_days,
     { type: 'number', attrs: 'min="1" max="30"' })}
   ${select('grade_min', 'Lowest grade', GRADES, program.grade_min)}
   ${select('grade_max', 'Highest grade', GRADES, program.grade_max)}
-  ${input('paypal_plan_id_live', 'PayPal plan ID (live)', program.paypal_plan_id_live, { attrs: 'maxlength="60" pattern="P-[A-Z0-9]+"' })}
+  ${program.billing !== 'subscription' ? '' : `${input('paypal_plan_id_live', 'PayPal plan ID (live)', program.paypal_plan_id_live, { attrs: 'maxlength="60" pattern="P-[A-Z0-9]+"' })}
   ${input('paypal_plan_id_sandbox', 'PayPal plan ID (sandbox, for testing)', program.paypal_plan_id_sandbox,
-    { attrs: 'maxlength="60" pattern="P-[A-Z0-9]+"' })}
+    { attrs: 'maxlength="60" pattern="P-[A-Z0-9]+"' })}`}
   ${select('waiver_version_id', 'Waiver families sign', [['', '— none —'], ...waivers.map((w) => [w.id, `${w.title} (${w.id})`])],
     program.waiver_version_id)}
 </div><div class="form-actions"><button type="submit">Save settings</button></div></form>`;
@@ -137,6 +158,8 @@ To change the wording, save a new version and choose it above.</p></form>`;
 <p class="sub">Price, groups and waiver for families applying through the parent portal.</p>
 ${message && MESSAGES[message] ? `<div class="notice" role="status">${esc(MESSAGES[message])}</div>` : ''}
 <div class="panel"><h2>Status</h2><div style="padding:12px 16px">${statusLine}${openClose}</div></div>
+${evaluationPanel(program, evaluationCurrent, base)}
+${detailsPanel({ program, base })}
 <div class="panel"><h2>Settings</h2>${settings}</div>
 <div class="panel"><h2>Groups</h2>${groupList}
   <details class="group"><summary>Add a group</summary>${groupForm(`/programs/${program.id}/groups`, {}, base)}</details></div>

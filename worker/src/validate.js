@@ -19,7 +19,7 @@ const ALL_GRADES = ['3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11
  * client-side and therefore advisory — a POST can claim any grade, so the
  * list is enforced here too.
  */
-function allowedGrades(env) {
+export function allowedGrades(env) {
   const configured = String(env.ALLOWED_GRADES || '')
     .split(',')
     .map((s) => s.trim())

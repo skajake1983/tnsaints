@@ -11,7 +11,7 @@ import { privacySection } from './privacy.js';
 import { currentGrade, gradeLabel } from '../lib/grades.js';
 import { SHIRT_SIZES, RELATIONSHIPS } from './forms.js';
 
-const NAV = [{ href: '/', label: 'Family' }, { href: '/account', label: 'Account' }];
+const NAV = [{ href: '/', label: 'Family' }, { href: '/programs', label: 'Programs' }, { href: '/account', label: 'Account' }];
 const errorFor = (errors, id) => errors.find((e) => e.id === id)?.message || '';
 const GRADE_OPTIONS = Array.from({ length: 13 }, (_, g) => [String(g), g === 0 ? 'Kindergarten' : gradeLabel(g)]);
 const shirtLabel = (v) => (SHIRT_SIZES.find(([k]) => k === v) || [null, ''])[1];
@@ -48,31 +48,65 @@ function medicalBadge(status) {
   return '<span class="badge warn">Medical answer needed</span>';
 }
 
-/** One line per child about the academy: where the application stands, or how to apply. */
-function academyLine(rc, child, enrollments, academy) {
-  const e = enrollments.find((x) => Number(x.player_id) === Number(child.id) && x.program_id === 'academy'
-    && ['applied', 'waitlist', 'offered', 'active', 'past_due'].includes(x.status));
-  if (!e) {
-    return academy ? `<a href="${esc(rc.url(`/children/${child.id}/apply/academy`))}">Apply to the academy</a>` : '';
-  }
+const LIVE = ['applied', 'waitlist', 'offered', 'active', 'past_due'];
+
+/** Where one place stands, with the next step if there is one. */
+function placeLine(rc, child, e) {
+  const name = e.program_id === 'academy' ? 'Academy' : e.program_name;
   const until = e.offer_expires_at ? new Date(e.offer_expires_at).toLocaleDateString('en-US',
     { timeZone: 'America/Chicago', month: 'long', day: 'numeric' }) : '';
-  if (e.status === 'applied') return '<span class="badge ok">Academy: application received</span>';
-  if (e.status === 'waitlist') return '<span class="badge warn">Academy: on the waiting list</span>';
+  if (e.status === 'applied') return `<span class="badge ok">${esc(name)}: application received</span>`;
+  if (e.status === 'waitlist') return `<span class="badge warn">${esc(name)}: on the waiting list</span>`;
+  if (e.status === 'offered' && e.enrollment_mode === 'self_serve') {
+    return `<span class="badge ok">${esc(name)}: place held in ${esc(e.group_name)}</span>
+  <a href="${esc(rc.url(`/pay/${e.ref}`))}">Finish paying</a>`;
+  }
   if (e.status === 'offered') {
-    return `<span class="badge ok">Place offered: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
+    return `<span class="badge ok">Place offered${e.program_id === 'academy' ? '' : ` (${esc(name)})`}: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
   <a href="${esc(rc.url(`/pay/${e.ref}`))}">Accept and pay</a>`;
   }
   if (['active', 'past_due'].includes(e.status) && !e.consent_record_id) {
     return `<span class="badge warn">Action needed: sign the waiver</span>
   <a href="${esc(rc.url(`/children/${child.id}/waiver/${e.program_id}`))}">Sign the waiver</a>`;
   }
-  if (e.status === 'past_due') return '<span class="badge warn">Academy: payment needed</span>';
-  return `<span class="badge ok">Academy: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;
+  if (e.status === 'past_due') return `<span class="badge warn">${esc(name)}: payment needed</span>`;
+  return `<span class="badge ok">${esc(name)}: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;
+}
+
+/** Every current place a child has, and how to apply to the academy if they have none there. */
+function placeLines(rc, child, enrollments, academy) {
+  const mine = enrollments.filter((x) => Number(x.player_id) === Number(child.id) && LIVE.includes(x.status));
+  const lines = mine.map((e) => placeLine(rc, child, e));
+  if (academy && !mine.some((e) => e.program_id === 'academy')) {
+    lines.unshift(`<a href="${esc(rc.url(`/children/${child.id}/apply/academy`))}">Apply to the academy</a>`);
+  }
+  return lines.join('<br>');
+}
+
+const EVENT_LABEL = { practice: 'Practice', game: 'Game', tournament: 'Tournament', other: 'Event' };
+const eventTime = (v) => new Date(v).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short',
+  day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+/** Each team a child is on: the next few events and the calendar link. */
+function teamsPanel(rc, teams, children) {
+  if (!teams.length) return '';
+  const byGroup = new Map();
+  for (const t of teams) {
+    if (!byGroup.has(t.group_id)) byGroup.set(t.group_id, { ...t, kids: [] });
+    byGroup.get(t.group_id).kids.push(children.find((c) => Number(c.id) === Number(t.player_id))?.display_name || '');
+  }
+  return `<section class="panel" aria-labelledby="team-h">
+  <h2 id="team-h" style="margin-top:0">Team schedule</h2>
+  ${[...byGroup.values()].map((t) => `<h3 style="margin:8px 0 4px">${esc(t.team_name)} <span class="item-sub">${esc(t.kids.filter(Boolean).join(', '))}</span></h3>
+  ${t.events.length ? `<ul class="plain">${t.events.map((e) => `<li>${esc(eventTime(e.starts_at))} · ${esc(e.title || EVENT_LABEL[e.kind] || 'Event')}${
+    e.opponent ? ` vs ${esc(e.opponent)}` : ''}${e.location ? ` · ${esc(e.location)}` : ''}${e.cancelled_at ? ' <span class="badge warn">Cancelled</span>' : ''}</li>`).join('')}</ul>`
+    : '<p>Nothing scheduled yet.</p>'}
+  <p><a href="${esc(rc.url(t.feedPath))}">Add this team's schedule to your calendar</a></p>`).join('')}
+</section>`;
 }
 
 export function dashboardPage(rc, { household, guardians, children, contacts, claimable, enrollments = [],
-  academy = null, notice = '' }) {
+  academy = null, notice = '', teams = [] }) {
   const kids = children.length
     ? `<ul class="cards-list">${children
         .map((c) => {
@@ -83,7 +117,7 @@ export function dashboardPage(rc, { household, guardians, children, contacts, cl
           return `<li class="item">
   <div><a class="item-title" href="${esc(rc.url(`/children/${c.id}`))}">${esc(c.display_name)}</a>
   ${details ? `<div class="item-sub">${esc(details)}</div>` : ''}
-  <div class="item-sub">${academyLine(rc, c, enrollments, academy)}</div></div>
+  <div class="item-sub">${placeLines(rc, c, enrollments, academy)}</div></div>
   ${medicalBadge(c.medical_status)}
 </li>`;
         })
@@ -120,6 +154,7 @@ ${claim}
   ${kids}
   <p style="margin-bottom:0"><a class="btn" href="${esc(rc.url('/children/new'))}">Add a child</a></p>
 </section>
+${teamsPanel(rc, teams, children)}
 <section class="panel" aria-labelledby="ec-h">
   <h2 id="ec-h" style="margin-top:0">Emergency contacts</h2>
   ${ec}

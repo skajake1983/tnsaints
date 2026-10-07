@@ -41,6 +41,10 @@ TABLES = [
     "crm_inquiries",
     "crm_prospect_players",
     "crm_contacts",
+    # Programs manager (015)
+    "team_events",
+    "team_coaches",
+    "paypal_orders",
     # Billing (010)
     "payments",
     "paypal_events",

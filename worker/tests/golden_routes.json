@@ -390,6 +390,23 @@
    "no-script"
   ]
  },
+ "GET /enrollments?program=no-such-program": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /eval": {
   "admin": [
    200,
@@ -560,6 +577,23 @@
    "no-script"
   ]
  },
+ "GET /programs": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /programs/academy": {
   "admin": [
    200,
@@ -585,6 +619,40 @@
   ],
   "coach": [
    403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /teams": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /teams/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   404,
    "html",
    "no-script"
   ],
@@ -1223,10 +1291,112 @@
    "no-script"
   ]
  },
+ "POST /programs/academy/current": {
+  "admin": [
+   303,
+   "redirect /programs/academy?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /programs/academy/details": {
+  "admin": [
+   303,
+   "redirect /programs/academy?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "POST /programs/academy/groups/999999": {
   "admin": [
    303,
    "redirect /programs/academy?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /programs/new": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /teams/999999/calendar/rotate": {
+  "admin": [
+   303,
+   "redirect /teams/999999?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /teams/999999/coaches": {
+  "admin": [
+   303,
+   "redirect /teams/999999?msg=not-staff",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /teams/999999/events": {
+  "admin": [
+   404,
+   "html",
    "no-script"
   ],
   "coach": [

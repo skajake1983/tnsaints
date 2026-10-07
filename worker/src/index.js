@@ -15,12 +15,13 @@
 import { corsHeaders, json, errorResponse, hashIp, clientIp, toCsv } from './http.js';
 import { sendRegistrationEmails, sendCancellationAlert } from './email.js';
 import { verifyTurnstile } from './turnstile.js';
-import { validateRegistration, botSignals } from './validate.js';
+import { validateRegistration, botSignals, allowedGrades } from './validate.js';
 import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
 import { handlePaypalWebhook } from './payments/webhook.js';
 import { handleLead } from './crm/lead-route.js';
 import { runJobs } from './jobs/runner.js';
+import { withActiveEvent, publicPrograms } from './programs/evaluation.js';
 import { flag } from './lib/flags.js';
 import { configureSchoolYear } from './lib/grades.js';
 import { audit } from './auth/staff.js';
@@ -50,7 +51,8 @@ export default {
     const route = resolveSurface(request, env);
     if (route.surface === 'admin') {
       try {
-        return await handleAdmin(request, env, ctx, route.path, route.base);
+        // The evaluation's settings: wrangler.toml, or the current evaluation program.
+        return await handleAdmin(request, await withActiveEvent(env), ctx, route.path, route.base);
       } catch (err) {
         console.error('Unhandled admin error:', err?.stack || err?.message || err);
         return new Response('Something went wrong. Try again, or text Jacob.', {
@@ -95,25 +97,34 @@ export default {
         return json({ ok: true }, { cors });
       }
 
+      // What the website may list: open, public programs and their seats.
+      if (url.pathname === '/api/programs' && request.method === 'GET') {
+        return json({ ok: true, programs: await publicPrograms(env) }, { cors });
+      }
+
+      // The evaluation's settings: wrangler.toml, or the current evaluation
+      // program (programs/evaluation.js). Everything below reads them.
+      const ev = await withActiveEvent(env);
+
       if (url.pathname === '/api/availability' && request.method === 'GET') {
-        return await handleAvailability(env, cors);
+        return await handleAvailability(ev, cors);
       }
 
       if (url.pathname === '/api/register' && request.method === 'POST') {
-        return await handleRegister(request, env, ctx, cors);
+        return await handleRegister(request, ev, ctx, cors);
       }
 
       // GET is read-only by design — see lookupByCancelToken().
       if (url.pathname === '/api/cancel/lookup' && request.method === 'GET') {
-        return await handleCancelLookup(url, env, cors);
+        return await handleCancelLookup(url, ev, cors);
       }
 
       if (url.pathname === '/api/cancel' && request.method === 'POST') {
-        return await handleCancel(request, env, ctx, cors);
+        return await handleCancel(request, ev, ctx, cors);
       }
 
       if (url.pathname === '/api/admin/registrations' && request.method === 'GET') {
-        return await handleAdminExport(request, env, ctx, cors);
+        return await handleAdminExport(request, ev, ctx, cors);
       }
 
       // Once [assets] is enabled in wrangler.toml, static files are served
@@ -134,7 +145,7 @@ export default {
    */
   async scheduled(event, env, ctx) {
     configureSchoolYear(env);
-    ctx.waitUntil(runJobs(env));
+    ctx.waitUntil(withActiveEvent(env).then((ev) => runJobs(ev)));
   },
 };
 
@@ -228,6 +239,7 @@ async function handleAvailability(env, cors) {
       event_id: availability.event_id,
       event_label: availability.event_label,
       sessions: publicSessions(availability),
+      grades: allowedGrades(env),
       all_full: availability.all_full,
     },
     { cors }

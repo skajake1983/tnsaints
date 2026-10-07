@@ -31,6 +31,7 @@ import { requestLink, verifyLink, renderSignIn } from '../auth/magic.js';
 import { googleConfigured, startGoogle, finishGoogle } from '../auth/google.js';
 import { verifyPage, redirect } from './auth-pages.js';
 import { familyRoutes, isFamilyPath } from './family.js';
+import { calendarFeed } from '../programs/teams.js';
 import { inviteLanding, acceptInvitation } from './guardians.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
@@ -77,6 +78,19 @@ export async function handlePortal(request, env, ctx, route) {
       console.warn(JSON.stringify({ event: 'portal_csrf_blocked', reason: check.reason, method: request.method }));
       return refusedResponse(rc);
     }
+  }
+
+  // A team's schedule as a calendar feed. No sign-in: calendar apps cannot
+  // sign in. The unguessable token in the link is the permission, and the feed
+  // holds the schedule only — never a child (programs/teams.js).
+  const feed = /^\/calendar\/(\d{1,12})\/([A-Za-z0-9_-]{32})\.ics$/.exec(pathname);
+  if (feed && method === 'GET') {
+    const ics = await calendarFeed(env, Number(feed[1]), feed[2]);
+    if (!ics) return notFoundResponse(rc);
+    return new Response(request.method === 'HEAD' ? null : ics, {
+      headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'private, max-age=300',
+        'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' },
+    });
   }
 
   const session = await loadSession(env, request, ctx);

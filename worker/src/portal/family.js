@@ -28,6 +28,8 @@ import { guardianRoutes } from './guardians.js';
 import { privacyRoutes } from './privacy.js';
 import { applyRoutes, waiverRoutes } from './apply.js';
 import { payRoutes } from './pay.js';
+import { programRoutes } from './programs.js';
+import { familyTeams } from '../programs/teams.js';
 import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
 
 const NOTICES = {
@@ -35,6 +37,8 @@ const NOTICES = {
   applied: "Application received. We'll email you when a place in a group is ready.",
   paid: "Payment set up. Your child's place is confirmed. Welcome to the academy!",
   signed: 'Waiver signed. Thank you.',
+  registered: "You're signed up. The place is confirmed.",
+  waitlisted: "That group is full, so your child is on its waiting list. We'll email you if a place opens.",
   contacts: 'Emergency contacts saved.',
   claimed: 'Added to your family.',
   'not-claimed': "That child couldn't be added. They may already be in a family.",
@@ -59,7 +63,8 @@ export function isFamilyPath(pathname) {
     pathname === '/account/signout-others' ||
     pathname === '/account/export' ||
     pathname === '/account/delete-request' ||
-    pathname.startsWith('/pay/')
+    pathname.startsWith('/pay/') ||
+    pathname === '/programs'
   );
 }
 
@@ -123,17 +128,19 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
   }
 
   if (pathname === '/' && method === 'GET') {
-    const [guardians, children, contacts, claimable, enrollments, academy] = await Promise.all([
+    const [guardians, children, contacts, claimable, enrollments, academy, teams] = await Promise.all([
       data.listGuardians(env, accountId),
       data.listChildren(env, accountId),
       data.listEmergencyContacts(env, accountId),
       data.claimableChildren(env, accountId),
       familyEnrollments(env, accountId),
       getProgram(env, 'academy'),
+      familyTeams(env, accountId),
     ]);
     return dashboardPage(rc, {
       household, guardians, children, contacts, claimable, enrollments,
       academy: academy && programOpen(academy) ? academy : null,
+      teams,
       notice: NOTICES[url.searchParams.get('notice')] || '',
     });
   }
@@ -178,6 +185,9 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       return redirect(rc.url(`/?notice=${playerId ? 'claimed' : 'not-claimed'}`));
     });
   }
+
+  const signup = await programRoutes({ env, ctx, request, rc, session, pathname, method, readForm });
+  if (signup) return signup;
 
   const application = await applyRoutes({ env, ctx, request, rc, session, pathname, method, readForm });
   if (application) return application;

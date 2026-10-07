@@ -116,6 +116,17 @@ ROUTES = [
     ("POST", "/clearances", FORM, {}),
     ("GET", "/clearances/person?email=nobody%40example.com", None, None),
     ("POST", "/clearances/999999/revoke", FORM, {}),
+    # Programs manager (G1).
+    ("GET", "/programs", None, None),
+    ("POST", "/programs/new", FORM, {}),
+    ("POST", "/programs/academy/details", FORM, {}),
+    ("POST", "/programs/academy/current", FORM, {"current": "on"}),
+    ("GET", "/enrollments?program=no-such-program", None, None),
+    ("GET", "/teams", None, None),
+    ("GET", "/teams/999999", None, None),
+    ("POST", "/teams/999999/coaches", FORM, {"email": "x@example.com", "role": "head"}),
+    ("POST", "/teams/999999/events", FORM, {}),
+    ("POST", "/teams/999999/calendar/rotate", FORM, {}),
 ]
 
 

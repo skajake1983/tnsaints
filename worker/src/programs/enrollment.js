@@ -52,7 +52,10 @@ export function priceLine(program) {
   const price = program.price_cents !== null ? dollars(program.price_cents) : 'Price to be confirmed';
   const per = program.billing === 'subscription' ? ' a month' : '';
   const setup = program.setup_fee_cents ? `, plus a one-time ${dollars(program.setup_fee_cents)} setup fee that covers the practice shirt` : '';
-  return `${price}${per}${setup}. You pay only once we offer your child a place in a group.`;
+  const when = program.enrollment_mode === 'self_serve'
+    ? 'You pay when you sign up, for a seat in the group you choose.'
+    : 'You pay only once we offer your child a place in a group.';
+  return `${price}${per}${setup}. ${when}`;
 }
 
 function seatsSql(groupExpr, nowParam) {
@@ -191,7 +194,7 @@ export async function apply(env, accountId, { playerId, program, waiver, signatu
 export async function familyEnrollments(env, accountId) {
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.ref, e.player_id, e.program_id, e.status, e.offer_expires_at, e.applied_at, e.consent_record_id,
-            pr.name AS program_name, g.name AS group_name, g.schedule_summary, g.location, g.starts_on
+            pr.name AS program_name, pr.enrollment_mode, g.name AS group_name, g.schedule_summary, g.location, g.starts_on
        FROM enrollments e
        JOIN programs pr ON pr.id = e.program_id
        LEFT JOIN program_groups g ON g.id = e.group_id
@@ -266,15 +269,24 @@ export async function decline(env, { enrollmentId, staffEmail, reason }) {
  */
 export async function expireOffers(env) {
   const now = iso();
-  const res = await env.DB.prepare(
-    `UPDATE enrollments
-        SET status = 'waitlist', group_id = NULL, offer_expires_at = NULL,
-            waitlisted_at = COALESCE(waitlisted_at, applied_at), updated_at = ?1
-      WHERE id IN (SELECT id FROM enrollments WHERE status = 'offered' AND offer_expires_at <= ?1 LIMIT 200)`
-  )
-    .bind(now)
-    .run();
-  return res.meta.changes || 0;
+  const SELF = `(SELECT p.enrollment_mode FROM programs p WHERE p.id = enrollments.program_id) = 'self_serve'`;
+  const LAPSED = `id IN (SELECT id FROM enrollments WHERE status = 'offered' AND offer_expires_at <= ?1 LIMIT 200)`;
+  const [released, waiting] = await env.DB.batch([
+    // A self-serve hold the family did not pay for: the seat goes back, the
+    // sign-up ends (they can sign up again if there is room).
+    env.DB.prepare(
+      `UPDATE enrollments
+          SET status = 'cancelled', offer_expires_at = NULL, decline_reason = 'hold-lapsed', ended_at = ?1, updated_at = ?1
+        WHERE ${LAPSED} AND ${SELF}`
+    ).bind(now),
+    env.DB.prepare(
+      `UPDATE enrollments
+          SET status = 'waitlist', group_id = NULL, offer_expires_at = NULL,
+              waitlisted_at = COALESCE(waitlisted_at, applied_at), updated_at = ?1
+        WHERE ${LAPSED} AND NOT ${SELF}`
+    ).bind(now),
+  ]);
+  return (released.meta.changes || 0) + (waiting.meta.changes || 0);
 }
 
 /**
