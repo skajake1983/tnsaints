@@ -9,6 +9,11 @@ tags correct for the current date, reading eval-preview.json:
   * EVERGREEN (academy, no dates) shows by default.
   * The EVAL preview shows only while eval.activeUntil is in the future; the
     first run after that timestamp reverts to evergreen.
+  * Otherwise, an EVALUATION PROGRAM from the academy's live programs API
+    (https://api.tnsaints.com/api/programs) shows while its sign-up is open, if
+    staff gave it a preview image (Admin -> Programs). So the next evaluation's
+    card can come from the admin, with no edit here. If the API cannot be
+    reached, this behaves exactly as before.
 
 It is idempotent: it rewrites index.html only when a tag actually differs, so
 the workflow commits only when the preview genuinely needs to flip (at most
@@ -18,12 +23,15 @@ about twice per eval — apply on launch, revert on expiry).
     python scripts/apply-eval-preview.py --check     # exit 1 if it WOULD change
 """
 import datetime
+import html as html_lib
 import json
 import pathlib
 import re
 import sys
+import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+PROGRAMS_API = "https://api.tnsaints.com/api/programs"
 CONFIG = ROOT / "eval-preview.json"
 INDEX = ROOT / "index.html"
 
@@ -56,6 +64,40 @@ def eval_is_active(cfg, now):
     return now <= until
 
 
+def program_preview(now):
+    """An open evaluation program with a preview card, from the live API, or None."""
+    if "--no-api" in sys.argv:
+        return None
+    try:
+        req = urllib.request.Request(PROGRAMS_API, headers={"Accept": "application/json", "User-Agent": "tnsaints-link-preview"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.load(resp)
+    except Exception as exc:  # network, HTTP or JSON: fall back, never fail the job
+        print(f"NOTE: programs API unavailable ({exc.__class__.__name__}); using eval-preview.json only")
+        return None
+    for p in data.get("programs") or []:
+        image = str(p.get("preview_image") or "")
+        if p.get("kind") != "evaluation" or not image.startswith("https://"):
+            continue
+        try:
+            until = datetime.datetime.fromisoformat(str(p.get("registration_closes_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=datetime.timezone.utc)
+        if now > until:
+            continue
+        title = str(p.get("preview_title") or p.get("name") or "")[:120]
+        # Text from the API goes into an HTML attribute: escape it.
+        return {
+            "title": html_lib.escape(title, quote=True),
+            "description": html_lib.escape(str(p.get("description") or "")[:300], quote=True),
+            "image": html_lib.escape(image, quote=True),
+            "alt": html_lib.escape(title, quote=True),
+        }
+    return None
+
+
 def set_meta(html, attr, value, content):
     # Target the tag by its property/name, replacing whatever content it holds,
     # so the current dash encodings never have to be matched by hand.
@@ -70,8 +112,9 @@ def main():
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
     now = datetime.datetime.now(datetime.timezone.utc)
     active = eval_is_active(cfg, now)
-    mode = "eval" if active else "evergreen"
-    chosen = cfg["eval"] if active else cfg["evergreen"]
+    from_api = None if active else program_preview(now)
+    mode = "eval" if active else "program" if from_api else "evergreen"
+    chosen = cfg["eval"] if active else from_api or cfg["evergreen"]
 
     # newline="" preserves the file's existing line endings byte-for-byte; only
     # the tag content changes.

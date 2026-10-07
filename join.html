@@ -78,6 +78,11 @@
     }
     .fee-note strong { color: var(--saints-blue-dark); }
     .paypal-wrap { max-width: 320px; margin: 0 auto; min-height: 46px; }
+    .portal-cta { display:block; text-align:center; margin: 14px 0 6px; padding: 14px 18px; border-radius: 10px;
+      background: var(--saints-blue-dark); color: #fff; font-weight: 800; font-size: 1.05rem; text-decoration: none; }
+    .portal-cta:hover, .portal-cta:focus-visible { filter: brightness(1.15); outline: 2px solid var(--saints-blue-dark); outline-offset: 2px; }
+    .portal-how { font-size: .92rem; line-height: 1.5; margin: 8px 0 14px; }
+    .or-pay { margin: 18px 0 6px; font-size: .9rem; opacity: .85; }
     .fine { color: var(--saints-muted); font-size: 0.82rem; margin: 16px 0 0; }
 
     footer { text-align: center; color: var(--saints-muted); font-size: 0.85rem; padding: 0 20px 34px; }
@@ -118,8 +123,13 @@
         <span class="tag">Monthly Membership</span>
         <h2>Become a Saint</h2>
         <div class="fee-note"><strong>One-time $40 setup fee</strong> when you join &mdash; it covers your player&rsquo;s practice shirt. It&rsquo;s charged once at sign-up, then it&rsquo;s just your monthly membership.</div>
+        <a class="portal-cta" href="https://portal.tnsaints.com/">Create your parent account &amp; apply</a>
+        <p class="portal-how">Apply in a few minutes. We place your child in a scheduled group with room for them,
+          email you the day, time and place, and only then do you pay &mdash; so you never pay for a spot that isn&rsquo;t there.</p>
+
         <p class="price-note">Billed monthly through PayPal. You&rsquo;ll see the full amount &mdash; the $40 setup fee plus your first month &mdash; before you confirm.</p>
 
+        <p class="or-pay">Already arranged a place with a coach? You can still pay here:</p>
         <div class="paypal-wrap">
           <div id="paypal-button-container-P-3A8355760P817903NNKZ4ZGQ"></div>
         </div>
@@ -137,7 +147,9 @@
     paypal.Buttons({
       style: { shape: 'rect', color: 'gold', layout: 'vertical', label: 'subscribe' },
       createSubscription: function (data, actions) {
-        return actions.subscription.create({ plan_id: 'P-3A8355760P817903NNKZ4ZGQ' });
+        // 'joinpage' tells the academy's records this came from here, so staff
+        // can match it to a child (Admin -> Billing). No personal data is sent.
+        return actions.subscription.create({ plan_id: 'P-3A8355760P817903NNKZ4ZGQ', custom_id: 'joinpage' });
       },
       onApprove: function (data, actions) {
         // Subscription set up in PayPal — send them to the confirmation page.

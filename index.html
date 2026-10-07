@@ -1297,6 +1297,7 @@
     }
 
     #turnstile-widget:not(:empty) { margin: 4px 0 16px; }
+    label .optional { font-weight: 400; opacity: .75; }
 
     /* Sits directly above the session picker as its status line, so it reads
        as part of that choice rather than as a stray line under the dropdown. */
@@ -1847,6 +1848,8 @@
                   <option value="general">General Contact</option>
                   <option value="player-interest">Academy Interest</option>
                   <option value="coaching-interest">Coaching Interest</option>
+                  <option value="sponsor-interest">Sponsorship</option>
+                  <option value="volunteer-interest">Volunteering</option>
                   <!-- Temporarily hidden pending revisions. The 'academy-onboarding' template
                        and its evaluation-gate logic below remain intact; re-enable by
                        restoring this option:
@@ -1960,6 +1963,7 @@
     <div class="container footer-bottom">
       <span>&copy; <span id="footer-year">2026</span> Tennessee Saints Basketball Academy</span>
       <a href="privacy-policy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Use</a>
     </div>
   </footer>
 
@@ -1974,9 +1978,11 @@
     const namePattern = "[A-Za-zÀ-ÿ' -]{2,60}";
     const schoolPattern = "[A-Za-z0-9À-ÿ'&., -]{2,80}";
     const locationPattern = "[A-Za-zÀ-ÿ0-9'., -]{2,80}";
-    // --- Registration API ----------------------------------------------------
-    // Evaluation requests go to the capacity-aware Worker; every other form
-    // purpose still uses Formspree.
+    // --- Registration and lead APIs ---------------------------------------------
+    // Evaluation requests go to the capacity-aware Worker (/api/register). The
+    // contact and interest forms go to the academy's CRM (/api/lead) — and fall
+    // back to Formspree by themselves whenever the CRM is switched off (503),
+    // unreachable, or failing, so no message is lost while it settles in.
     //
     // ROLLBACK: set REGISTRATION_API back to '' and push. The form falls
     // straight back to Formspree — no DNS change, no data loss, live in about
@@ -1994,6 +2000,11 @@
     const REGISTRATION_API = IS_LOCAL
       ? 'http://127.0.0.1:8787'
       : 'https://api.tnsaints.com';
+
+    // ROLLBACK for the contact forms alone: set LEAD_API to '' and push —
+    // every one of them goes straight to Formspree again.
+    const LEAD_API = REGISTRATION_API;
+    const LEAD_PURPOSES = ['general', 'player-interest', 'coaching-interest', 'sponsor-interest', 'volunteer-interest'];
 
     const TURNSTILE_SITE_KEY = IS_LOCAL
       ? '1x00000000000000000000AA'
@@ -2113,6 +2124,49 @@
           <textarea id="coach-experience" name="coach_experience" placeholder="Share your playing, coaching, training, or volunteer background." required minlength="20" maxlength="1000"></textarea>
         </div>
       `,
+      'sponsor-interest': `
+        <div>
+          <label for="sponsor-name">Your Name</label>
+          <input id="sponsor-name" name="name" type="text" placeholder="Your name" required pattern="${namePattern}" title="Please enter a valid name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="sponsor-organization">Business or Organization <span class="optional">(optional)</span></label>
+          <input id="sponsor-organization" name="organization" type="text" placeholder="Business name" maxlength="120" autocomplete="organization" />
+        </div>
+        <div>
+          <label for="sponsor-email">Email</label>
+          <input id="sponsor-email" name="email" type="email" placeholder="Your email" required autocomplete="email" />
+        </div>
+        <div>
+          <label for="sponsor-phone">Phone <span class="optional">(optional)</span></label>
+          <input id="sponsor-phone" name="phone" type="tel" placeholder="(555) 555-5555" inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+        </div>
+        <div>
+          <label for="sponsor-message">How You'd Like to Support the Academy</label>
+          <textarea id="sponsor-message" name="message" placeholder="A team sponsorship, an event, equipment — tell us what you have in mind." maxlength="1000"></textarea>
+        </div>
+      `,
+      'volunteer-interest': `
+        <div>
+          <label for="volunteer-name">Your Name</label>
+          <input id="volunteer-name" name="name" type="text" placeholder="Your name" required pattern="${namePattern}" title="Please enter a valid name using letters only." autocomplete="name" />
+        </div>
+        <div>
+          <label for="volunteer-email">Email</label>
+          <input id="volunteer-email" name="email" type="email" placeholder="Your email" required autocomplete="email" />
+        </div>
+        <div>
+          <label for="volunteer-phone">Phone</label>
+          <input id="volunteer-phone" name="phone" type="tel" placeholder="(555) 555-5555" required inputmode="tel" pattern="${phonePattern}" title="Please enter a valid phone number." autocomplete="tel" />
+        </div>
+        <div>
+          <label for="volunteer-message">How You'd Like to Help</label>
+          <textarea id="volunteer-message" name="message" placeholder="Game days, events, team parent, transport — and when you're usually free." maxlength="1000"></textarea>
+          <p style="margin:6px 0 0; font-size:0.88rem; line-height:1.45; opacity:0.8;">
+            Everyone who works with our players completes a background check and safety training before they start.
+          </p>
+        </div>
+      `,
       evaluation: `
         <div class="eval-expect">
           <strong>What to expect</strong>
@@ -2149,13 +2203,15 @@
             <input id="evaluation-player-name" name="player_name" type="text" placeholder="Player full name" required pattern="${namePattern}" title="Please enter a valid player name using letters only." autocomplete="name" />
           </div>
           <div>
-            <label for="evaluation-grade">Grade (4th&ndash;6th)</label>
-            <!-- This evaluation is 4th through 6th grade. The Worker enforces
-                 the same list server-side via ALLOWED_GRADES. The note below
+            <label for="evaluation-grade">Grade (3rd&ndash;6th)</label>
+            <!-- Replaced from /api/availability (the Worker's ALLOWED_GRADES, or
+                 the current evaluation program's range) as soon as it answers;
+                 this list matches the backend until then. The note below
                  matters: without it, a parent of a 7th grader hits a dead end
                  here and leaves, when we actually want to hear from them. -->
             <select id="evaluation-grade" name="grade" required>
               <option value="" selected disabled>Select grade</option>
+              <option value="3rd">3rd</option>
               <option value="4th">4th</option>
               <option value="5th">5th</option>
               <option value="6th">6th</option>
@@ -2390,6 +2446,9 @@
         const data = await res.json();
         if (!data.ok) throw new Error('unavailable');
 
+        // The grades the server will accept, from the same settings it checks.
+        if (Array.isArray(data.grades) && data.grades.length) setEvaluationGrades(data.grades);
+
         // Registration being closed is a statement about the whole event, so
         // it stays a single line rather than a tag on each option.
         if (!data.registration_open && slot) {
@@ -2414,6 +2473,26 @@
         // Never block registration on the status check failing — the radios
         // still work, they just carry no status.
       }
+    }
+
+    function setEvaluationGrades(grades) {
+      const select = document.getElementById('evaluation-grade');
+      const label = document.querySelector('label[for="evaluation-grade"]');
+      if (!select) return;
+      const chosen = select.value;
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      placeholder.textContent = 'Select grade';
+      select.replaceChildren(placeholder, ...grades.map((g) => {
+        const option = document.createElement('option');
+        option.value = String(g);
+        option.textContent = String(g);
+        return option;
+      }));
+      if (grades.includes(chosen)) select.value = chosen;
+      if (label) label.textContent = `Grade (${grades[0]}–${grades[grades.length - 1]})`;
     }
 
     function setupOnboardingEvaluationGate() {
@@ -2512,8 +2591,12 @@
       submitBtn.textContent = 'Sending...';
 
       try {
-        const useApi = REGISTRATION_API && purposeSelect.value === 'evaluation';
-        const ok = useApi ? await submitToRegistrationApi() : await submitToFormspree();
+        const purpose = purposeSelect.value;
+        const ok = REGISTRATION_API && purpose === 'evaluation'
+          ? await submitToRegistrationApi()
+          : LEAD_API && LEAD_PURPOSES.includes(purpose)
+            ? await submitToLeadApi()
+            : await submitToFormspree();
 
         if (ok) {
           form.reset();
@@ -2542,6 +2625,54 @@
 
       openSuccessModal();
       return true;
+    }
+
+    /**
+     * The CRM path for contact and interest forms. A field the server rejects
+     * is marked and focused; anything that means "the CRM is not taking
+     * messages right now" sends the same form to Formspree instead.
+     */
+    async function submitToLeadApi() {
+      const payload = { elapsed_ms: Date.now() - formRenderedAt, turnstile_token: currentTurnstileToken() };
+      for (const [name, value] of new FormData(form).entries()) {
+        if (typeof value === 'string' && name !== 'cf-turnstile-response') payload[name] = value;
+      }
+      let response;
+      try {
+        response = await fetch(`${LEAD_API}/api/lead`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        return submitToFormspree();
+      }
+      if (response.status === 503 || response.status >= 500) return submitToFormspree();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        return submitToFormspree();
+      }
+      if (!response.ok || !data.ok) {
+        const errors = data.errors && typeof data.errors === 'object' ? data.errors : {};
+        markFieldErrors(errors);
+        showFormError(Object.keys(errors).length ? Object.values(errors).join(' ') : data.error);
+        return false;
+      }
+      markFieldErrors({});
+      openSuccessModal('Message received', data.message);
+      return true;
+    }
+
+    function markFieldErrors(errors) {
+      form.querySelectorAll('[aria-invalid="true"]').forEach((el) => el.removeAttribute('aria-invalid'));
+      const names = Object.keys(errors);
+      names.forEach((name) => {
+        const el = form.querySelector(`[name="${CSS.escape(name)}"]`);
+        if (el) el.setAttribute('aria-invalid', 'true');
+      });
+      if (names.length) form.querySelector(`[name="${CSS.escape(names[0])}"]`)?.focus();
     }
 
     /**
