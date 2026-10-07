@@ -33,6 +33,7 @@ import { expireInquiryIpHashes } from '../crm/intake.js';
 import { runStaffBrief } from './brief.js';
 import { sendRosterDigest, sendStaffBriefEmail } from '../email.js';
 import { reconcileCrm, RECONCILE_STEPS } from '../crm/reconcile.js';
+import { runRetention, RULES as RETENTION_RULES } from '../privacy/retention.js';
 
 export const QUERY_BUDGET = 45;
 const STALE_MS = 30 * 60 * 1000;
@@ -101,7 +102,7 @@ export const JOBS = [
   },
   {
     // One staff email a day, only when there is something to do.
-    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 14,
+    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 16,
     run: async (env) => {
       const r = await runStaffBrief(env, sendStaffBriefEmail);
       // Not sent because the provider failed or the day's allowance is gone:
@@ -133,6 +134,15 @@ export const JOBS = [
     // the main path; this catches anything they missed, a few an hour.
     name: 'paypal-sweep', cadence: 'hourly', minQueries: 6,
     run: async (env) => ({ detail: { synced: await sweepSubscriptions(env, SWEEP_PER_RUN) } }),
+  },
+  {
+    // Retention (privacy/retention.js): counts every day; removes only when
+    // RETENTION_MODE is "enforce". Its report is on Admin -> Privacy.
+    name: 'retention', cadence: 'daily', minQueries: RETENTION_RULES.length * 2 + 2,
+    run: async (env) => {
+      const r = await runRetention(env);
+      return { detail: { mode: r.mode, due: Object.fromEntries(r.rules.map((x) => [x.key, x.due])), removed: r.removed } };
+    },
   },
   {
     // This table's own history, bounded.

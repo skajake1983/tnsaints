@@ -152,6 +152,40 @@
    "no-script"
   ]
  },
+ "GET /clearances": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /clearances/person?email=nobody%40example.com": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /crm": {
   "admin": [
    200,
@@ -883,6 +917,40 @@
    "no-script"
   ]
  },
+ "POST /clearances": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /clearances/999999/revoke": {
+  "admin": [
+   303,
+   "redirect /clearances?msg=not-found",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "POST /crm/cards/999999/move": {
   "admin": [
    303,
@@ -1091,6 +1159,57 @@
   "admin": [
    303,
    "redirect /privacy?msg=updated",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /privacy/holds": {
+  "admin": [
+   303,
+   "redirect /privacy?msg=hold-not-found",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /privacy/holds/999999/release": {
+  "admin": [
+   303,
+   "redirect /privacy?msg=updated",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /privacy/retention/check": {
+  "admin": [
+   303,
+   "redirect /privacy?msg=report-run",
    "no-script"
   ],
   "coach": [

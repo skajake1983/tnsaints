@@ -108,6 +108,14 @@ ROUTES = [
     ("POST", "/crm/families/999999/owner", FORM, {"owner": ""}),
     ("POST", "/crm/tasks", FORM, {"title": ""}),
     ("POST", "/crm/tasks/999999/done", FORM, {}),
+    # Privacy and safety (S1).
+    ("POST", "/privacy/retention/check", FORM, {}),
+    ("POST", "/privacy/holds", FORM, {"subject_type": "household", "subject_id": "999999", "reason": "Test"}),
+    ("POST", "/privacy/holds/999999/release", FORM, {}),
+    ("GET", "/clearances", None, None),
+    ("POST", "/clearances", FORM, {}),
+    ("GET", "/clearances/person?email=nobody%40example.com", None, None),
+    ("POST", "/clearances/999999/revoke", FORM, {}),
 ]
 
 

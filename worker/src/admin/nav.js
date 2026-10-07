@@ -16,6 +16,7 @@ export const NAV = [
   { href: '/crm', label: 'CRM' },
   { href: '/privacy', label: 'Privacy' },
   { href: '/users', label: 'Users' },
+  { href: '/clearances', label: 'Clearances' },
   { href: '/profile', label: 'Profile' },
 ];
 

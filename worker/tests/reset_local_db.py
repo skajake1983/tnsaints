@@ -29,10 +29,13 @@ from _d1 import WORKER_DIR, execute_local
 
 # Children before parents.
 TABLES = [
-    # CRM intake (012)
+    # Privacy and safety (014)
+    "legal_holds",
+    "clearances",
     # CRM screens (013)
     "crm_activities",
     "crm_household_meta",
+    # CRM intake (012)
     "crm_tasks",
     "crm_opportunities",
     "crm_inquiries",

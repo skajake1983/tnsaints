@@ -51,8 +51,10 @@ const CAPABILITIES = {
     // Download the contact list (audited); merge, anonymize and import contacts.
     'crm:export',
     'crm:admin',
-    // Act on families' deletion requests.
+    // Act on families' deletion requests; legal holds and the retention report.
     'privacy:manage',
+    // Record and withdraw background checks and trainings (safety/clearances.js).
+    'clearances:manage',
   ]),
 
   // Coaches evaluate basketball. Contact details and medical notes are not

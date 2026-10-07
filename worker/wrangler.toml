@@ -132,6 +132,17 @@ ENROLLMENT_ENABLED = "false"
 # SESSION_MAX_DAYS = "30"
 # RECENT_AUTH_HOURS = "12"
 
+# Retention (src/privacy/retention.js). "report" (the default; anything but
+# exactly "enforce") counts what each rule would remove and shows it on
+# Admin -> Privacy, removing nothing. The periods are defaults PENDING THE
+# ATTORNEY'S REVIEW (plan item O15); see PORTAL-SETUP.md section 10.
+RETENTION_MODE = "report"
+# RETENTION_MEDICAL_DAYS = "90"
+# RETENTION_LEAD_MONTHS = "24"
+# RETENTION_WAIVER_YEARS = "7"
+# RETENTION_WAIVER_MIN_AGE = "21"
+# RETENTION_PAYMENT_YEARS = "7"
+
 # The day each child's grade goes up by one ("MM-DD", Central time). Default
 # shown. A date that is not in every year (02-29) or malformed keeps July 1.
 # SCHOOL_YEAR_STARTS = "07-01"

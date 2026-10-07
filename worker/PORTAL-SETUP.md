@@ -165,7 +165,70 @@ brief. To act on one:
    period ends — ask the accountant/attorney for the periods (plan item O15).
 4. Mark the request completed in Admin → Privacy, and email the family.
 
-## 11. When something goes wrong
+### Retention and legal holds
+
+The daily job counts what each retention rule would remove and shows it on
+Admin → Privacy → Retention. With `RETENTION_MODE = "report"` (the default)
+**nothing is removed**. The periods are defaults pending the attorney (plan
+item O15), each a setting in `wrangler.toml`:
+
+| Rule | Default | Setting |
+|---|---|---|
+| A child's medical answer, after their last place ended | 90 days | `RETENTION_MEDICAL_DAYS` |
+| An evaluation registration's medical note, after the evaluation | 90 days | `RETENTION_MEDICAL_DAYS` |
+| A contact never converted and untouched (anonymized) | 24 months | `RETENTION_LEAD_MONTHS` |
+| A signed waiver: both this long AND the child this old | 7 years, age 21 | `RETENTION_WAIVER_YEARS`, `RETENTION_WAIVER_MIN_AGE` |
+| A payment record | 7 years | `RETENTION_PAYMENT_YEARS` |
+
+To start removing: approve the periods, watch two weeks of reports, then set
+`RETENTION_MODE = "enforce"` and deploy. It removes up to 200 rows per rule
+per day, re-checking each rule as it removes, and audits counts only.
+
+**Legal hold** (Admin → Privacy → Legal holds): keeps everything about a
+family, child, CRM contact or evaluation registration out of every rule until
+released — for a dispute, an insurance claim or a safeguarding concern. Use the
+number from the record's page address. Keep the reason short and free of
+medical or safeguarding detail.
+
+## 11. The CRM
+
+Admin → CRM. Website inquiries arrive in the Inbox and as cards and tasks;
+parents who sign up for the portal are matched to their inquiry by email
+every day (and whenever a contact or family page is opened), and their copy of
+the lead's details is cleared — the family's own record is the one kept.
+
+- **First time:** CRM → Import brings in families from past evaluations (one
+  contact per parent email, one card per child). Running it twice adds nothing.
+- **Owners:** set who looks after each contact or family; their open cards follow.
+- **Email** families from your own mail program (the email links); log the
+  call, email or meeting on the timeline. The site's email allowance is never
+  used for one-to-one mail.
+- **Downloading the contact list** is recorded in the audit log.
+- **Merge** two contacts for the same person, or **anonymize** someone who asks
+  to be forgotten: CRM administrators only, and neither can be undone.
+
+## 12. Clearances
+
+Admin → Clearances. Everyone who works with children needs a current background
+check, abuse-prevention training and concussion training (the providers and
+how long each lasts are the academy's policy — plan item O14; Tennessee's
+concussion-training rule is to be confirmed with the attorney). Record each
+from its certificate, with its expiry date. The daily brief lists anyone lapsed
+or lapsing within 30 days, and a coach who is not fully cleared cannot be put
+on a team.
+
+## 13. Scheduled jobs
+
+The cron fires every hour; the job runner decides what is due (Central time)
+and keeps each run inside D1's per-invocation query limit. Each job's last run
+is in the `job_runs` table (counts only):
+
+    npx wrangler d1 execute tnsaints --remote --command "SELECT job, run_key, status, detail FROM job_runs ORDER BY started_at DESC LIMIT 20"
+
+A job that ran out of room is `partial` and continues next hour; one that
+failed is retried next hour.
+
+## 14. When something goes wrong
 
 - **A family paid but had no seat** (their offer lapsed and the group filled):
   listed on Admin → Billing and in the daily brief. Offer them a seat from the
