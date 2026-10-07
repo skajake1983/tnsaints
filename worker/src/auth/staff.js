@@ -48,6 +48,9 @@ const CAPABILITIES = {
     // The CRM: see contacts and inquiries; change their state.
     'crm:view',
     'crm:write',
+    // Download the contact list (audited); merge, anonymize and import contacts.
+    'crm:export',
+    'crm:admin',
     // Act on families' deletion requests.
     'privacy:manage',
   ]),

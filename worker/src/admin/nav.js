@@ -13,7 +13,7 @@ export const NAV = [
   { href: '/enrollments', label: 'Enrollments' },
   { href: '/families', label: 'Families' },
   { href: '/billing', label: 'Billing' },
-  { href: '/inbox', label: 'Inbox' },
+  { href: '/crm', label: 'CRM' },
   { href: '/privacy', label: 'Privacy' },
   { href: '/users', label: 'Users' },
   { href: '/profile', label: 'Profile' },

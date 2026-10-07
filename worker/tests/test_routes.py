@@ -90,6 +90,24 @@ ROUTES = [
     ("GET", "/api/message/999999/preview", None, None),
     # Wrong method on a real path: falls through to the not-found page.
     ("DELETE", "/users", None, None),
+    # The CRM screens (C1).
+    ("GET", "/crm", None, None),
+    ("GET", "/crm?pipeline=sponsor", None, None),
+    ("GET", "/crm/list", None, None),
+    ("GET", "/crm/list.csv", None, None),
+    ("GET", "/crm/tasks", None, None),
+    ("GET", "/crm/customers", None, None),
+    ("GET", "/crm/contacts/new", None, None),
+    ("POST", "/crm/contacts/new", FORM, {}),
+    ("GET", "/crm/contacts/999999", None, None),
+    ("GET", "/crm/families/999999", None, None),
+    ("GET", "/crm/import", None, None),
+    ("POST", "/crm/cards/999999/move", FORM, {"stage": "contacted"}),
+    ("POST", "/crm/contacts/999999/activity", FORM, {"kind": "call"}),
+    ("POST", "/crm/contacts/999999/merge", FORM, {"into_id": "1"}),
+    ("POST", "/crm/families/999999/owner", FORM, {"owner": ""}),
+    ("POST", "/crm/tasks", FORM, {"title": ""}),
+    ("POST", "/crm/tasks/999999/done", FORM, {}),
 ]
 
 

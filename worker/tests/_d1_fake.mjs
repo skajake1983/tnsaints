@@ -20,6 +20,8 @@ const plain = (row) => (row ? { ...row } : row);
 
 export function fakeD1({ migrate = true } = {}) {
   const db = new DatabaseSync(':memory:');
+  // D1 enforces foreign keys; so does this.
+  db.exec('PRAGMA foreign_keys = ON');
   const stats = { queries: 0 };
   if (migrate) {
     db.exec(readFileSync(join(WORKER_DIR, 'schema.sql'), 'utf8'));

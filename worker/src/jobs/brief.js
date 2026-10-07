@@ -59,7 +59,7 @@ export function briefLines(summary) {
   add(summary.offersLapsingSoon, (c) => `${c} seat ${c === 1 ? 'offer lapses' : 'offers lapse'} in the next two days`, '/enrollments');
   add(summary.applied, (c) => `${c} new academy ${c === 1 ? 'application' : 'applications'} to review`, '/enrollments');
   add(summary.newInquiries, (c) => `${c} website ${c === 1 ? 'inquiry' : 'inquiries'} in the last day (${summary.unhandledInquiries} not yet handled)`, '/inbox');
-  add(summary.tasksDue, (c) => `${c} follow-up ${c === 1 ? 'task is' : 'tasks are'} due or overdue`, '/inbox');
+  add(summary.tasksDue, (c) => `${c} follow-up ${c === 1 ? 'task is' : 'tasks are'} due or overdue`, '/crm/tasks?view=overdue');
   add(summary.unlinkedSubscriptions, (c) => `${c} PayPal ${c === 1 ? 'subscription' : 'subscriptions'} not yet matched to a child`, '/billing');
   add(summary.waitlist, (c) => `${c} on the academy waiting list`, '/enrollments');
   return lines;

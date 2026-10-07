@@ -152,6 +152,176 @@
    "no-script"
   ]
  },
+ "GET /crm": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/contacts/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/contacts/new": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/customers": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/families/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/import": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/list": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/list.csv": {
+  "admin": [
+   200,
+   "text/csv",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm/tasks": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /crm?pipeline=sponsor": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /decisions": {
   "admin": [
    200,
@@ -700,6 +870,125 @@
   "admin": [
    303,
    "redirect /billing?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/cards/999999/move": {
+  "admin": [
+   303,
+   "redirect /crm?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/contacts/999999/activity": {
+  "admin": [
+   303,
+   "redirect /crm/contacts/999999?msg=not-found",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/contacts/999999/merge": {
+  "admin": [
+   303,
+   "redirect /crm/contacts/999999?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/contacts/new": {
+  "admin": [
+   400,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/families/999999/owner": {
+  "admin": [
+   303,
+   "redirect /crm/families/999999?msg=not-found",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/tasks": {
+  "admin": [
+   303,
+   "redirect /crm/tasks?msg=invalid",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /crm/tasks/999999/done": {
+  "admin": [
+   303,
+   "redirect /crm/tasks?msg=not-found",
    "no-script"
   ],
   "coach": [

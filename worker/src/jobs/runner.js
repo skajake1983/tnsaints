@@ -32,6 +32,7 @@ import { sweepSubscriptions } from '../payments/billing.js';
 import { expireInquiryIpHashes } from '../crm/intake.js';
 import { runStaffBrief } from './brief.js';
 import { sendRosterDigest, sendStaffBriefEmail } from '../email.js';
+import { reconcileCrm, RECONCILE_STEPS } from '../crm/reconcile.js';
 
 export const QUERY_BUDGET = 45;
 const STALE_MS = 30 * 60 * 1000;
@@ -120,6 +121,12 @@ export const JOBS = [
     // Inquiries keep a salted IP hash for 30 days, for rate limiting only.
     name: 'inquiry-ip-expiry', cadence: 'daily', minQueries: 1,
     run: async (env) => ({ detail: { cleared: await expireInquiryIpHashes(env) } }),
+  },
+  {
+    // The CRM catching up with the portal: leads linked to families, cards
+    // moved by evaluations and academy places (crm/reconcile.js). Fixed size.
+    name: 'crm-reconcile', cadence: 'daily', minQueries: RECONCILE_STEPS.length,
+    run: async (env) => ({ detail: await reconcileCrm(env) }),
   },
   {
     // Re-read the PayPal subscriptions we have heard least about. Webhooks are
