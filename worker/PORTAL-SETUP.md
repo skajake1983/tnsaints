@@ -64,11 +64,18 @@ kills every outstanding sign-in link and invitation at once.
 3. Check: `https://api.tnsaints.com/api/health` answers `{"ok":true}`, and the
    admin still signs in.
 
+Restoring the database: prefer D1 Time Travel
+(`npx wrangler d1 time-travel restore tnsaints --timestamp=<ISO time>`). A
+`wrangler d1 export` file does not import as it is: it lists tables in the
+order they were created, and `registrations` (which points at `players`) was
+created before `players`. Move the `players` table and its rows to the top of
+the file first. (Found rehearsing 007–018 on a copy of production, 2026-10-07.)
+
 Rollback: `npx wrangler rollback` returns to the previous version. Migrations
 only ever add tables and columns, so the older code runs fine against them.
 
 **First deploy of the portal and admin work:** production has migrations
-001–006. Before that deploy, apply 007 to 018 in order. Rehearse it on a
+001–006. Before that deploy, apply 007 to 019 in order. Rehearse it on a
 local copy of production first
 (`npx wrangler d1 export tnsaints --remote --output=prod.sql`, import it
 locally, apply the migrations there and run the suites). Then apply them to
@@ -88,8 +95,9 @@ production:
 | 016 | `governance.sql` | board, meetings, motions, votes, documents, disclosures, compliance calendar |
 | 017 | `donations.sql` | donations and receipts |
 | 018 | `staff_board_role.sql` | the `board` staff role (rebuilds the `staff` table; export it first, as the file says) |
+| 019 | `places_paid_outside.sql` | how a place staff added is paid today (PayPal Join page, or other) |
 
-All of them are safe to re-run except 008 and 015 (018 re-runs harmlessly). Those end in ALTERs, so a
+All of them are safe to re-run except 008, 015 and 019 (018 re-runs harmlessly). Those end in ALTERs, so a
 re-run fails with "duplicate column name", which means the file was already
 applied.
 
@@ -135,9 +143,13 @@ moving the account to the non-profit's EIN.
 6. Going live repeats 1–4 on the **Live** tab with the `_LIVE` names, the live
    plan ID in the admin, and `PAYPAL_ENV = "live"`.
 
-Families who already pay through the old Join page are matched by hand:
-Admin → Billing → paste their `I-…` subscription ID → record → link to their
-child. The family is then asked to sign the waiver on the portal.
+Families who already pay through the old Join page: invite them (Admin →
+Families → *Invite a family*); once they have added their children, use
+*Add a place* on each child: the group they practise with, how they pay today
+(PayPal Join page, or other), and their `I-…` subscription id if you have it.
+The place starts active, takes a seat, and the family is asked to sign the
+waiver when they next sign in. (Admin → Billing can also link a PayPal
+subscription to a child, but needs the PayPal API keys.)
 
 ## 6. Turnstile (plan item O7)
 

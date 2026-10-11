@@ -57,6 +57,8 @@ ROUTES = [
     ("GET", "/families", None, None),
     ("POST", "/families/invite", FORM, {"email": "not an email"}),
     ("GET", "/families/children/999999/medical", None, None),
+    ("GET", "/families/children/999999/place", None, None),
+    ("POST", "/families/children/999999/place", FORM, {}),
     ("GET", "/programs/academy", None, None),
     ("GET", "/programs/no-such-program", None, None),
     ("POST", "/programs/academy/groups/999999", FORM, {}),

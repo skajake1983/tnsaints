@@ -205,7 +205,7 @@ print("\n=== the admin ===")
 for path in ["/", "/profile", "/eval", "/decisions", "/programs", "/programs/academy", "/enrollments", "/families", "/billing",
              "/crm", "/crm/list", "/crm/tasks", "/crm/customers", "/crm/contacts/new", "/crm/import", "/inbox", "/privacy",
              "/users", "/clearances", "/teams", "/brief", "/board", "/board/members", "/board/meetings",
-             "/board/documents", "/board/compliance", "/board/disclosures", "/donations"]:
+             "/board/documents", "/board/compliance", "/board/disclosures", "/donations", f"/families/children/{KID}/place"]:
     audit(f"admin {path}", BASE + A + path)
 
 check.finish()

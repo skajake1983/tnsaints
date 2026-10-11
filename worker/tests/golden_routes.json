@@ -835,6 +835,28 @@
    "no-script"
   ]
  },
+ "GET /families/children/999999/place": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /inbox": {
   "admin": [
    200,
@@ -2071,6 +2093,28 @@
   "admin": [
    303,
    "redirect /enrollments?msg=state",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /families/children/999999/place": {
+  "admin": [
+   404,
+   "html",
    "no-script"
   ],
   "board": [

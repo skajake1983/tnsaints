@@ -37,9 +37,11 @@ const FAMILY_MESSAGES = {
   invited: 'Invitation sent. They can now sign in with that address.',
   'invited-no-email': "Their account is ready, but the email didn't send (daily allowance or provider). Tell them to sign in at the portal with that address.",
   invalid: "That didn't look like an email address.",
+  placed: 'Place added. The family will be asked to sign the waiver the next time they sign in.',
 };
 
-export function familiesBody({ families, contact, medical, totals, base = '', message = '', canInvite = false, invited = [] }) {
+export function familiesBody({ families, contact, medical, totals, base = '', message = '', canInvite = false, invited = [],
+  canPlace = false }) {
   const childCount = families.reduce((n, f) => n + f.children.length, 0);
   const cards = families.length
     ? families
@@ -60,7 +62,8 @@ export function familiesBody({ families, contact, medical, totals, base = '', me
   <span>${esc(c.grade === null ? '' : gradeLabel(c.grade))}</span>
   <span>Shirt ${esc(c.shirtSize || '—')}</span>
   ${med}
-  ${c.academy ? `<span class="tag">${esc(ACADEMY[c.academy] || c.academy)}${c.group ? `: ${esc(c.group)}` : ''}</span>` : ''}</div>`;
+  ${c.academy ? `<span class="tag">${esc(ACADEMY[c.academy] || c.academy)}${c.group ? `: ${esc(c.group)}` : ''}</span>` : ''}
+  ${canPlace ? `<a href="${esc(base)}/families/children/${esc(c.id)}/place" aria-label="Add a place for ${esc(c.name)}">Add a place</a>` : ''}</div>`;
                 })
                 .join('')
             : '<div class="kid">No children added yet.</div>';
@@ -84,7 +87,7 @@ they sign in at the portal with that address.</p>
 ${invited.length ? `<p class="sub" style="padding:0 16px 12px;margin:0">Invited, not set up yet: ${invited.map((a) => esc(a.email)).join(', ')}</p>` : ''}</div>` : '';
   return `<h1>Families</h1>
 <p class="sub">${families.length} ${families.length === 1 ? 'family' : 'families'} and ${childCount} ${childCount === 1 ? 'child' : 'children'} on the parent portal.</p>
-${message && FAMILY_MESSAGES[message] ? `<div class="notice" role="status">${esc(FAMILY_MESSAGES[message])}</div>` : ''}
+${message && Object.hasOwn(FAMILY_MESSAGES, message) ? `<div class="notice" role="status">${esc(FAMILY_MESSAGES[message])}</div>` : ''}
 ${invite}
 <div class="panel"><h2>Practice shirts</h2><div style="padding:12px 16px" class="sizes">
   <p style="margin:0 0 6px">To order (offered or enrolled): ${sizesLine(totals.placed)}</p>
