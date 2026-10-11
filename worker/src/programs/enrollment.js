@@ -24,6 +24,7 @@
 import { randomToken } from '../lib/crypto.js';
 import { flag } from '../lib/flags.js';
 import { currentGrade } from '../lib/grades.js';
+import { waiverSeasonStart, needsWaiver } from './waiver-season.js';
 
 const MEMBER_OF = `SELECT household_id FROM household_members WHERE account_id = ?1`;
 const HOLDS_SEAT = `(e.status IN ('active', 'past_due') OR (e.status = 'offered' AND e.offer_expires_at > ?now))`;
@@ -138,7 +139,11 @@ export async function applicationBlockers(env, accountId, child, program) {
 /** The child's live enrollment in a program, if any (household-checked). */
 export async function liveEnrollment(env, accountId, playerId, programId) {
   return env.DB.prepare(
-    `SELECT e.* FROM enrollments e
+    `SELECT e.*, c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id,
+            pr.waiver_version_id AS program_waiver_id
+       FROM enrollments e
+       JOIN programs pr ON pr.id = e.program_id
+       LEFT JOIN consent_records c ON c.id = e.consent_record_id
       WHERE e.player_id = ?2 AND e.program_id = ?3 AND e.status IN ${LIVE}
         AND e.household_id IN (${MEMBER_OF})`
   )
@@ -194,16 +199,20 @@ export async function apply(env, accountId, { playerId, program, waiver, signatu
 export async function familyEnrollments(env, accountId) {
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.ref, e.player_id, e.program_id, e.status, e.offer_expires_at, e.applied_at, e.consent_record_id,
-            pr.name AS program_name, pr.enrollment_mode, g.name AS group_name, g.schedule_summary, g.location, g.starts_on
+            pr.name AS program_name, pr.enrollment_mode, g.name AS group_name, g.schedule_summary, g.location, g.starts_on,
+            c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id, pr.waiver_version_id AS program_waiver_id
        FROM enrollments e
        JOIN programs pr ON pr.id = e.program_id
        LEFT JOIN program_groups g ON g.id = e.group_id
+       LEFT JOIN consent_records c ON c.id = e.consent_record_id
       WHERE e.household_id IN (${MEMBER_OF})
       ORDER BY e.applied_at DESC`
   )
     .bind(accountId)
     .all();
-  return results || [];
+  // needs_waiver: never signed, signed before this season began, or signed for an older version.
+  const season = waiverSeasonStart(env);
+  return (results || []).map((e) => ({ ...e, needs_waiver: needsWaiver(e, season) }));
 }
 
 // --- staff decisions -------------------------------------------------------------------
@@ -342,7 +351,14 @@ export async function enrollmentWithGroup(env, enrollmentId) {
  * place must be this account's family's and still unsigned.
  * @returns {Promise<boolean>}
  */
-export async function signForExistingPlace(env, accountId, { enrollmentId, waiver, signature, relationship, photoRelease, ipHash }) {
+/**
+ * Sign the waiver for a place that exists: one never signed, or one whose
+ * signature is from before this season (seasonStart) or for an older version
+ * of the waiver. A new consent record is added (they are append-only) and the
+ * place points at it; the old one stays as history.
+ */
+export async function signForExistingPlace(env, accountId, { enrollmentId, waiver, signature, relationship, photoRelease, ipHash,
+  seasonStart }) {
   const now = iso();
   const [consent, attached] = await env.DB.batch([
     env.DB.prepare(
@@ -351,16 +367,19 @@ export async function signForExistingPlace(env, accountId, { enrollmentId, waive
                                    assumption_of_risk, medical_release, photo_release, signed_at, ip_hash)
        SELECT e.player_id, e.household_id, ?1, e.program_id, w.id, w.body_sha256, ?4, ?5, 1, 1, 1, ?6, ?7, ?8
          FROM enrollments e JOIN waiver_versions w ON w.id = ?3
-        WHERE e.id = ?2 AND e.consent_record_id IS NULL AND e.status IN ${LIVE}
-          AND e.household_id IN (${MEMBER_OF})`
-    ).bind(accountId, enrollmentId, waiver.id, signature, relationship, photoRelease ? 1 : 0, now, ipHash),
+        WHERE e.id = ?2 AND e.status IN ${LIVE}
+          AND e.household_id IN (${MEMBER_OF})
+          AND (e.consent_record_id IS NULL OR EXISTS (
+                SELECT 1 FROM consent_records old WHERE old.id = e.consent_record_id
+                   AND (old.signed_at < ?9 OR old.waiver_version_id != ?3)))`
+    ).bind(accountId, enrollmentId, waiver.id, signature, relationship, photoRelease ? 1 : 0, now, ipHash, seasonStart),
     env.DB.prepare(
       `UPDATE enrollments SET consent_record_id = (
          SELECT c.id FROM consent_records c
           WHERE c.id = last_insert_rowid() AND c.player_id = enrollments.player_id
             AND c.account_id = ?1 AND c.signed_at = ?3),
          updated_at = ?3
-        WHERE id = ?2 AND consent_record_id IS NULL AND household_id IN (${MEMBER_OF})
+        WHERE id = ?2 AND household_id IN (${MEMBER_OF})
           AND EXISTS (SELECT 1 FROM consent_records c WHERE c.id = last_insert_rowid()
                         AND c.player_id = enrollments.player_id AND c.account_id = ?1 AND c.signed_at = ?3)`
     ).bind(accountId, enrollmentId, now),

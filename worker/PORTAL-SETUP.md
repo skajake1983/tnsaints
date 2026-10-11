@@ -160,9 +160,22 @@ Cloudflare dashboard → Turnstile → the existing widget → add hostname
 
 Admin → Enrollments → *Price, groups and waiver*:
 
-- **Waiver**: paste the approved text, with the exact legal name of who
-  families agree with. A saved version can never be edited; to change wording,
-  save a new version and choose it.
+- **Waiver**: the approved text is `waivers/academy-v1.md` (owner approved
+  2026-10-10; the attorney is reviewing section 7). Paste everything below its
+  heading, with legal entity "Tennessee Saints Basketball Academy LLC". A
+  saved version can never be edited; to change wording, save a new version and
+  choose it. Every family with a place is then asked to sign it.
+- **Signing every season**: a signature lasts until the next
+  `WAIVER_SEASON_STARTS` (default `"08-01"`, Central). From that day each family
+  with a place is asked to sign again, and Admin → Families shows *Waiver
+  needed* beside each child still to sign. This is how the academy meets
+  Tennessee's yearly concussion-sheet review (Tenn. Code Ann. 68-55-503).
+- **Concussion sheet**: put the state's current concussion and head injury
+  information sheet on tnsaints.com and set `CONCUSSION_SHEET_URL` to it (an
+  https address). Every waiver form links it. Until it is set, the form asks
+  families to email for it. The same law needs the program director and every
+  coach to take the state's concussion course and sign its sheet each year:
+  record the course on the Clearances page.
 - **Groups**: one per scheduled group — day, times, place, first session
   (monthly billing starts there), seats, grades.
 - **Open to families**: refused until price, PayPal plan and waiver exist.

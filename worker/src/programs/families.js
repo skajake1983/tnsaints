@@ -14,6 +14,7 @@
 
 import { can } from '../auth/staff.js';
 import { currentGrade } from '../lib/grades.js';
+import { waiverSeasonStart, needsWaiver } from './waiver-season.js';
 
 const LIVE = `('applied', 'waitlist', 'offered', 'active', 'past_due')`;
 
@@ -29,11 +30,15 @@ export async function familiesView(env, principal) {
     env.DB.prepare(
       `SELECT p.id, p.household_id, p.display_name, p.grade_level, p.grade_school_year, p.shirt_size, p.school,
               pm.status AS medical_status,
-              e.status AS academy_status, g.name AS academy_group
+              e.status AS academy_status, g.name AS academy_group,
+              e.consent_record_id, c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id,
+              pr.waiver_version_id AS program_waiver_id
          FROM players p
          LEFT JOIN player_medical pm ON pm.player_id = p.id
          LEFT JOIN enrollments e ON e.player_id = p.id AND e.program_id = 'academy' AND e.status IN ${LIVE}
          LEFT JOIN program_groups g ON g.id = e.group_id
+         LEFT JOIN consent_records c ON c.id = e.consent_record_id
+         LEFT JOIN programs pr ON pr.id = e.program_id
         WHERE p.household_id IS NOT NULL
         ORDER BY p.display_name`
     ).all(),
@@ -56,6 +61,7 @@ export async function familiesView(env, principal) {
       ...(contact ? { email: m.email, phone: m.phone || '' } : {}),
     });
   }
+  const season = waiverSeasonStart(env);
   for (const c of children.results || []) {
     const h = byHousehold.get(c.household_id);
     if (!h) continue;
@@ -68,6 +74,7 @@ export async function familiesView(env, principal) {
       medical: c.medical_status || 'missing',
       academy: c.academy_status || '',
       group: c.academy_group || '',
+      waiverNeeded: needsWaiver({ ...c, status: c.academy_status }, season),
     });
   }
   for (const ec of contacts.results || []) byHousehold.get(ec.household_id)?.contacts.push(ec);

@@ -65,8 +65,9 @@ function placeLine(rc, child, e) {
     return `<span class="badge ok">Place offered${e.program_id === 'academy' ? '' : ` (${esc(name)})`}: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
   <a href="${esc(rc.url(`/pay/${e.ref}`))}">Accept and pay</a>`;
   }
-  if (['active', 'past_due'].includes(e.status) && !e.consent_record_id) {
-    return `<span class="badge warn">Action needed: sign the waiver</span>
+  if (e.needs_waiver) {
+    return `<span class="badge warn">Action needed: sign ${e.consent_record_id ? "this season's" : 'the'} waiver${
+      e.program_id === 'academy' ? '' : ` (${esc(name)})`}</span>
   <a href="${esc(rc.url(`/children/${child.id}/waiver/${e.program_id}`))}">Sign the waiver</a>`;
   }
   if (e.status === 'past_due') return `<span class="badge warn">${esc(name)}: payment needed</span>`;

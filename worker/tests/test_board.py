@@ -95,12 +95,6 @@ admin("POST", "/board/members", {"name": "Sam Secretary", "email": ME, "office":
 ELECT = one(f"SELECT id FROM board_members WHERE email='{ME}' AND term_start='2099-01-01'")["id"]
 st, _, html = admin("GET", "/board/members")
 check("a member-elect is listed as not started", "(not started)" in html)
-admin("POST", "/board/members", {"name": "Fay Future", "email": "fay@example.com", "office": "treasurer", "voting": "1",
-                                 "term_start": today})
-FAY = one("SELECT id FROM board_members WHERE email='fay@example.com'")["id"]
-st, h, _ = admin("POST", f"/board/members/{FAY}/end")
-check("ending a term the day it starts works (no end date before its start)", "msg=ended" in loc(h)
-      and one(f"SELECT ended_at IS NOT NULL AS e, term_end FROM board_members WHERE id={FAY}") == {"e": 1, "term_end": None}, loc(h))
 
 print("\n=== a board member sees the board and nothing about children ===")
 role("board")
@@ -240,5 +234,11 @@ check("admins can give someone the board role", "board — board records" in htm
 print("\n=== ending a term ===")
 admin("POST", f"/board/members/{NAN}/end")
 check("a term ends", one(f"SELECT ended_at IS NOT NULL AS ended FROM board_members WHERE id={NAN}")["ended"] == 1)
+admin("POST", "/board/members", {"name": "Fay Future", "email": "fay@example.com", "office": "treasurer", "voting": "1",
+                                 "term_start": today})
+FAY = one("SELECT id FROM board_members WHERE email='fay@example.com'")["id"]
+st, h, _ = admin("POST", f"/board/members/{FAY}/end")
+check("ending a term the day it starts works (no end date before its start)", "msg=ended" in loc(h)
+      and one(f"SELECT ended_at IS NOT NULL AS e, term_end FROM board_members WHERE id={FAY}") == {"e": 1, "term_end": None}, loc(h))
 
 check.finish()

@@ -63,6 +63,7 @@ export function familiesBody({ families, contact, medical, totals, base = '', me
   <span>Shirt ${esc(c.shirtSize || '—')}</span>
   ${med}
   ${c.academy ? `<span class="tag">${esc(ACADEMY[c.academy] || c.academy)}${c.group ? `: ${esc(c.group)}` : ''}</span>` : ''}
+  ${c.waiverNeeded ? '<span class="tag warn">Waiver needed</span>' : ''}
   ${canPlace ? `<a href="${esc(base)}/families/children/${esc(c.id)}/place" aria-label="Add a place for ${esc(c.name)}">Add a place</a>` : ''}</div>`;
                 })
                 .join('')

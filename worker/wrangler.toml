@@ -153,6 +153,15 @@ RETENTION_MODE = "report"
 # shown. A date that is not in every year (02-29) or malformed keeps July 1.
 # SCHOOL_YEAR_STARTS = "07-01"
 
+# Waivers last one season: families sign again from this day each year
+# (Central; owner, 2026-10-10), because Tennessee asks for the concussion
+# sheet to be reviewed yearly (Tenn. Code Ann. 68-55-503).
+WAIVER_SEASON_STARTS = "08-01"
+# The state's concussion and head injury information sheet, linked beside
+# every waiver. An https address; put a copy on tnsaints.com so it can't move.
+# Empty: the form asks families to email for it.
+CONCUSSION_SHEET_URL = ""
+
 # PayPal (src/payments). "sandbox" = test money; switch to "live" only after
 # a full sandbox run and PayPal's answer about the account (plan items O4, O5).
 # Each environment has its own client id (here) and secret (wrangler secret):

@@ -18,6 +18,7 @@ import {
   getProgram, listGroups, currentWaiver, programOpen, applicationBlockers, liveEnrollment, apply, priceLine,
   signForExistingPlace, enrollmentEnabled,
 } from '../programs/enrollment.js';
+import { waiverSeasonStart, needsWaiver } from '../programs/waiver-season.js';
 import { hashIp, clientIp } from '../http.js';
 import { audit } from '../auth/staff.js';
 import { currentGrade, gradeLabel } from '../lib/grades.js';
@@ -51,11 +52,18 @@ function groupChoices(groups, chosen) {
 </fieldset>`;
 }
 
-/** The waiver, the three agreements, photo choice, signature and relationship. */
-export function waiverSection(waiver, values, errors) {
+/**
+ * The waiver, the three agreements, photo choice, signature and relationship.
+ * `concussionUrl` (rc.concussionSheetUrl): Tennessee's concussion sheet, which
+ * the waiver says the family has reviewed (Tenn. Code Ann. 68-55-503).
+ */
+export function waiverSection(waiver, values, errors, concussionUrl = null) {
   return `  <section class="panel" aria-labelledby="w-h">
     <h2 id="w-h" style="margin-top:0">${esc(waiver.title)}</h2>
     <p class="hint">Between you and ${esc(waiver.legal_entity)}. Please read it before signing.</p>
+    <p class="hint">Before signing, review Tennessee's concussion and head injury information sheet with your child: ${concussionUrl
+    ? `<a href="${esc(concussionUrl)}" target="_blank" rel="noopener noreferrer">open the information sheet</a> (opens in a new tab).`
+    : 'email <a href="mailto:info@tnsaints.com">info@tnsaints.com</a> and we will send it to you.'}</p>
     <div class="waiver" role="region" aria-label="${esc(waiver.title)}" tabindex="0">${esc(waiver.body_text).replace(/\n/g, '<br>')}</div>
     <fieldset class="field${errorFor(errors, 'agree_risk') || errorFor(errors, 'agree_medical') || errorFor(errors, 'agree_esign') ? ' has-error' : ''}">
       <legend>Agreements <span class="req">(required)</span></legend>
@@ -101,7 +109,7 @@ ${errorSummary(errors)}
 <form method="post" action="${esc(rc.url(`/children/${child.id}/apply/${program.id}`))}" novalidate>
   <input type="hidden" name="waiver_version" value="${esc(waiver.id)}">
   <section class="panel">${groupChoices(groups, chosen)}</section>
-  ${waiverSection(waiver, values, errors)}
+  ${waiverSection(waiver, values, errors, rc.concussionSheetUrl)}
   <button class="btn" type="submit">Sign and apply</button>
 </form>`;
   return page(rc, program.name, body, status);
@@ -203,13 +211,14 @@ export async function waiverRoutes({ env, ctx, request, rc, session, pathname, m
   const program = await getProgram(env, m[2]);
   if (!child || !program) return notFoundResponse(rc);
   const place = await liveEnrollment(env, session.accountId, child.id, program.id);
-  if (!place || place.consent_record_id) return redirect(rc.url('/'));
+  const seasonStart = waiverSeasonStart(env);
+  if (!needsWaiver(place, seasonStart)) return redirect(rc.url('/'));
   const waiver = await currentWaiver(env, program);
   if (!waiver) {
     return page(rc, program.name, `<h1>${esc(program.name)}</h1>
 <p class="lede">The waiver isn't available right now. Please try again later, or email info@tnsaints.com.</p>`, 503);
   }
-  const render = (extra = {}) => signPage(rc, { child, program, waiver, ...extra });
+  const render = (extra = {}) => signPage(rc, { child, program, waiver, again: Boolean(place.consent_record_id), ...extra });
   if (method === 'GET') return render();
   if (method !== 'POST') return null;
   return readForm(async (form) => {
@@ -221,6 +230,7 @@ export async function waiverRoutes({ env, ctx, request, rc, session, pathname, m
     const signed = await signForExistingPlace(env, session.accountId, {
       enrollmentId: place.id, waiver, signature: values.signature, relationship: values.relationship,
       photoRelease: values.photo_release === 'yes', ipHash: await hashIp(clientIp(request), env.IP_HASH_SALT),
+      seasonStart,
     });
     if (!signed) return redirect(rc.url('/'));
     ctx.waitUntil(audit(env, {
@@ -231,14 +241,16 @@ export async function waiverRoutes({ env, ctx, request, rc, session, pathname, m
   });
 }
 
-export function signPage(rc, { child, program, waiver, values = {}, errors = [], status = 200 }) {
+export function signPage(rc, { child, program, waiver, again = false, values = {}, errors = [], status = 200 }) {
   const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
 <h1>Sign the waiver: ${esc(program.name)}</h1>
-<p class="lede">${esc(child.display_name)} has a place in the academy. Before they play, a guardian needs to sign the waiver.</p>
+<p class="lede">${again
+    ? `A new season has started, or the waiver has changed. Please read it and sign again for ${esc(child.display_name)}.`
+    : `${esc(child.display_name)} has a place in ${esc(program.name)}. Before they play, a guardian needs to sign the waiver.`}</p>
 ${errorSummary(errors)}
 <form method="post" action="${esc(rc.url(`/children/${child.id}/waiver/${program.id}`))}" novalidate>
   <input type="hidden" name="waiver_version" value="${esc(waiver.id)}">
-  ${waiverSection(waiver, values, errors)}
+  ${waiverSection(waiver, values, errors, rc.concussionSheetUrl)}
   <button class="btn" type="submit">Sign the waiver</button>
 </form>`;
   return page(rc, program.name, body, status);

@@ -32,6 +32,7 @@ import { googleConfigured, startGoogle, finishGoogle } from '../auth/google.js';
 import { verifyPage, redirect } from './auth-pages.js';
 import { familyRoutes, isFamilyPath } from './family.js';
 import { calendarFeed } from '../programs/teams.js';
+import { concussionSheetUrl } from '../programs/waiver-season.js';
 import { inviteLanding, acceptInvitation } from './guardians.js';
 import { esc, requestContext, portalPage, portalResponse, notFoundResponse, maintenanceResponse } from './ui.js';
 
@@ -52,6 +53,7 @@ export async function handlePortal(request, env, ctx, route) {
     // The TEST MODE banner appears once PayPal is configured for its sandbox,
     // not before: there is nothing to pay for until then.
     testMode: choice(env, 'PAYPAL_ENV', ['sandbox', 'live'], null) === 'sandbox',
+    concussionSheetUrl: concussionSheetUrl(env),
   });
   const method = request.method === 'HEAD' ? 'GET' : request.method;
 

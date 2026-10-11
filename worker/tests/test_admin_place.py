@@ -1,4 +1,4 @@
-"""Add a place: staff give an already-paying child a place (programs/places.js).
+"""Add a place, and the yearly waiver (programs/places.js, programs/waiver-season.js).
 
 Asserted: an admin adds a child to a group with room, in a program that is
 still a draft (the academy before payments open); the place is active, says how
@@ -6,6 +6,11 @@ the family pays today, and takes a seat; the family is then asked to sign the
 waiver and can; a full group, a second place in the same program, a bad PayPal
 id and a missing choice are refused with the reason, changing nothing; coaches
 and viewers cannot reach it; the audit row carries identifiers only.
+
+A signature lasts one season (from August 1): one from an earlier season, or
+for an older waiver version, asks the family to sign again, shows staff
+"Waiver needed", and signing adds a new consent record, keeping the old.
+Needs CONCUSSION_SHEET_URL=https://tnsaints.com/test-concussion-sheet.pdf in .dev.vars.
 """
 import hashlib
 import os
@@ -65,7 +70,7 @@ sql("INSERT INTO staff (email_norm, display_name, author_label, role, active, cr
 # The academy as it is before payments open: a draft, with a waiver and one group of two seats.
 WAIVER = "PLACE TEST WAIVER. Basketball involves risk."
 sql("UPDATE programs SET status='draft', waiver_version_id=NULL WHERE id='academy'")
-sql("DELETE FROM waiver_versions WHERE id='place-test-v1'")
+sql("DELETE FROM waiver_versions WHERE id IN ('place-test-v1', 'place-test-v2')")
 sql("INSERT INTO waiver_versions (id, legal_entity, title, body_text, body_sha256, effective_at, created_at) VALUES "
     f"('place-test-v1', 'Test entity', 'Test waiver', '{WAIVER}', '{hashlib.sha256(WAIVER.encode()).hexdigest()}', "
     "datetime('now'), datetime('now'))")
@@ -138,6 +143,58 @@ check("they sign it, and it is attached to the place", st == 303 and one(
     f"SELECT consent_record_id IS NOT NULL AS signed FROM enrollments WHERE player_id={AVA}")["signed"] == 1, st)
 st, _, _, _ = get(P + f"/children/{AVA}/waiver/academy", cookies=cookies["Brown"])
 check("another family cannot open it", st == 404, st)
+st, _, _, html = get(P + f"/children/{BEN}/waiver/academy", cookies=cookies["Adams"])
+check("the waiver form links Tennessee's concussion sheet (CONCUSSION_SHEET_URL)", st == 200
+      and 'href="https://tnsaints.com/test-concussion-sheet.pdf"' in html and "concussion and head injury information sheet" in html, st)
+
+print("\n=== a new season, or a new version, asks again (every August 1) ===")
+
+
+def kid_block(html, name):
+    m = re.search(r"<strong>" + re.escape(name) + r"</strong>(.*?)</div>", html, re.S)
+    return m.group(1) if m else ""
+
+
+st, _, html = admin("GET", "/families")
+check("staff see who still needs to sign: Ben yes, Ava no", "Waiver needed" in kid_block(html, "Ben Adams")
+      and "Waiver needed" not in kid_block(html, "Ava Adams"))
+fam = one(f"SELECT household_id FROM players WHERE id={AVA}")["household_id"]
+acct = one(f"SELECT account_id FROM household_members WHERE household_id={fam}")["account_id"]
+SHA1 = hashlib.sha256(WAIVER.encode()).hexdigest()
+first_consent = one(f"SELECT consent_record_id AS id FROM enrollments WHERE player_id={AVA}")["id"]
+# Last season's signature (consent records are append-only, so add an old one and point the place at it).
+sql("INSERT INTO consent_records (player_id, household_id, account_id, program_id, waiver_version_id, waiver_sha256, signature, "
+    "signer_relationship, esign_consent, assumption_of_risk, medical_release, photo_release, signed_at) VALUES "
+    f"({AVA}, {fam}, {acct}, 'academy', 'place-test-v1', '{SHA1}', 'Pat Adams', 'Mother', 1, 1, 1, 0, '2020-08-02T12:00:00.000Z')")
+OLD = one(f"SELECT id FROM consent_records WHERE player_id={AVA} AND signed_at LIKE '2020-%'")["id"]
+sql(f"UPDATE enrollments SET consent_record_id={OLD} WHERE player_id={AVA}")
+st, _, _, html = get(P + "/", cookies=cookies["Adams"])
+check("a signature from an earlier season: the family is asked again", "Action needed: sign this season's waiver" in html)
+st, _, _, html = get(P + f"/children/{AVA}/waiver/academy", cookies=cookies["Adams"])
+check("the signing page says why", st == 200 and "A new season has started, or the waiver has changed" in html, st)
+st, _, html = admin("GET", "/families")
+check("and staff see it", "Waiver needed" in kid_block(html, "Ava Adams"))
+SIGN = {"agree_risk": "on", "agree_medical": "on", "agree_esign": "on", "photo_release": "yes", "signature": "Pat Adams",
+        "relationship": "Mother"}
+st, h, _, _ = post(P + f"/children/{AVA}/waiver/academy", {"waiver_version": "place-test-v1", **SIGN}, cookies=cookies["Adams"])
+now_consent = one(f"SELECT consent_record_id AS id FROM enrollments WHERE player_id={AVA}")["id"]
+check("signing again adds a new record and the place points at it; the old ones stay", st == 303
+      and now_consent not in (OLD, first_consent)
+      and one(f"SELECT COUNT(*) AS n FROM consent_records WHERE player_id={AVA}")["n"] == 3, (st, now_consent))
+st, h, _, _ = post(P + f"/children/{AVA}/waiver/academy", {"waiver_version": "place-test-v1", **SIGN}, cookies=cookies["Adams"])
+check("once signed for this season, signing again does nothing",
+      one(f"SELECT COUNT(*) AS n FROM consent_records WHERE player_id={AVA}")["n"] == 3)
+# A new version of the waiver (for example, naming the non-profit).
+W2 = "PLACE TEST WAIVER v2. Basketball involves risk."
+sql("INSERT INTO waiver_versions (id, legal_entity, title, body_text, body_sha256, effective_at, created_at) VALUES "
+    f"('place-test-v2', 'Test entity', 'Test waiver', '{W2}', '{hashlib.sha256(W2.encode()).hexdigest()}', "
+    "datetime('now'), datetime('now'))")
+sql("UPDATE programs SET waiver_version_id='place-test-v2' WHERE id='academy'")
+st, _, _, html = get(P + "/", cookies=cookies["Adams"])
+check("a new waiver version: asked again", "Action needed: sign this season's waiver" in html)
+st, h, _, _ = post(P + f"/children/{AVA}/waiver/academy", {"waiver_version": "place-test-v2", **SIGN}, cookies=cookies["Adams"])
+c = one(f"SELECT c.waiver_version_id FROM enrollments e JOIN consent_records c ON c.id = e.consent_record_id WHERE e.player_id={AVA}")
+check("and the new signature is for the new version", st == 303 and c == {"waiver_version_id": "place-test-v2"}, (st, c))
 
 print("\n=== who may ===")
 for r in ("coach", "viewer"):

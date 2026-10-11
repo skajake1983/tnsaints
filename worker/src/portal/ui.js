@@ -114,12 +114,13 @@ const STYLES = `${BRAND_TOKENS}
  * door, so every link and form action is built with rc.url() and works in both.
  * A bare href="/family" would leave the portal locally and land on the API.
  */
-export function requestContext({ base = '', siteUrl = 'https://tnsaints.com', testMode = false } = {}) {
+export function requestContext({ base = '', siteUrl = 'https://tnsaints.com', testMode = false, concussionSheetUrl = null } = {}) {
   const trimmed = String(siteUrl).replace(/\/$/, '');
   return {
     base,
     siteUrl: trimmed,
     testMode,
+    concussionSheetUrl,
     url: (path) => `${base}${path.startsWith('/') ? path : `/${path}`}`,
   };
 }

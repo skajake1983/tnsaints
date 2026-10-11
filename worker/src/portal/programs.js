@@ -131,7 +131,7 @@ ${errorSummary(errors)}
     ${groupError ? `<span class="error">${esc(groupError.message)}</span>` : ''}
     ${options || '<p>No groups are scheduled yet.</p>'}
   </fieldset></section>
-  ${waiverSection(waiver, values, errors)}
+  ${waiverSection(waiver, values, errors, rc.concussionSheetUrl)}
   <p class="hint">${paid ? `Signing up holds the place for ${HOLD_MINUTES} minutes while you pay. If you don't finish, the place goes back.`
     : 'This program is free: signing up confirms the place.'}</p>
   <button class="btn" type="submit">${paid ? 'Sign and continue to payment' : 'Sign and confirm'}</button>
