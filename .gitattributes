@@ -1,0 +1,4 @@
+# Seed SQL carries waiver text whose SHA-256 is stored beside it. A CRLF
+# checkout would change the text and break the hash (the portal then refuses
+# the waiver), so these files keep LF line endings everywhere.
+worker/seeds/*.sql text eol=lf
