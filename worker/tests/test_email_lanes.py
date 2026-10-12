@@ -230,11 +230,14 @@ try:
     check("and the counter stays exactly at the limit (it used to climb on every refusal)",
           today_sent() == L, today_sent())
 
-    print("\n=== 3. alerts may spend the last credit; receipts stop at the reserve ===")
-    st, alerts, receipts = run_registration("Lane Last Credit", today=L - 1)
-    check("the alert takes the final credit", alerts == 1, alerts)
+    print("\n=== 3. alerts may spend up to the sign-in reserve; receipts stop at the alert reserve ===")
+    # Alerts and batches stop EMAIL_AUTH_RESERVE short of the daily limit, so a
+    # parent can always get a sign-in link (the whole day, when it is 0).
+    alert_ceiling = L - A
+    st, alerts, receipts = run_registration("Lane Last Credit", today=alert_ceiling - 1)
+    check("the alert takes the last credit it may use", alerts == 1, alerts)
     check("the receipt is held back", receipts == 0, receipts)
-    check("counter lands exactly on the limit", today_sent() == L, today_sent())
+    check("counter lands exactly on the alert ceiling", today_sent() == alert_ceiling, today_sent())
 
     receipt_ceiling = L - max(R, A)
     st, alerts, receipts = run_registration("Lane Reserve Edge", today=receipt_ceiling - 1)
@@ -298,7 +301,7 @@ try:
     st, r = call("POST", f"{ADMIN}/api/batch/{batch}/approve")
     check("batch approved", st == 200 and r.get("ok"), str(r)[:200])
 
-    set_budget(today=L - 1)
+    set_budget(today=L - A - 1)
     st, pre = call("GET", f"{ADMIN}/api/batch/{batch}/preflight")
     check("preflight shows the bulk ceiling as the limit", pre.get("budget_limit") == L - A, pre)
     check("preflight shows one credit left", pre.get("budget_remaining") == 1, pre)
@@ -314,7 +317,7 @@ try:
     check("the other waits in the queue, marked budget -- not failed",
           states.count('"send_state": "queued"') == 1 and '"last_error": "budget"' in states
           and '"send_state": "failed"' not in states, states[-300:])
-    check("the refusal did not push the counter past the limit", today_sent() == L, today_sent())
+    check("the refusal did not push the counter past the bulk ceiling", today_sent() == L - A, today_sent())
 
     set_budget(today=0, rows=[(5, month_ceiling - 3)])
     st, pre = call("GET", f"{ADMIN}/api/batch/{batch}/preflight")

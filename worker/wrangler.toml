@@ -16,13 +16,10 @@ compatibility_date = "2026-08-08"
 # broken Access policy takes down the dashboard, never parent registration.
 routes = [
   { pattern = "api.tnsaints.com", custom_domain = true },
-  { pattern = "admin.tnsaints.com", custom_domain = true }
-  # The parent portal's hostname is added at launch, with the owner's go-ahead
-  # (plan step P1.14). Deploying it creates public DNS and a certificate for
-  # portal.tnsaints.com; with PORTAL_ENABLED="false" it would only show the
-  # "not open yet" page, but it is still a new public address, so it is not
-  # created as a side effect of some other deploy:
-  #   { pattern = "portal.tnsaints.com", custom_domain = true }
+  { pattern = "admin.tnsaints.com", custom_domain = true },
+  # The parent portal, added at launch with the owner's go-ahead (2026-10-12).
+  # Deploying it created public DNS and a certificate for portal.tnsaints.com.
+  { pattern = "portal.tnsaints.com", custom_domain = true }
 ]
 
 # One canonical hostname. Declaring these explicitly rather than letting the
@@ -100,7 +97,7 @@ ADMIN_CSRF_MODE = "report"
 # .dev.vars opens it through the /__portal door (DEV_PORTAL=true).
 # ---------------------------------------------------------------------------
 PORTAL_HOSTNAME = "portal.tnsaints.com"
-PORTAL_ENABLED = "false"
+PORTAL_ENABLED = "true"
 
 # Who can get a sign-in link. "false" = invited families only (the pilot): an
 # address without an account is sent nothing, and the page answers the same
@@ -160,7 +157,10 @@ WAIVER_SEASON_STARTS = "08-01"
 # The state's concussion and head injury information sheet, linked beside
 # every waiver. An https address; put a copy on tnsaints.com so it can't move.
 # Empty: the form asks families to email for it.
-CONCUSSION_SHEET_URL = ""
+# The state form ("Concussion Information and Signature Form for
+# Student-Athletes & Parents/Legal Guardians"), as TSSAA hosts it; move to a
+# copy on tnsaints.com when the website update goes live (owner, 2026-10-12).
+CONCUSSION_SHEET_URL = "https://cms-files.tssaa.org/documents/tssaa/health-safety-information/concussionparents.pdf"
 
 # PayPal (src/payments). "sandbox" = test money; switch to "live" only after
 # a full sandbox run and PayPal's answer about the account (plan items O4, O5).
@@ -193,7 +193,7 @@ LEADS_ENABLED = "false"
 
 # The daily staff brief (jobs/brief.js): one email to NOTIFY_EMAIL_TO a day,
 # only when there is something to do. Costs at most one credit a day.
-STAFF_BRIEF_ENABLED = "false"
+STAFF_BRIEF_ENABLED = "true"
 
 # The public Turnstile site key (the same widget as the registration form).
 # portal.tnsaints.com must be added to the widget's hostnames in the
@@ -237,7 +237,7 @@ ROSTER_DIGEST_ENABLED = "false"
 # Raise the limits if the Resend plan is upgraded.
 EMAIL_DAILY_LIMIT = "100"
 EMAIL_ALERT_RESERVE = "25"
-EMAIL_AUTH_RESERVE = "0"
+EMAIL_AUTH_RESERVE = "15"
 EMAIL_MONTHLY_LIMIT = "3000"
 EMAIL_MONTHLY_AUTH_RESERVE = "150"
 

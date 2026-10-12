@@ -115,3 +115,5 @@ LEADS_ENABLED=true
 REGISTRATION_CLOSES_AT=2099-12-31T23:59:59-05:00
 # The concussion sheet link beside every waiver (tests/test_admin_place.py expects this test value).
 CONCUSSION_SHEET_URL=https://tnsaints.com/test-concussion-sheet.pdf
+# The scheduled staff brief stays off locally (tests/test_brief.py); production has it on.
+STAFF_BRIEF_ENABLED=false
