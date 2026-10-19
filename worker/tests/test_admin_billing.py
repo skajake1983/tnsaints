@@ -130,7 +130,7 @@ try:
     check("an id PayPal does not know says so", "PayPal does not know that subscription" in html)
     st, _, html = admin("GET", "/billing?lookup=I-JOINPAGE00001")
     check("a known id shows the payer, live from PayPal, so staff can recognise the family",
-          "Pat Payer" in html and "pat.payer@example.com" in html and "old Join page" not in html.split("Placed via")[0])
+          "Pat Payer" in html and "pat.payer@example.com" in html and "old Join page" not in html.split("Look up a subscription")[1].split("Placed via")[0])
     check("a lookup stores nothing", sql("SELECT 1 FROM billing_subscriptions") == [])
     a = sql("SELECT subject_id, detail FROM audit_log WHERE action='billing.lookup' ORDER BY id DESC LIMIT 1")
     check("but leaves a trace, carrying only the id", a and a[0]["subject_id"] == "I-JOINPAGE00001" and "pat.payer" not in str(a), a)

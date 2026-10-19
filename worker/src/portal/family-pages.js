@@ -65,11 +65,18 @@ function placeLine(rc, child, e) {
     return `<span class="badge ok">Place offered${e.program_id === 'academy' ? '' : ` (${esc(name)})`}: ${esc(e.group_name)} (${esc(e.schedule_summary)}), accept by ${esc(until)}</span>
   <a href="${esc(rc.url(`/pay/${e.ref}`))}">Accept and pay</a>`;
   }
+  // Everything this place needs from the family, each shown (one must not hide another).
+  const actions = [];
   if (e.needs_waiver) {
-    return `<span class="badge warn">Action needed: sign ${e.consent_record_id ? "this season's" : 'the'} waiver${
+    actions.push(`<span class="badge warn">Action needed: sign ${e.consent_record_id ? "this season's" : 'the'} waiver${
       e.program_id === 'academy' ? '' : ` (${esc(name)})`}</span>
-  <a href="${esc(rc.url(`/children/${child.id}/waiver/${e.program_id}`))}">Sign the waiver</a>`;
+  <a href="${esc(rc.url(`/children/${child.id}/waiver/${e.program_id}`))}">Sign the waiver</a>`);
   }
+  if (e.can_move) {
+    actions.push(`<span class="badge warn">Action needed: move your monthly payment from PayPal</span>
+  <a href="${esc(rc.url(`/pay/${e.ref}/move`))}">Move it now</a>`);
+  }
+  if (actions.length) return actions.join('<br>');
   if (e.status === 'past_due') return `<span class="badge warn">${esc(name)}: payment needed</span>`;
   return `<span class="badge ok">${esc(name)}: ${esc(e.group_name)} (${esc(e.schedule_summary)})</span>`;
 }
@@ -156,6 +163,11 @@ ${claim}
   <p style="margin-bottom:0"><a class="btn" href="${esc(rc.url('/children/new'))}">Add a child</a></p>
 </section>
 ${teamsPanel(rc, teams, children)}
+${enrollments.some((e) => Number(e.on_stripe)) ? `<section class="panel" aria-labelledby="pay-h">
+  <h2 id="pay-h" style="margin-top:0">Payments</h2>
+  <p>Change your card or bank account, see receipts, or cancel. Cancelling ends a place at the end of the month you've paid for.</p>
+  <p style="margin-bottom:0"><a class="btn secondary" href="${esc(rc.url('/billing/manage'))}">Manage billing</a></p>
+</section>` : ''}
 <section class="panel" aria-labelledby="ec-h">
   <h2 id="ec-h" style="margin-top:0">Emergency contacts</h2>
   ${ec}

@@ -42,7 +42,7 @@ export const routes = [
       return htmlResponse(page({ title: 'Families', principal, nav: NAV, current: '/families',
         body: familiesBody({ ...view, totals: shirtTotals(view.families), base, message: url.searchParams.get('msg'),
           canInvite: can(principal, 'crm:write'), invited: await invitedAccounts(env),
-          canPlace: can(principal, 'enrollments:manage') }), extraStyles: FAMILY_STYLES }));
+          canPlace: can(principal, 'enrollments:manage'), canBilling: can(principal, 'billing:manage') }), extraStyles: FAMILY_STYLES }));
     },
   },
   {

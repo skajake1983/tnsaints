@@ -13,6 +13,7 @@
 import { complianceAttention } from '../governance/board.js';
 import { clearanceAttention } from '../safety/clearances.js';
 import { flag } from '../lib/flags.js';
+import { stripeEnv } from '../payments/stripe.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -37,6 +38,10 @@ export async function briefSummary(env, now = Date.now()) {
     one(`SELECT COUNT(*) AS n FROM billing_subscriptions WHERE enrollment_id IS NULL AND status NOT IN ('CANCELLED', 'EXPIRED')`),
     one(`SELECT COUNT(*) AS n FROM audit_log WHERE action = 'billing.paid_without_seat' AND at >= ?1`, since),
     one(`SELECT COUNT(*) AS n FROM data_requests WHERE kind = 'deletion' AND status IN ('received', 'verified', 'scheduled')`),
+    // Moved to Stripe, but the old PayPal subscription is still running.
+    one(`SELECT COUNT(*) AS n FROM enrollments e WHERE e.billed_outside = 'paypal_join' AND e.paypal_cancelled_at IS NULL
+           AND EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.enrollment_id = e.id AND s.environment = ?1
+                         AND s.status IN ('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused'))`, stripeEnv(env)),
   ]);
   const n = (i) => Number(results[i].results?.[0]?.n || 0);
   return {
@@ -50,6 +55,7 @@ export async function briefSummary(env, now = Date.now()) {
     unlinkedSubscriptions: n(7),
     paidWithoutSeat: n(8),
     deletionRequests: n(9),
+    paypalToCancel: n(10),
     clearancesDue,
     complianceDue: compliance.due,
     complianceUndated: compliance.undated,
@@ -64,7 +70,8 @@ export function briefLines(summary) {
   add(summary.complianceDue, (c) => `${c} filing ${c === 1 ? 'deadline is' : 'deadlines are'} due within 30 days or overdue`, '/board/compliance');
   add(summary.clearancesDue, (c) => `${c} ${c === 1 ? 'person has' : 'people have'} a clearance lapsed or lapsing within 30 days`, '/clearances');
   add(summary.deletionRequests, (c) => `${c} data deletion ${c === 1 ? 'request is' : 'requests are'} waiting`, '/privacy');
-  add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due in PayPal`, '/families');
+  add(summary.paypalToCancel, (c) => `${c} ${c === 1 ? 'family has' : 'families have'} moved to the new payments — cancel their PayPal ${c === 1 ? 'subscription' : 'subscriptions'}`, '/billing');
+  add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due`, '/families');
   add(summary.offersLapsingSoon, (c) => `${c} seat ${c === 1 ? 'offer lapses' : 'offers lapse'} in the next two days`, '/enrollments');
   add(summary.applied, (c) => `${c} new academy ${c === 1 ? 'application' : 'applications'} to review`, '/enrollments');
   add(summary.newInquiries, (c) => `${c} website ${c === 1 ? 'inquiry' : 'inquiries'} in the last day (${summary.unhandledInquiries} not yet handled)`, '/inbox');

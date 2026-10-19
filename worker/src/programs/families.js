@@ -30,7 +30,7 @@ export async function familiesView(env, principal) {
     env.DB.prepare(
       `SELECT p.id, p.household_id, p.display_name, p.grade_level, p.grade_school_year, p.shirt_size, p.school,
               pm.status AS medical_status,
-              e.status AS academy_status, g.name AS academy_group,
+              e.status AS academy_status, g.name AS academy_group, e.id AS academy_enrollment_id,
               e.consent_record_id, c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id,
               pr.waiver_version_id AS program_waiver_id
          FROM players p
@@ -73,6 +73,7 @@ export async function familiesView(env, principal) {
       school: c.school || '',
       medical: c.medical_status || 'missing',
       academy: c.academy_status || '',
+      academyEnrollmentId: c.academy_enrollment_id || null,
       group: c.academy_group || '',
       waiverNeeded: needsWaiver({ ...c, status: c.academy_status }, season),
     });

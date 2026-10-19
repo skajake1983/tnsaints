@@ -13,6 +13,15 @@
  *   POST /pay/:ref/accept      confirms it (self-serve free sign-ups never come here:
  *                              they are confirmed when signed up)
  *
+ * When Admin -> Billing says new payments use Stripe (payments/stripe-billing.js):
+ *   GET  /pay/:ref             the offer, what will be charged when, and a button
+ *   POST /pay/:ref/checkout    creates a Stripe Checkout Session; 303 to Stripe's page
+ *   GET  /pay/:ref/done        Stripe sends the family back here; checked with Stripe
+ *   GET  /pay/:ref/move        a place paid through the old Join page: move to Stripe
+ *   POST /pay/:ref/move        creates that Checkout Session
+ *   GET  /billing/manage       303 to Stripe's billing page (card or bank, receipts, cancel)
+ * Card and bank details are entered on Stripe's own pages, never here.
+ *
  * The page exists only while this family's offer is live, so paying for a
  * place that has no seat and no schedule is not possible from here (the
  * owner's rule). PayPal is sent the enrollment's unguessable ref as
@@ -35,6 +44,12 @@ import { paypalConfig, paypalConfigured } from '../payments/paypal.js';
 import { approveFromPortal, activateEnrollment } from '../payments/billing.js';
 import { createOrderForPortal, captureForPortal } from '../payments/orders.js';
 import { priceLine, enrollmentEnabled } from '../programs/enrollment.js';
+import { stripeConfigured } from '../payments/stripe.js';
+import { portalOrigin } from '../auth/magic.js';
+import {
+  paymentsProvider, placeForAccount, firstCharge, percentOffFor, chargeSummary, startCheckout, syncCheckout,
+  liveSubscriptionFor, portalUrl,
+} from '../payments/stripe-billing.js';
 
 const NAV = [{ href: '/', label: 'Family' }, { href: '/programs', label: 'Programs' }, { href: '/account', label: 'Account' }];
 const REF = /^[A-Za-z0-9_-]{16,43}$/;
@@ -155,7 +170,7 @@ function startTime(startsOn, now = Date.now()) {
   return at > now + 24 * 60 * 60 * 1000 ? new Date(at).toISOString().replace('.000', '') : '';
 }
 
-function placeTable(offer) {
+function placeTable(offer, { cost = true } = {}) {
   const row = (label, value) => `<tr><th scope="row" style="text-align:left;padding:4px 16px 4px 0">${esc(label)}</th><td>${esc(value)}</td></tr>`;
   return `<section class="panel" aria-label="The place">
   <table style="border-collapse:collapse">
@@ -164,7 +179,7 @@ function placeTable(offer) {
     ${row('When', offer.schedule_summary)}
     ${offer.location ? row('Where', offer.location) : ''}
     ${offer.starts_on ? row('First session', longDate(`${offer.starts_on}T17:00:00Z`)) : ''}
-    ${row('Cost', priceLine(offer))}
+    ${cost ? row('Cost', priceLine(offer)) : ''}
   </table>
 </section>`;
 }
@@ -230,6 +245,43 @@ ${placeTable(offer)}
   return payResponse(rc, body, nonce);
 }
 
+/** The pay page when payments go through Stripe: what is charged when, and one button. */
+function stripePayPage(rc, offer, summary, action, heading = 'Accept the place', lede = heldLine(offer), { cost = true } = {}) {
+  const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
+<h1>${esc(heading)}</h1>
+<p class="lede">${esc(lede)}</p>
+${placeTable(offer, { cost })}
+<section class="panel" aria-labelledby="pay-h">
+  <h2 id="pay-h" style="margin-top:0">Payment</h2>
+  ${summary.map((l) => `<p>${esc(l)}</p>`).join('')}
+  <p class="hint">You pay on Stripe's secure page, by card or from your bank account. Stripe shows the program, never your
+  child's name. You can change your card or bank, see receipts, or cancel at any time from your family page; cancelling ends
+  the place at the end of the month you've paid for.</p>
+  <form method="post" action="${esc(action)}"><button class="btn" type="submit">Continue to secure payment</button></form>
+</section>`;
+  // The button's form posts here and is redirected on to Stripe's checkout page,
+  // which the form-action directive has to allow.
+  return page(rc, heading, body, {
+    headers: {
+      'Content-Security-Policy':
+        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'self' https://checkout.stripe.com; " +
+        "frame-ancestors 'none'; base-uri 'none'",
+    },
+  });
+}
+
+const STRIPE_ERRORS = {
+  'not-found': ["We couldn't find that place", "If you think this is a mistake, email info@tnsaints.com.", 404],
+  already: ["You're all set", 'Payment for this place is already set up. You can manage it from your family page.', 409],
+  'not-offered': ['This offer has ended', 'The time to accept this place has passed.', 410],
+  'not-movable': ['Nothing to move', 'This place is not paid through the old Join page, or we still need the date your PayPal payments cover. Email info@tnsaints.com and we will help.', 409],
+  'not-payable': ['Payments are not set up yet', 'Please try again later, or email info@tnsaints.com and we will help.', 503],
+};
+
+function seeOtherExternal(url) {
+  return new Response(null, { status: 303, headers: { Location: url, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+}
+
 const APPROVE_ERRORS = {
   'not-found': "We couldn't find that place.",
   unknown: "PayPal doesn't know that subscription yet. If you just paid, wait a minute and refresh your family page.",
@@ -262,11 +314,64 @@ async function jsonBody(request) {
  * @returns {Promise<Response|null>} null if not a pay route
  */
 export async function payRoutes({ env, ctx, request, rc, session, pathname, method }) {
-  const m = /^\/pay\/([A-Za-z0-9_-]{1,64})(\/approved|\/order|\/captured|\/accept)?$/.exec(pathname);
+  // Stripe's billing page for this family: card or bank, receipts, cancelling.
+  if (pathname === '/billing/manage' && method === 'GET') {
+    if (!stripeConfigured(env)) return message(rc, 'Billing is not available yet', 'Please try again later, or email info@tnsaints.com.', 503);
+    const url = await portalUrl(env, session.accountId, `${portalOrigin(env)}${rc.url('/')}`);
+    if (!url) return message(rc, 'No payments set up yet', 'Once you have paid for a place, you can manage it here.', 404);
+    return seeOtherExternal(url);
+  }
+
+  const m = /^\/pay\/([A-Za-z0-9_-]{1,64})(\/approved|\/order|\/captured|\/accept|\/checkout|\/done|\/move)?$/.exec(pathname);
   if (!m) return null;
   if (!REF.test(m[1])) return notFoundResponse(rc);
   const ref = m[1];
   const config = paypalConfig(env);
+
+  // --- Stripe ---------------------------------------------------------------
+  if (m[2] === '/done' && method === 'GET') {
+    const sessionId = new URL(request.url).searchParams.get('session_id') || '';
+    const result = await syncCheckout(env, sessionId, { accountId: session.accountId });
+    if (result.ok && result.status === 'complete') {
+      ctx.waitUntil(audit(env, { actor: `account:${session.accountId}`, action: 'portal.pay_stripe', subjectType: 'enrollment', subjectId: ref }));
+      return redirect(rc.url('/?notice=paid'));
+    }
+    if (result.reason === 'no-seat') return message(rc, 'We could not place your child', APPROVE_ERRORS['no-seat'], 409);
+    if (result.ok) {
+      return message(rc, "We're confirming your payment",
+        "Stripe hasn't told us the payment is complete yet. Your family page will show it within a few minutes — there is no need to pay again.", 202);
+    }
+    return notFoundResponse(rc);
+  }
+  if ((m[2] === '/checkout' || m[2] === '/move') && method === 'POST') {
+    if ((await paymentsProvider(env)) !== 'stripe' || !stripeConfigured(env)) return message(rc, ...STRIPE_ERRORS['not-payable']);
+    // A new place is paused with enrollment; moving an existing place never is.
+    if (m[2] === '/checkout' && !enrollmentEnabled(env)) {
+      return message(rc, 'Payments are paused', "We've paused new enrollments for a moment. Your offer is still yours until its pay-by date. Please try again later, or email info@tnsaints.com.", 503);
+    }
+    const result = await startCheckout(env, session.accountId, ref, {
+      purpose: m[2] === '/move' ? 'move' : 'place', origin: portalOrigin(env), base: rc.url('').replace(/\/$/, ''),
+    });
+    if (!result.ok) return message(rc, ...(STRIPE_ERRORS[result.reason] || STRIPE_ERRORS['not-payable']));
+    ctx.waitUntil(audit(env, { actor: `account:${session.accountId}`, action: m[2] === '/move' ? 'portal.move_started' : 'portal.checkout_started',
+      subjectType: 'enrollment', subjectId: ref }));
+    return seeOtherExternal(result.url);
+  }
+  if (m[2] === '/move' && method === 'GET') {
+    if ((await paymentsProvider(env)) !== 'stripe' || !stripeConfigured(env)) return message(rc, ...STRIPE_ERRORS['not-payable']);
+    const place = await placeForAccount(env, session.accountId, ref);
+    if (!place) return notFoundResponse(rc);
+    if (await liveSubscriptionFor(env, place.id)) return message(rc, ...STRIPE_ERRORS.already);
+    if (!['active', 'past_due'].includes(place.status) || place.billed_outside !== 'paypal_join' || !place.outside_paid_through) {
+      return message(rc, ...STRIPE_ERRORS['not-movable']);
+    }
+    const percentOff = await percentOffFor(env, place);
+    const plan = firstCharge({ nowMs: Date.now(), purpose: 'move', paidThrough: place.outside_paid_through, priceCents: place.price_cents, percentOff });
+    return stripePayPage(rc, place, chargeSummary(place, plan, percentOff, { purpose: 'move' }), rc.url(`/pay/${ref}/move`),
+      'Move your monthly payment',
+      `We're moving the academy's monthly payments from PayPal to card or bank account. No setup fee — you've paid it. Once this is done, we cancel your PayPal subscription for you.`,
+      { cost: false });
+  }
 
   if (!m[2] && method === 'GET') {
     const offer = await loadOffer(env, session.accountId, ref, config.planColumn);
@@ -283,6 +388,16 @@ export async function payRoutes({ env, ctx, request, rc, session, pathname, meth
     // not paused, so a family already mid-payment is still placed.
     if (!enrollmentEnabled(env)) {
       return message(rc, 'Payments are paused', "We've paused new enrollments for a moment. Your offer is still yours until its pay-by date. Please try again later, or email info@tnsaints.com.", 503);
+    }
+    if (offer.billing !== 'free' && (await paymentsProvider(env)) === 'stripe') {
+      if (!stripeConfigured(env) || !offer.price_cents) return message(rc, ...STRIPE_ERRORS['not-payable']);
+      const place = await placeForAccount(env, session.accountId, ref);
+      if (await liveSubscriptionFor(env, place.id)) return message(rc, ...STRIPE_ERRORS.already);
+      const percentOff = offer.billing === 'subscription' ? await percentOffFor(env, place) : 0;
+      const summary = offer.billing === 'subscription'
+        ? chargeSummary(place, firstCharge({ nowMs: Date.now(), purpose: 'place', startsOn: place.starts_on, priceCents: place.price_cents, percentOff }), percentOff)
+        : [`One payment of $${(place.price_cents / 100).toFixed(place.price_cents % 100 ? 2 : 0)}.`];
+      return stripePayPage(rc, offer, summary, rc.url(`/pay/${ref}/checkout`));
     }
     if (offer.billing === 'free') {
       return page(rc, 'Accept the place', `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>

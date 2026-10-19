@@ -19,6 +19,7 @@ import { validateRegistration, botSignals, allowedGrades } from './validate.js';
 import { handleAdmin } from './admin/router.js';
 import { handlePortal } from './portal/router.js';
 import { handlePaypalWebhook } from './payments/webhook.js';
+import { handleStripeWebhook } from './payments/stripe-webhook.js';
 import { handleLead } from './crm/lead-route.js';
 import { runJobs } from './jobs/runner.js';
 import { withActiveEvent, publicPrograms } from './programs/evaluation.js';
@@ -86,6 +87,9 @@ export default {
       // Server to server: no CORS, no browser, verified by signature (payments/webhook.js).
       if (url.pathname === '/api/paypal/webhook' && request.method === 'POST') {
         return await handlePaypalWebhook(request, env);
+      }
+      if (url.pathname === '/api/stripe/webhook' && request.method === 'POST') {
+        return await handleStripeWebhook(request, env);
       }
 
       // Website contact and interest forms -> CRM (crm/lead-route.js).

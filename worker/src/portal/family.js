@@ -31,6 +31,7 @@ import { payRoutes } from './pay.js';
 import { programRoutes } from './programs.js';
 import { familyTeams } from '../programs/teams.js';
 import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
+import { paymentsProvider } from '../payments/stripe-billing.js';
 
 const NOTICES = {
   joined: "Welcome — you've joined the family.",
@@ -64,6 +65,7 @@ export function isFamilyPath(pathname) {
     pathname === '/account/export' ||
     pathname === '/account/delete-request' ||
     pathname.startsWith('/pay/') ||
+    pathname === '/billing/manage' ||
     pathname === '/programs'
   );
 }
@@ -128,7 +130,7 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
   }
 
   if (pathname === '/' && method === 'GET') {
-    const [guardians, children, contacts, claimable, enrollments, academy, teams] = await Promise.all([
+    const [guardians, children, contacts, claimable, places, academy, teams, provider] = await Promise.all([
       data.listGuardians(env, accountId),
       data.listChildren(env, accountId),
       data.listEmergencyContacts(env, accountId),
@@ -136,7 +138,15 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       familyEnrollments(env, accountId),
       getProgram(env, 'academy'),
       familyTeams(env, accountId),
+      paymentsProvider(env),
     ]);
+    // A place paid through the old Join page, once Stripe is on and staff have
+    // recorded the last day PayPal covers: the family is asked to move it.
+    const enrollments = places.map((e) => ({
+      ...e,
+      can_move: provider === 'stripe' && e.billed_outside === 'paypal_join' && !e.on_stripe && Boolean(e.outside_paid_through)
+        && ['active', 'past_due'].includes(e.status),
+    }));
     return dashboardPage(rc, {
       household, guardians, children, contacts, claimable, enrollments,
       academy: academy && programOpen(academy) ? academy : null,

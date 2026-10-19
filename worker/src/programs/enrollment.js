@@ -200,7 +200,10 @@ export async function familyEnrollments(env, accountId) {
   const { results } = await env.DB.prepare(
     `SELECT e.id, e.ref, e.player_id, e.program_id, e.status, e.offer_expires_at, e.applied_at, e.consent_record_id,
             pr.name AS program_name, pr.enrollment_mode, g.name AS group_name, g.schedule_summary, g.location, g.starts_on,
-            c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id, pr.waiver_version_id AS program_waiver_id
+            c.signed_at AS consent_signed_at, c.waiver_version_id AS consent_waiver_id, pr.waiver_version_id AS program_waiver_id,
+            e.billed_outside, e.outside_paid_through,
+            (SELECT COUNT(*) FROM stripe_subscriptions s WHERE s.enrollment_id = e.id
+               AND s.status IN ('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused')) AS on_stripe
        FROM enrollments e
        JOIN programs pr ON pr.id = e.program_id
        LEFT JOIN program_groups g ON g.id = e.group_id

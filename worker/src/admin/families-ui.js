@@ -41,7 +41,7 @@ const FAMILY_MESSAGES = {
 };
 
 export function familiesBody({ families, contact, medical, totals, base = '', message = '', canInvite = false, invited = [],
-  canPlace = false }) {
+  canPlace = false, canBilling = false }) {
   const childCount = families.reduce((n, f) => n + f.children.length, 0);
   const cards = families.length
     ? families
@@ -64,7 +64,8 @@ export function familiesBody({ families, contact, medical, totals, base = '', me
   ${med}
   ${c.academy ? `<span class="tag">${esc(ACADEMY[c.academy] || c.academy)}${c.group ? `: ${esc(c.group)}` : ''}</span>` : ''}
   ${c.waiverNeeded ? '<span class="tag warn">Waiver needed</span>' : ''}
-  ${canPlace ? `<a href="${esc(base)}/families/children/${esc(c.id)}/place" aria-label="Add a place for ${esc(c.name)}">Add a place</a>` : ''}</div>`;
+  ${canPlace ? `<a href="${esc(base)}/families/children/${esc(c.id)}/place" aria-label="Add a place for ${esc(c.name)}">Add a place</a>` : ''}
+  ${canBilling && c.academyEnrollmentId ? `<a href="${esc(base)}/billing/places/${esc(c.academyEnrollmentId)}" aria-label="Billing for ${esc(c.name)}">Billing</a>` : ''}</div>`;
                 })
                 .join('')
             : '<div class="kid">No children added yet.</div>';

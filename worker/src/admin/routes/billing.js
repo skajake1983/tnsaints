@@ -1,6 +1,8 @@
 /**
- * Billing reconciliation (billing:manage): subscriptions the system could not
- * place by itself (old Join-page families, pasted ids) and places paid for
+ * Billing (billing:manage): which provider new payments use, families moving
+ * from the old Join page to Stripe, one place's billing (scholarship, PayPal
+ * paid-through day), and PayPal reconciliation: subscriptions the system could
+ * not place by itself (old Join-page families, pasted ids) and places paid for
  * without a seat.
  */
 
@@ -16,6 +18,11 @@ import { page, htmlResponse } from '../ui.js';
 import { billingBody, BILLING_STYLES } from '../billing-ui.js';
 import { NAV, denyHtml, seeOther } from '../nav.js';
 import { ENROLLMENT_PROGRAM } from './enrollments.js';
+import { stripeConfigured } from '../../payments/stripe.js';
+import { setPaymentsProvider } from '../../payments/stripe-billing.js';
+import { stripeOverview, placeBilling, savePlaceBilling, markPaypalCancelled } from '../../payments/stripe-admin.js';
+import { stripePanel, placeBillingBody, STRIPE_MESSAGES } from '../stripe-billing-ui.js';
+import { notFoundPage } from '../nav.js';
 
 const SUBSCRIPTION_ID_RE = /^I-[A-Z0-9]{6,40}$/;
 const denyBilling = denyHtml('Billing', 'Billing is limited to academy admins.');
@@ -34,6 +41,52 @@ export const routes = [
     handler: ({ request, env, ctx, principal, base }, m) =>
       handleBillingPost(request, env, ctx, principal, m[2], Number(m[1]), base),
   },
+  {
+    // Which provider new payments use. Stripe only once it has a key.
+    method: 'POST', path: '/billing/provider', cap: 'billing:manage', deny: denyBilling,
+    handler: async ({ request, env, ctx, principal, base }) => {
+      let form;
+      try { form = await readForm(request); } catch { form = null; }
+      const provider = String(form?.get('provider') || '');
+      if (provider === 'stripe' && !stripeConfigured(env)) return seeOther(base, '/billing?msg=not-configured');
+      if (!(await setPaymentsProvider(env, provider, principal.email))) return seeOther(base, '/billing?msg=provider-invalid');
+      ctx.waitUntil(audit(env, { actor: principal.email, action: 'billing.provider', subjectType: 'setting', subjectId: 'payments.provider',
+        detail: { provider } }));
+      return seeOther(base, '/billing?msg=provider');
+    },
+  },
+  {
+    method: 'GET', path: /^\/billing\/places\/(\d{1,12})$/, cap: 'billing:manage', deny: denyBilling,
+    handler: async ({ env, principal, url, base }, m) => {
+      const detail = await placeBilling(env, Number(m[1]));
+      if (!detail) return notFoundPage(principal, 'No such place');
+      return htmlResponse(page({ title: 'Billing', principal, nav: NAV, current: '/billing',
+        body: placeBillingBody({ detail, base, message: url.searchParams.get('msg') }), extraStyles: BILLING_STYLES }));
+    },
+  },
+  {
+    method: 'POST', path: /^\/billing\/places\/(\d{1,12})$/, cap: 'billing:manage', deny: denyBilling,
+    handler: async ({ request, env, ctx, principal, base }, m) => {
+      const id = Number(m[1]);
+      let form;
+      try { form = await readForm(request); } catch { form = null; }
+      const r = form ? await savePlaceBilling(env, id, form) : { result: 'invalid' };
+      if (r.result === 'saved') {
+        ctx.waitUntil(audit(env, { actor: principal.email, action: 'billing.place_settings', subjectType: 'enrollment', subjectId: id,
+          detail: { scholarship_changed: r.scholarshipChanged } }));
+      }
+      return seeOther(base, `/billing/places/${id}?msg=${r.result}`);
+    },
+  },
+  {
+    method: 'POST', path: /^\/billing\/places\/(\d{1,12})\/paypal-cancelled$/, cap: 'billing:manage', deny: denyBilling,
+    handler: async ({ env, ctx, principal, base }, m) => {
+      const id = Number(m[1]);
+      const done = await markPaypalCancelled(env, id);
+      if (done) ctx.waitUntil(audit(env, { actor: principal.email, action: 'billing.paypal_cancelled', subjectType: 'enrollment', subjectId: id }));
+      return seeOther(base, `/billing?msg=${done ? 'cancelled' : 'cancel-invalid'}`);
+    },
+  },
 ];
 
 async function renderBilling(env, ctx, principal, url, base) {
@@ -51,12 +104,16 @@ async function renderBilling(env, ctx, principal, url, base) {
     }
   }
   const program = await getProgram(env, ENROLLMENT_PROGRAM);
-  const [unlinked, paidNoSeat, children, groups] = await Promise.all([
+  const [unlinked, paidNoSeat, children, groups, overview] = await Promise.all([
     listUnlinked(env), listPaidWithoutSeat(env), linkableChildren(env), program ? listGroups(env, program.id) : [],
+    stripeOverview(env),
   ]);
+  const stripeNotice = Object.hasOwn(STRIPE_MESSAGES, String(message)) && message !== 'invalid'
+    ? `<div class="notice" role="status">${STRIPE_MESSAGES[message]}</div>` : '';
   return htmlResponse(page({
     title: 'Billing', principal, nav: NAV, current: '/billing',
-    body: billingBody({ unlinked, paidNoSeat, children, groups, found, message, env: paypalEnv(env), base }),
+    body: stripeNotice + stripePanel({ overview, base })
+      + billingBody({ unlinked, paidNoSeat, children, groups, found, message, env: paypalEnv(env), base }),
     extraStyles: BILLING_STYLES,
   }));
 }

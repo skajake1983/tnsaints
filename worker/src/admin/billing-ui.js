@@ -23,6 +23,7 @@ const MESSAGES = {
 };
 
 export const BILLING_STYLES = `
+  .inline { display:inline; } .inline button { font: inherit; font-size: 13px; padding: 4px 8px; margin-left: 6px; }
   .sub-row { background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 16px; margin-bottom:10px; font-size:14px; }
   .sub-row form { display:inline-flex; gap:6px; align-items:center; margin:6px 10px 0 0; flex-wrap: wrap; }
   .sub-row select, .sub-row button, .lookup input, .lookup button { font: inherit; font-size: 14px; padding: 6px 8px; min-height: 36px; }
@@ -75,7 +76,7 @@ export function billingBody({ unlinked, paidNoSeat, children, groups, found, mes
 </div></div>`
     : '';
 
-  return `<h1>Billing</h1>
+  return `<h2 style="margin-top:24px">PayPal</h2>
 <p class="sub">PayPal (${esc(env)}): subscriptions to match with a child, and payments that need a person.</p>
 ${message && MESSAGES[message] ? `<div class="notice" role="status">${esc(MESSAGES[message])}</div>` : ''}
 ${noSeat}

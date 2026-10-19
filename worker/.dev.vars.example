@@ -117,3 +117,9 @@ REGISTRATION_CLOSES_AT=2099-12-31T23:59:59-05:00
 CONCUSSION_SHEET_URL=https://tnsaints.com/test-concussion-sheet.pdf
 # The scheduled staff brief stays off locally (tests/test_brief.py); production has it on.
 STAFF_BRIEF_ENABLED=false
+# Stripe, against the stand-in tests/test_stripe.py runs on 127.0.0.1:8798 (honoured for
+# loopback only). Fake test-mode key and signing secret: the stand-in checks them.
+STRIPE_API_BASE=http://127.0.0.1:8798
+STRIPE_SECRET_KEY_SANDBOX=sk_test_mockstandin000000
+STRIPE_WEBHOOK_SECRET_SANDBOX=whsec_mockstandin000000
+STRIPE_WEBHOOK_ENABLED=true

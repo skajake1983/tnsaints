@@ -57,6 +57,11 @@ TABLES = [
     "team_events",
     "team_coaches",
     "paypal_orders",
+    # Stripe (020)
+    "stripe_events",
+    "stripe_checkouts",
+    "stripe_subscriptions",
+    "stripe_customers",
     # Billing (010)
     "payments",
     "paypal_events",

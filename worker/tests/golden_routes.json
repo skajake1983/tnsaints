@@ -175,6 +175,28 @@
    "no-script"
   ]
  },
+ "GET /billing/places/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /board": {
   "admin": [
    200,
@@ -1499,6 +1521,72 @@
   "admin": [
    303,
    "redirect /billing?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /billing/places/999999": {
+  "admin": [
+   303,
+   "redirect /billing/places/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /billing/places/999999/paypal-cancelled": {
+  "admin": [
+   303,
+   "redirect /billing?msg=cancel-invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /billing/provider": {
+  "admin": [
+   303,
+   "redirect /billing?msg=provider-invalid",
    "no-script"
   ],
   "board": [

@@ -187,6 +187,22 @@ PAYPAL_WEBHOOK_ENABLED = "false"
 # Anything else is read as "self".
 PAYPAL_WEBHOOK_VERIFY = "self"
 
+# Stripe (src/payments/stripe*.js), replacing PayPal (owner, 2026-10-07).
+# Which provider NEW payments use is not set here: it is Admin -> Billing
+# (app setting payments.provider), so it can be switched at launch without a
+# deploy. "sandbox" = Stripe's test mode; "live" only after a full test run.
+# Each environment has its own secret key and webhook signing secret:
+#   wrangler secret put STRIPE_SECRET_KEY_SANDBOX   (sk_test_... or rk_test_...)
+#   wrangler secret put STRIPE_WEBHOOK_SECRET_SANDBOX   (whsec_...)
+#   ... and the _LIVE pair when going live.
+# The webhook's URL is https://api.tnsaints.com/api/stripe/webhook. While
+# STRIPE_WEBHOOK_ENABLED is not "true" it answers 503 and Stripe retries for
+# three days, so turning it off loses nothing.
+# STRIPE_API_VERSION pins the response shapes the code reads (stripe.js).
+STRIPE_ENV = "sandbox"
+STRIPE_API_VERSION = "2026-09-30.endive"
+STRIPE_WEBHOOK_ENABLED = "false"
+
 # Website forms -> CRM (POST /api/lead). Anything but "true" answers 503 and the
 # site falls back to Formspree, so turning this off loses no inquiries.
 LEADS_ENABLED = "false"

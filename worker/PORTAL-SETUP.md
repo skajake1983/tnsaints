@@ -27,6 +27,7 @@ misspelled, `"True"` — is off.
 | `STAFF_BRIEF_ENABLED` | no daily staff email | yes |
 | `ADMIN_CSRF_MODE` | `"report"` logs cross-site admin posts with no Sec-Fetch-Site; `"enforce"` refuses them | — |
 | `RETENTION_MODE` | `"report"` counts what the retention rules would remove; `"enforce"` removes it (section 10) | yes — back to `"report"` stops removal |
+| `STRIPE_WEBHOOK_ENABLED` | Stripe's webhook answers 503; Stripe retries for 3 days, nothing lost | yes |
 | `DONATIONS_ENABLED` | gifts can still be recorded, but no receipt saying a gift is tax-deductible can be issued (section 19) | yes — keep it `"false"` until the IRS determination letter |
 
 `PAYPAL_ENV` is `"sandbox"` (test money, TEST MODE banner on the portal) or
@@ -96,8 +97,9 @@ production:
 | 017 | `donations.sql` | donations and receipts |
 | 018 | `staff_board_role.sql` | the `board` staff role (rebuilds the `staff` table; export it first, as the file says) |
 | 019 | `places_paid_outside.sql` | how a place staff added is paid today (PayPal Join page, or other) |
+| 020 | `stripe.sql` | Stripe customers, checkouts, subscriptions and events; scholarships; the PayPal paid-through day |
 
-All of them are safe to re-run except 008, 015 and 019 (018 re-runs harmlessly). Those end in ALTERs, so a
+All of them are safe to re-run except 008, 015, 019 and 020 (018 re-runs harmlessly). Those end in ALTERs, so a
 re-run fails with "duplicate column name", which means the file was already
 applied.
 
@@ -150,6 +152,66 @@ Families → *Invite a family*); once they have added their children, use
 The place starts active, takes a seat, and the family is asked to sign the
 waiver when they next sign in. (Admin → Billing can also link a PayPal
 subscription to a child, but needs the PayPal API keys.)
+
+## 5b. Stripe (replacing PayPal; owner, 2026-10-07)
+
+New payments go through PayPal or Stripe as **Admin → Billing → New payments
+go through** says. Stripe can only be chosen once it has a key. Families who
+already pay keep paying the way they started until they move (below).
+
+The rules (owner, 2026-10-07 to 10-18): billing on the 1st, the first part
+month prorated; $40 setup fee for new places only; 10% off for each academy
+child after the first; scholarships per place; cancelling ends the place at
+the end of the paid month. How each maps onto Stripe is at the top of
+`src/payments/stripe-billing.js`.
+
+**Test mode first ("sandbox"):**
+
+1. Stripe Dashboard → Developers → API keys: copy the test **secret key**
+   (`sk_test_…`). Then `npx wrangler secret put STRIPE_SECRET_KEY_SANDBOX` and
+   paste it at the prompt. Never paste it into chat or a file.
+2. Workbench → Webhooks → **Add destination**: snapshot events, these types:
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `checkout.session.expired`,
+   `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`,
+   `invoice.payment_action_required`, `charge.refunded`. Endpoint URL:
+   `https://api.tnsaints.com/api/stripe/webhook`. Copy its signing secret
+   (`whsec_…`) → `npx wrangler secret put STRIPE_WEBHOOK_SECRET_SANDBOX`.
+3. `STRIPE_WEBHOOK_ENABLED = "true"` in `wrangler.toml`, deploy.
+4. Settings → Payment methods: turn on **ACH Direct Debit** (cards are on).
+5. Settings → Billing → Subscriptions and emails: email customers their
+   receipts, and about failed payments (Stripe retries them on its own).
+6. Settings → Branding: the academy's logo and colours (Stripe's pages and
+   emails use them).
+7. Admin → Billing → choose **Stripe**. The portal shows a TEST MODE banner.
+8. Test run: invite yourself, add a child, offer a place (or add a place for a
+   PayPal family and set its paid-through day), pay with Stripe's test card
+   `4242 4242 4242 4242` (any future date, any CVC) and with a test bank
+   account. Check: the place is active; Admin → Billing → the place shows the
+   payments; **Manage billing** on the family page opens Stripe's page; cancel
+   there and the place stays until the end of the month. **Also confirm the
+   first charge**: setup fee + the partial month for a group starting later,
+   and the 10% sibling discount on a prorated first month — Stripe's docs say
+   both work this way; this is the run that proves it.
+
+**Going live:** repeat 1–3 with the **live** key and a live webhook
+(`STRIPE_SECRET_KEY_LIVE`, `STRIPE_WEBHOOK_SECRET_LIVE`), set
+`STRIPE_ENV = "live"`, deploy. The academy's Stripe product and coupons are
+created by the Worker on first use, in each mode.
+
+**Families moving from the old Join page:** on each place's billing page
+(Admin → Families → Billing, or Admin → Billing), enter the last day their
+PayPal payments cover (in PayPal: the day before their next payment). Their
+family page then asks them to move; nothing is charged until the 1st after
+that day, and there is no setup fee. Once they have moved they appear under
+**Moved to Stripe — cancel their PayPal subscription** (and in the daily
+brief): cancel it in PayPal's dashboard, then press *Done*.
+
+**Known limit until PayPal is retired:** a monthly program can only be
+*opened* if it has a PayPal plan id (a database rule from migration 009). The
+academy has one, so this blocks nothing today; retiring PayPal rebuilds that
+rule.
 
 ## 6. Turnstile (plan item O7)
 

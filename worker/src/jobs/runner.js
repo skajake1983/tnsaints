@@ -30,6 +30,7 @@ import { cleanupExpiredAuth } from '../auth/cleanup.js';
 import { expireOffers } from '../programs/enrollment.js';
 import { sweepSubscriptions } from '../payments/billing.js';
 import { sweepOrders } from '../payments/orders.js';
+import { sweepStripe } from '../payments/stripe-billing.js';
 import { expireInquiryIpHashes } from '../crm/intake.js';
 import { runStaffBrief } from './brief.js';
 import { sendRosterDigest, sendStaffBriefEmail } from '../email.js';
@@ -103,7 +104,7 @@ export const JOBS = [
   },
   {
     // One staff email a day, only when there is something to do.
-    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 17,
+    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 18,
     run: async (env) => {
       const r = await runStaffBrief(env, sendStaffBriefEmail);
       // Not sent because the provider failed or the day's allowance is gone:
@@ -137,6 +138,13 @@ export const JOBS = [
     run: async (env) => ({
       detail: { synced: await sweepSubscriptions(env, SWEEP_PER_RUN), orders: await sweepOrders(env, SWEEP_PER_RUN) },
     }),
+  },
+  {
+    // Stripe (payments/stripe-billing.js): finish a checkout a family never came
+    // back from, and re-read the subscription we have heard least about.
+    // Webhooks are the main path; this is the safety net, one of each an hour.
+    name: 'stripe-sweep', cadence: 'hourly', minQueries: 18,
+    run: async (env) => ({ detail: { synced: await sweepStripe(env, { checkouts: 1, subscriptions: 1 }) } }),
   },
   {
     // Retention (privacy/retention.js): counts every day; removes only when
