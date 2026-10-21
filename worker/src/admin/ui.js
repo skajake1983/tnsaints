@@ -76,32 +76,63 @@ const STYLES = `${BRAND_TOKENS}
    * sync by hand. (Gold is an accent here, never link text: gold on white fails
    * WCAG, so the pills are navy — see the --gold note above.)
    */
-  header {
+  /*
+   * The menu (owner, 2026-10-20): grouped links, a sidebar on wide screens and
+   * a Menu button below 960px. The admin runs no script, so the button is a
+   * <details> with nothing inside it: the menu is its next sibling, shown
+   * while it is open (the sibling combinator, which every browser supports).
+   * Every rule is scoped to header.site, because pages have tab bars of their
+   * own in <nav> elements.
+   */
+  .skip { position: absolute; left: -9999px; top: 8px; z-index: 10; padding: 8px 14px; border-radius: 8px;
+    background: #fff; color: var(--navy); font-weight: 700; box-shadow: 0 2px 10px rgba(6, 37, 92, .2); }
+  .skip:focus { left: 12px; }
+  header.site {
     background: #fff;
     border-bottom: 4px solid var(--gold);
     box-shadow: 0 6px 18px rgba(6, 37, 92, .06);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px;
   }
-  header .nav-inner {
-    max-width: 1100px; margin: 0 auto; padding: 10px 18px;
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  }
-  header .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; }
-  header .brand img { width: 44px; height: 44px; object-fit: contain; display: block; }
-  header .mark { font-weight: 800; letter-spacing: .01em; line-height: 1.1;
+  header.site .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; min-width: 0; flex: 1 1 auto; }
+  header.site .brand img { width: 44px; height: 44px; object-fit: contain; display: block; }
+  header.site .mark { font-weight: 800; letter-spacing: .01em; line-height: 1.1;
     font-size: 16px; color: var(--navy); }
-  header .mark small { display: block; font-size: 10px; font-weight: 700;
+  header.site .mark small { display: block; font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: .12em; color: var(--gold-ink); margin-top: 2px; }
-  header nav { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
-  header nav a {
-    padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 700;
-    color: var(--navy); text-decoration: none;
-    transition: background .15s ease, color .15s ease;
+  .menu-btn summary {
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    min-height: 44px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 999px;
+    background: #fff; color: var(--navy); font-size: 15px; font-weight: 700;
   }
-  header nav a:hover, header nav a:focus-visible { background: var(--navy-soft); color: #fff; }
-  header nav a[aria-current="page"] { background: var(--navy); color: #fff; }
-  header .who {
-    font-size: 13px; font-weight: 600; color: var(--muted);
-    padding-left: 14px; border-left: 1px solid var(--line); white-space: nowrap;
+  .menu-btn summary::-webkit-details-marker { display: none; }
+  .menu-btn summary:focus-visible { outline: 2px solid var(--navy-soft); outline-offset: 2px; }
+  .menu-btn[open] summary { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .menu-btn summary svg { display: block; }
+  .menu-btn .if-open, .menu-btn[open] .if-shut { display: none; }
+  .menu-btn[open] .if-open { display: inline; }
+  header.site .side-nav { flex: 1 1 100%; padding: 4px 0 6px; }
+  .menu-btn:not([open]) ~ .side-nav { display: none; }
+  header.site .side-nav ul { list-style: none; margin: 0; padding: 0; }
+  header.site .side-nav li a {
+    display: block; padding: 10px 12px; border-radius: 8px; font-size: 15px; font-weight: 700;
+    color: var(--navy); text-decoration: none; transition: background .15s ease, color .15s ease;
+  }
+  header.site .side-nav li a:hover, header.site .side-nav li a:focus-visible { background: var(--navy-soft); color: #fff; }
+  header.site .side-nav li a[aria-current="page"] { background: var(--navy); color: #fff; }
+  header.site .nav-group { margin-top: 12px; }
+  header.site .nav-h { margin: 0 0 2px; padding: 0 12px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+  header.site .staff-who { margin-top: 14px; padding: 12px 12px 2px; border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--muted); }
+  header.site .staff-who strong { display: block; color: var(--ink); font-size: 14px; }
+  header.site .staff-who a { color: var(--navy); font-weight: 700; }
+  header.site .staff-who a[aria-current="page"] { text-decoration: none; }
+  /* A phone held sideways or a tablet: the open menu in two balanced columns, no group split. */
+  @media (min-width: 480px) and (max-width: 959px) {
+    header.site .side-nav { column-count: 2; column-gap: 18px; }
+    header.site .nav-group { break-inside: avoid; }
+    header.site .nav-top, header.site .staff-who { column-span: all; }
+    header.site .nav-group:first-of-type { margin-top: 0; }
   }
   main { max-width: 1100px; margin: 0 auto; padding: 20px 18px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
@@ -180,9 +211,6 @@ const STYLES = `${BRAND_TOKENS}
 
     .cards { grid-template-columns: repeat(2, 1fr); }
     .card .n { font-size: 22px; }
-    header .nav-inner { padding: 10px 14px; gap: 10px; }
-    header nav { order: 3; flex-basis: 100%; width: 100%; margin-left: 0; gap: 8px; }
-    header .who { order: 2; margin-left: auto; padding-left: 0; border-left: 0; font-size: 12px; }
     .bigbtn { width: 100%; }
     .toolbar { gap: 10px; }
   }
@@ -190,7 +218,28 @@ const STYLES = `${BRAND_TOKENS}
   @media (max-width: 400px) {
     .cards { grid-template-columns: 1fr; }
   }
+
+  /* Last, so it wins over the base main and footer rules above. */
+  /* Wide screens: the menu is a sidebar, always open, every page one click away. */
+  @media (min-width: 960px) {
+    body { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: 1fr auto; min-height: 100vh; }
+    header.site {
+      grid-column: 1; grid-row: 1 / 3; position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+      flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; padding: 16px 12px 20px;
+      border-bottom: 0; border-right: 1px solid var(--line); box-shadow: none;
+    }
+    header.site .brand { flex: 0 0 auto; padding: 0 6px 14px; margin-bottom: 12px; border-bottom: 4px solid var(--gold); }
+    .menu-btn { display: none; }
+    .menu-btn:not([open]) ~ .side-nav, header.site .side-nav { display: block; flex: 0 0 auto; padding: 0; }
+    header.site .side-nav li a { padding: 7px 12px; font-size: 14px; }
+    main { grid-column: 2; width: 100%; max-width: 1100px; margin: 0; padding: 24px 28px 60px; }
+    footer { grid-column: 2; text-align: left; padding: 0 28px 30px; }
+  }
 `;
+
+// Three bars; the word beside it says what it does.
+const MENU_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">'
+  + '<path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
 /**
  * Full page shell.
@@ -200,14 +249,24 @@ const STYLES = `${BRAND_TOKENS}
  * external request is another thing that can hang there.
  */
 export function page({ title, principal, nav = [], current = '', body, extraStyles = '' }) {
-  // A link to a page this person cannot open is noise; leave it out.
-  const links = nav
-    .filter((n) => !n.cap || n.cap === 'staff' || !principal || can(principal, n.cap))
-    .map(
-      (n) =>
-        `<a href="${esc(n.href)}"${n.href === current ? ' aria-current="page"' : ''}>${esc(n.label)}</a>`
-    )
-    .join('');
+  // A link to a page this person cannot open is noise; leave it out, and a
+  // group with nothing left in it with it.
+  const shown = nav.filter((n) => !n.cap || n.cap === 'staff' || !principal || can(principal, n.cap));
+  const here = (n) => (n.href === current ? ' aria-current="page"' : '');
+  const item = (n) => `<li><a href="${esc(n.href)}"${here(n)}>${esc(n.label)}</a></li>`;
+  const top = shown.filter((n) => !n.group && !n.account);
+  const groups = [...new Set(shown.filter((n) => n.group).map((n) => n.group))];
+  const menu = [
+    top.length ? `<ul class="nav-top">${top.map(item).join('')}</ul>` : '',
+    ...groups.map((g, i) => `<div class="nav-group"><p class="nav-h" id="nav-g${i}">${esc(g)}</p>
+      <ul aria-labelledby="nav-g${i}">${shown.filter((n) => n.group === g).map(item).join('')}</ul></div>`),
+  ].join('');
+  const account = shown.filter((n) => n.account).map((n) => ` · <a href="${esc(n.href)}"${here(n)}>${esc(n.label)}</a>`).join('');
+  const who = principal
+    ? `<div class="staff-who"><strong>${esc(principal.displayName)}</strong>${esc(principal.role)}${account}</div>`
+    : '';
+  // Staff who can open the brief start there; everyone else at their home.
+  const home = shown.some((n) => n.href === '/brief') ? '/brief' : '/';
 
   return `<!doctype html>
 <html lang="en">
@@ -219,17 +278,16 @@ export function page({ title, principal, nav = [], current = '', body, extraStyl
 <style>${STYLES}${extraStyles}</style>
 </head>
 <body>
-<header>
-  <div class="nav-inner">
-    <a class="brand" href="/">
-      <img src="/logo.png" width="44" height="44" alt="Tennessee Saints">
-      <div class="mark">Tennessee Saints<small>Staff Portal</small></div>
-    </a>
-    <nav>${links}</nav>
-    ${principal ? `<div class="who">${esc(principal.displayName)} · ${esc(principal.role)}</div>` : ''}
-  </div>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site">
+  <a class="brand" href="${home}">
+    <img src="/logo.png" width="44" height="44" alt="Tennessee Saints">
+    <div class="mark">Tennessee Saints<small>Staff Portal</small></div>
+  </a>
+  ${menu || who ? `<details class="menu-btn"><summary aria-controls="main-menu">${MENU_ICON}<span class="if-shut">Menu</span><span class="if-open">Close</span></summary></details>
+  <nav class="side-nav" id="main-menu" aria-label="Main menu">${menu}${who}</nav>` : ''}
 </header>
-<main>
+<main id="main">
 ${body}
 </main>
 <footer>Tennessee Saints Basketball Academy · staff only</footer>

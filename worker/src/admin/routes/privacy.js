@@ -10,6 +10,8 @@ import { page, htmlResponse } from '../ui.js';
 import { privacyBody, NEXT_STATUS as PRIVACY_NEXT } from '../privacy-ui.js';
 import { retentionConfig, retentionCounts, lastRetentionReport } from '../../privacy/retention.js';
 import { listHolds, placeHold, releaseHold, HOLD_TYPES } from '../../privacy/holds.js';
+import { heldSql, deletedFamiliesPaypal } from '../../privacy/deletion.js';
+import { markPaypalCancelled } from '../../payments/stripe-admin.js';
 import { NAV, denyHtml, seeOther } from '../nav.js';
 
 const denyPrivacy = denyHtml('Privacy');
@@ -18,18 +20,20 @@ export const routes = [
   {
     method: 'GET', path: '/privacy', cap: 'privacy:manage', deny: denyPrivacy,
     handler: async ({ env, principal, url, base }) => {
-      const [{ results }, report, holds] = await Promise.all([
+      const [{ results }, report, holds, paypal] = await Promise.all([
         env.DB.prepare(
-          `SELECT r.id, r.kind, r.subject_id, r.requested_by, r.status, r.created_at, h.display_name AS family_name
+          `SELECT r.id, r.kind, r.subject_id, r.requested_by, r.status, r.created_at, r.purge_after, r.result_counts,
+                  h.display_name AS family_name, ${heldSql('r.subject_id')} AS held
              FROM data_requests r LEFT JOIN households h ON CAST(h.id AS TEXT) = r.subject_id
             ORDER BY r.created_at DESC LIMIT 200`
         ).all(),
         lastRetentionReport(env),
         listHolds(env),
+        deletedFamiliesPaypal(env),
       ]);
       return htmlResponse(page({ title: 'Privacy', principal, nav: NAV, current: '/privacy',
         body: privacyBody({ rows: results || [], message: url.searchParams.get('msg'), base, report,
-          config: retentionConfig(env), holds }) }));
+          config: retentionConfig(env), holds, paypal }) }));
     },
   },
   {
@@ -43,13 +47,25 @@ export const routes = [
       const res = await env.DB.prepare(
         `UPDATE data_requests SET status = ?2, updated_at = ?3, completed_at = CASE WHEN ?4 THEN ?3 ELSE completed_at END,
                 completed_by = CASE WHEN ?4 THEN ?5 ELSE completed_by END
-          WHERE id = ?1 AND kind = 'deletion' AND status IN (SELECT value FROM json_each(?6))`
+          WHERE id = ?1 AND kind = 'deletion' AND status IN (SELECT value FROM json_each(?6))
+            AND (purge_after IS NULL OR ?2 = 'rejected')`
       ).bind(Number(m[1]), target, now, done ? 1 : 0, principal.email, JSON.stringify(allowedFrom)).run();
       if (res.meta.changes) {
         ctx.waitUntil(audit(env, { actor: principal.email, action: `privacy.${target}`, subjectType: 'data_request',
           subjectId: m[1] }));
       }
       return seeOther(base, '/privacy?msg=updated');
+    },
+  },
+  // A deleted family's old PayPal subscription, cancelled by hand in PayPal.
+  {
+    method: 'POST', path: /^\/privacy\/paypal\/(\d{1,12})\/cancelled$/, cap: 'privacy:manage', deny: denyPrivacy,
+    handler: async ({ env, ctx, principal, base }, m) => {
+      if (await markPaypalCancelled(env, Number(m[1]))) {
+        ctx.waitUntil(audit(env, { actor: principal.email, action: 'privacy.paypal_cancelled', subjectType: 'enrollment',
+          subjectId: m[1] }));
+      }
+      return seeOther(base, '/privacy?msg=paypal-cancelled');
     },
   },
   // Counts only, whatever the mode: removal happens in the daily job.

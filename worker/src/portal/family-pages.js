@@ -8,6 +8,7 @@ import {
 } from './ui.js';
 import { googleButton } from './auth-pages.js';
 import { privacySection } from './privacy.js';
+import { deletionDay } from '../privacy/deletion.js';
 import { currentGrade, gradeLabel } from '../lib/grades.js';
 import { SHIRT_SIZES, RELATIONSHIPS } from './forms.js';
 
@@ -114,7 +115,7 @@ function teamsPanel(rc, teams, children) {
 }
 
 export function dashboardPage(rc, { household, guardians, children, contacts, claimable, enrollments = [],
-  academy = null, notice = '', teams = [] }) {
+  academy = null, notice = '', teams = [], deletion = null }) {
   const kids = children.length
     ? `<ul class="cards-list">${children
         .map((c) => {
@@ -151,9 +152,15 @@ export function dashboardPage(rc, { household, guardians, children, contacts, cl
     ? `<ol class="plain">${contacts
         .map((c) => `<li>${esc(c.name)}${c.relationship ? ` (${esc(c.relationship)})` : ''} · ${esc(c.phone)}</li>`)
         .join('')}</ol>`
-    : '<p><span class="badge warn">Needed</span> Add at least one person we can call if we cannot reach you.</p>';
+    : '<p><span class="badge warn">Needed</span> Add at least one person, other than your family\'s guardians, we can call if we can\'t reach any of you.</p>';
 
+  // Every guardian sees a pending deletion; the owner can cancel it from Account.
+  const leaving = deletion?.pending?.purgeAfter ? `<div class="notice" role="note"><strong>Your family's data will be deleted on
+  ${esc(deletionDay(deletion.pending.purgeAfter))}.</strong> ${deletion.owner
+    ? `Changed your mind? <a href="${esc(rc.url('/account'))}">Keep your data</a>.`
+    : 'Only the guardian who set up your family can cancel it.'}</div>` : '';
   const body = `${notice ? `<div class="notice" role="status">${esc(notice)}</div>` : ''}
+${leaving}
 <h1>${esc(household.display_name || 'Your family')}</h1>
 <p class="lede">Keep your children's details current here. Everything on this page is visible to every guardian in your family.</p>
 ${claim}
@@ -186,7 +193,11 @@ ${enrollments.some((e) => Number(e.on_stripe)) ? `<section class="panel" aria-la
 // --- a child -----------------------------------------------------------------------
 
 export function childPage(rc, { child = null, values = {}, errors = [], medical = null, medicalValues = {},
-  medicalErrors = [], status = 200, saved = '' }) {
+  medicalErrors = [], status = 200, saved = '', savedIn = 'profile' }) {
+  // The confirmation goes in the section that was saved, where the page lands
+  // (owner, 2026-10-20): a medical save returns to #medical, below the fold.
+  const savedNote = (where) => (saved && savedIn === where
+    ? `<div class="notice" role="status">&#10003; ${esc(saved)}</div>` : '');
   const isNew = !child;
   const v = {
     child_name: values.name ?? child?.display_name ?? '',
@@ -215,22 +226,22 @@ export function childPage(rc, { child = null, values = {}, errors = [], medical 
     ? ''
     : `<section class="panel" aria-labelledby="med-h" id="medical">
   <h2 id="med-h" style="margin-top:0">Medical information</h2>
+  ${savedNote('medical')}
   <p>Coaches see only that there is something to know. The details are kept private and read only when needed.</p>
   ${errorSummary(medicalErrors)}
   <form method="post" action="${esc(rc.url(`/children/${child.id}/medical`))}" novalidate>
     ${radioGroup({ id: 'medical_status', legend: 'Allergies, conditions or medication we should know about?',
       value: medStatus, required: true, error: errorFor(medicalErrors, 'medical_status'),
       options: [['none_declared', 'No, nothing to declare'], ['declared', 'Yes']] })}
-    ${textareaField({ id: 'medical_notes', label: 'Details', value: medNotes,
-      hint: 'Only if you answered yes. Include what to do in an emergency.', error: errorFor(medicalErrors, 'medical_notes') })}
+    <div class="if-yes">${textareaField({ id: 'medical_notes', label: 'Details', value: medNotes, required: true,
+      hint: 'What it is, and what to do in an emergency.', error: errorFor(medicalErrors, 'medical_notes') })}</div>
     <button class="btn" type="submit">Save medical answer</button>
   </form>
 </section>`;
 
   const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
-${saved ? `<div class="notice" role="status">${esc(saved)}</div>` : ''}
 <h1>${isNew ? 'Add a child' : esc(child.display_name)}</h1>
-<section class="panel" aria-label="Profile">${profile}</section>
+<section class="panel" aria-label="Profile">${savedNote('profile')}${profile}</section>
 ${medicalSection}`;
   return page(rc, isNew ? 'Add a child' : child.display_name, body, { status });
 }
@@ -252,7 +263,8 @@ export function contactsPage(rc, { contacts = [], values = null, errors = [], st
     .join('');
   const body = `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>
 <h1>Emergency contacts</h1>
-<p class="lede">People we can call, in this order, if we can't reach you. Ideally not someone who will be at practice with you.</p>
+<p class="lede">We always call you and your family's other guardians first. These are the people we call, in this order,
+if we can't reach any of you — ideally not someone who's usually at practice with you.</p>
 ${errorSummary(errors)}
 <form method="post" action="${esc(rc.url('/contacts'))}" novalidate>
   ${rows}
@@ -263,7 +275,7 @@ ${errorSummary(errors)}
 
 // --- account --------------------------------------------------------------------------
 
-export function accountPage(rc, session, { google = false, googleLinked = false, sessions = [], notice = '' }) {
+export function accountPage(rc, session, { google = false, googleLinked = false, sessions = [], notice = '', deletion }) {
   const body = `${notice ? `<div class="notice" role="status">${esc(notice)}</div>` : ''}
 <h1>Account</h1>
 <p class="lede">Signed in as <strong>${esc(session.email)}</strong>.</p>
@@ -274,7 +286,7 @@ ${google ? `<section class="panel" aria-labelledby="so-h">
     ? '<p style="margin:0">Google is connected. You can sign in with Google or an email link.</p>'
     : `<p>Connect Google to sign in with one tap next time.</p>${googleButton(rc, { mode: 'link', label: 'Connect Google' })}`}
 </section>` : ''}
-${privacySection(rc)}
+${privacySection(rc, deletion)}
 <form method="post" action="${esc(rc.url('/auth/signout'))}">
   <button class="btn secondary" type="submit">Sign out</button>
 </form>`;

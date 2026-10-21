@@ -34,7 +34,7 @@ function sizesLine(map) {
 }
 
 const FAMILY_MESSAGES = {
-  invited: 'Invitation sent. They can now sign in with that address.',
+  invited: 'Invitation sent. Its button signs them straight in (once, within 7 days); after that they sign in with that address.',
   'invited-no-email': "Their account is ready, but the email didn't send (daily allowance or provider). Tell them to sign in at the portal with that address.",
   invalid: "That didn't look like an email address.",
   placed: 'Place added. The family will be asked to sign the waiver the next time they sign in.',
@@ -84,8 +84,8 @@ export function familiesBody({ families, contact, medical, totals, base = '', me
   <label class="sr" for="invite-email">Parent's email</label>
   <input id="invite-email" name="email" type="email" required placeholder="parent@example.com" style="font:inherit;padding:8px 10px;min-width:260px">
   <button type="submit">Send invitation</button></form>
-<p class="sub" style="padding:0 16px 12px;margin:0">While the portal is invite-only, this is how a family gets in. The email has no special link:
-they sign in at the portal with that address.</p>
+<p class="sub" style="padding:0 16px 12px;margin:0">While the portal is invite-only, this is how a family gets in. The email's button signs
+them straight in, once, within 7 days; inviting again sends a fresh one. After that they sign in at the portal with that address.</p>
 ${invited.length ? `<p class="sub" style="padding:0 16px 12px;margin:0">Invited, not set up yet: ${invited.map((a) => esc(a.email)).join(', ')}</p>` : ''}</div>` : '';
   return `<h1>Families</h1>
 <p class="sub">${families.length} ${families.length === 1 ? 'family' : 'families'} and ${childCount} ${childCount === 1 ? 'child' : 'children'} on the parent portal.</p>

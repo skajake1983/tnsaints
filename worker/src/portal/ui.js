@@ -59,6 +59,9 @@ const STYLES = `${BRAND_TOKENS}
             border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; }
   .notice.test { border-left-color: var(--warn); }
   .field { margin: 0 0 18px; }
+  /* Details that only apply to a "Yes": hidden until it is chosen. Pure CSS
+     (portal pages run no script); a browser without :has() just shows it. */
+  form:not(:has(input[value="declared"]:checked)) .if-yes { display: none; }
   .field label, .field legend { display: block; font-weight: 700; margin-bottom: 6px; }
   .field .hint { display: block; color: var(--muted); font-size: 15px; margin: -2px 0 6px; }
   .field .req { color: var(--danger); font-weight: 700; }

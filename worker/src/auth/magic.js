@@ -35,6 +35,7 @@ import { audit } from './staff.js';
 import { createSession, readCookie, hostCookie, clearedCookie } from './session.js';
 import { verifyTurnstile, turnstileEnabled } from '../turnstile.js';
 import { clientIp } from '../http.js';
+import { isLoopbackOrigin } from '../lib/csrf.js';
 import { sendSignInLink } from '../email.js';
 import { googleConfigured } from './google.js';
 import { hasPendingInvite } from '../portal/data.js';
@@ -54,11 +55,42 @@ const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
 const EMAIL_SHAPE = /^[^\s@<>()[\]\\,;:"]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,}$/;
 
 const iso = (ms) => new Date(ms).toISOString();
+export const INVITE_DAYS = 7;
 
 /** Where links in emails point. PORTAL_ORIGIN overrides locally; production derives it. */
 export function portalOrigin(env) {
   if (env.PORTAL_ORIGIN) return String(env.PORTAL_ORIGIN).replace(/\/$/, '');
   return `https://${String(env.PORTAL_HOSTNAME || 'portal.tnsaints.com').trim().toLowerCase()}`;
+}
+
+/** The portal's path prefix for links built outside a portal request: '/__portal' on the local dev door, else ''. */
+export function portalBase(env) {
+  return flag(env, 'DEV_PORTAL', false) && isLoopbackOrigin(portalOrigin(env)) ? '/__portal' : '';
+}
+
+/**
+ * The sign-in link a STAFF invitation carries (owner, 2026-10-20): the family
+ * clicks once and is in, instead of asking for a second email. The invitation
+ * reached the invited inbox, which is the same proof a sign-in link gives.
+ * Single use; valid INVITE_DAYS; the token in the URL fragment (never sent to
+ * a server or seen by a mail scanner) and stored only as an HMAC; the landing
+ * page is inert until "Continue", and shows which address is signing in.
+ * Re-inviting replaces any earlier unused invitation link for the address.
+ * Co-guardian invitations do NOT use this: they open an existing family's
+ * children, so the invitee signs in as the invited address first.
+ */
+export async function createInviteLink(env, emailNorm) {
+  const token = randomToken(32);
+  const now = Date.now();
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM auth_login_tokens WHERE email_norm = ?1 AND purpose = 'invite' AND consumed_at IS NULL`)
+      .bind(emailNorm),
+    env.DB.prepare(
+      `INSERT INTO auth_login_tokens (token_hash, email_norm, purpose, binding_hash, created_at, expires_at)
+       VALUES (?1, ?2, 'invite', NULL, ?3, ?4)`
+    ).bind(await keyedHash(env, 'login', token), emailNorm, iso(now), iso(now + INVITE_DAYS * 24 * 60 * 60 * 1000)),
+  ]);
+  return `${portalOrigin(env)}${portalBase(env)}/auth/email/verify#t=${token}`;
 }
 
 /**
@@ -202,8 +234,8 @@ export async function verifyLink(env, ctx, request, rc, form) {
   const tokenHash = await keyedHash(env, 'login', token);
   const now = iso(Date.now());
   const row = await env.DB.prepare(
-    `SELECT email_norm, binding_hash FROM auth_login_tokens
-      WHERE token_hash = ?1 AND purpose = 'login' AND consumed_at IS NULL AND expires_at > ?2`
+    `SELECT email_norm, binding_hash, purpose FROM auth_login_tokens
+      WHERE token_hash = ?1 AND purpose IN ('login', 'invite') AND consumed_at IS NULL AND expires_at > ?2`
   )
     .bind(tokenHash, now)
     .first();
@@ -212,7 +244,7 @@ export async function verifyLink(env, ctx, request, rc, form) {
   const bind = readCookie(request, BIND_COOKIE);
   const sameBrowser = Boolean(bind && row.binding_hash && safeEqual(await keyedHash(env, 'bind', bind), row.binding_hash));
   if (!sameBrowser && form.get('confirm') !== '1') {
-    return confirmPage(rc, token, maskEmail(row.email_norm));
+    return confirmPage(rc, token, maskEmail(row.email_norm), { invite: row.purpose === 'invite' });
   }
 
   // Single use, enforced by the database: of two simultaneous presses, one wins.
@@ -258,7 +290,7 @@ export async function verifyLink(env, ctx, request, rc, form) {
     audit(env, {
       actor: `account:${account.id}`,
       action: 'portal.signin',
-      detail: { method: 'email', new_account: created, same_browser: sameBrowser },
+      detail: { method: row.purpose === 'invite' ? 'invite' : 'email', new_account: created, same_browser: sameBrowser },
     })
   );
   return redirect(rc.url('/'), [cookie, clearedCookie(BIND_COOKIE)]);

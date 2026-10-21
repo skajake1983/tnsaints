@@ -1,6 +1,7 @@
 /**
- * Privacy: families' downloads (recorded, already done), deletion requests (a
- * person acts on them, by runbook), the retention report, and legal holds.
+ * Privacy: families' downloads (recorded, already done), deletion requests
+ * (automatic after the grace period, privacy/deletion.js; older ones moved by
+ * hand), the retention report, and legal holds.
  */
 
 import { esc } from './ui.js';
@@ -14,6 +15,55 @@ export const NEXT_STATUS = {
 
 const LABEL = { verified: 'Mark verified', scheduled: 'Mark scheduled', completed: 'Mark completed', rejected: 'Reject' };
 
+// An automatic request runs itself: marking it completed by hand would skip
+// the deletion, so only Reject is offered (and the route refuses the rest).
+const nextFor = (r) => (r.purge_after ? (r.status === 'scheduled' ? ['rejected'] : []) : NEXT_STATUS[r.status] || []);
+
+const BLOCKED = {
+  'stripe-not-configured': "it has a Stripe subscription and Stripe isn't set up here",
+  'stripe-other-environment': 'its Stripe subscription is in the other Stripe mode (test or live)',
+  'stripe-cancel-failed': "Stripe wouldn't cancel its subscription; it tries again each hour",
+};
+
+const COUNT_LABELS = [
+  ['accounts', 'sign-ins'], ['children', 'children'], ['places', 'places ended'], ['medical', 'medical answers'],
+  ['emergencyContacts', 'emergency contacts'], ['registrations', 'evaluation registrations'], ['crmContacts', 'CRM contacts'],
+  ['stripeCancelled', 'Stripe subscriptions cancelled'],
+];
+
+function parseCounts(raw) {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function deletionState(r) {
+  const c = parseCounts(r.result_counts);
+  const day = (iso) => String(iso).slice(0, 16).replace('T', ' ');
+  if (r.status === 'scheduled' && r.purge_after) {
+    if (Number(r.held)) return `<strong>On legal hold</strong> — will not run until the hold is released (due ${esc(day(r.purge_after))} UTC).`;
+    if (c?.blocked) return `<strong>Waiting:</strong> ${esc(BLOCKED[c.blocked] || c.blocked)}.`;
+    return `Deletes automatically after ${esc(day(r.purge_after))} UTC, unless the family cancels or you place a legal hold on family #${esc(r.subject_id)}.`;
+  }
+  if (r.status === 'completed' && c) {
+    const parts = COUNT_LABELS.filter(([k]) => c[k]).map(([k, l]) => `${esc(c[k])} ${l}`);
+    return `Deleted: ${parts.join(', ') || 'nothing but the request'}.${c.emailed ? ' The family was emailed.' : ''}`;
+  }
+  return '';
+}
+
+function paypalPanel(rows, base) {
+  if (!rows.length) return '';
+  return `<div class="panel"><h2>PayPal to cancel for deleted families (${rows.length})</h2><div style="padding:12px 16px;font-size:14px">
+<p class="sub" style="margin:0 0 8px">These families deleted their data. Their old Join-page PayPal subscriptions can't be cancelled from here:
+cancel each in PayPal, then mark it.</p>
+${rows.map((p) => `<div style="margin-bottom:6px"><code>${esc(p.outside_reference)}</code> · family #${esc(p.household_id)}
+  <form method="post" action="${esc(base)}/privacy/paypal/${esc(p.id)}/cancelled" style="display:inline"><button type="submit">Cancelled in PayPal</button></form></div>`).join('')}
+</div></div>`;
+}
+
 export const PRIVACY_MESSAGES = {
   updated: 'Updated.',
   'hold-placed': 'Legal hold placed. Retention will not touch it until it is released.',
@@ -22,6 +72,7 @@ export const PRIVACY_MESSAGES = {
   'hold-invalid': 'Choose what to hold, give its number and a short reason (3 to 200 characters).',
   'hold-released': 'Hold released.',
   'report-run': 'Retention report updated. Nothing was removed.',
+  'paypal-cancelled': 'Marked as cancelled in PayPal.',
 };
 
 const SUBJECT_LINK = {
@@ -78,7 +129,7 @@ ${released.length ? `<details style="margin-top:8px"><summary>Released (${releas
 </div></div>`;
 }
 
-export function privacyBody({ rows, message, base = '', report = null, config, holds = [] }) {
+export function privacyBody({ rows, message, base = '', report = null, config, holds = [], paypal = [] }) {
   const deletions = rows.filter((r) => r.kind === 'deletion');
   const exports = rows.filter((r) => r.kind === 'export');
   const text = PRIVACY_MESSAGES[message] || '';
@@ -87,24 +138,26 @@ export function privacyBody({ rows, message, base = '', report = null, config, h
         .map((r) => `<div class="notice" style="border-left-color:${['received', 'verified', 'scheduled'].includes(r.status) ? 'var(--warn)' : 'var(--line)'}">
   <strong>Deletion request</strong> · family #${esc(r.subject_id)} · ${esc(r.family_name || '')} · asked ${esc(String(r.created_at).slice(0, 10))}
   by ${esc(r.requested_by)} · <strong>${esc(r.status)}</strong>
-  <div style="margin-top:6px">${(NEXT_STATUS[r.status] || [])
+  ${deletionState(r) ? `<div style="margin-top:4px">${deletionState(r)}</div>` : ''}
+  <div style="margin-top:6px">${nextFor(r)
     .map((s) => `<form method="post" action="${esc(base)}/privacy/${esc(r.id)}/${esc(s)}" style="display:inline"><button type="submit">${esc(LABEL[s])}</button></form>`)
     .join(' ')}</div></div>`)
         .join('')
     : '<div class="empty">No deletion requests.</div>';
 
   return `<h1>Privacy requests</h1>
-<p class="sub">Families can download their data themselves; deletion requests need a person.</p>
+<p class="sub">Families download and delete their own data. A deletion runs by itself 7 days after the family's main guardian asks.</p>
 ${text ? `<div class="notice" role="status">${esc(text)}</div>` : ''}
-<div class="panel"><h2>How to act on a deletion request</h2><div style="padding:12px 16px;font-size:14px">
+<div class="panel"><h2>How deletion works</h2><div style="padding:12px 16px;font-size:14px">
 <ol style="margin:0;padding-left:18px">
-  <li>Verify: the request came from a signed-in guardian of that family (it did, if it is here), and reply by email to confirm.</li>
-  <li>End any academy place and cancel their PayPal subscription if they have not.</li>
-  <li>Delete the family's children, medical answers, contacts and accounts (PORTAL-SETUP.md, "Privacy requests").</li>
-  <li>Keep signed waivers and payment records until their retention period ends.</li>
-  <li>Mark completed, and email the family that it is done.</li>
+  <li>The guardian who set up the family asks on their Account page, with a recent sign-in. They're emailed the date, and every guardian sees it.</li>
+  <li>Until then they can cancel. <strong>To stop it yourself</strong> (a dispute, an insurance claim, a safeguarding concern), place a legal hold on the family below.</li>
+  <li>Then the hourly job ends their places, cancels Stripe billing, and deletes sign-ins, children's details, medical answers, contacts, CRM
+  details and evaluation details. Signed waivers and payment records stay, with the child's name and date of birth, until retention removes them.</li>
+  <li>The family is emailed when it's done. Cancel any old PayPal subscription it had (listed below) by hand.</li>
 </ol></div></div>
 ${list}
+${paypalPanel(paypal, base)}
 ${config ? retentionPanel({ report, config, base }) : ''}
 ${holdsPanel({ holds, base })}
 <div class="panel"><h2>Downloads (${exports.length})</h2><div style="padding:12px 16px;font-size:14px">${exports.length

@@ -92,9 +92,9 @@ export async function catalogPage(env, rc, session) {
     ${childAction(rc, c, p, places)}</li>`).join('')}</ul>` : `<p><a href="${esc(rc.url('/'))}">Add a child</a> to sign up.</p>`}
 </section>`;
     }).join('')
-    : '<p>Nothing is open for sign-up right now. We will email families when the next program opens.</p>';
+    : '<p>Nothing is open for sign-up right now. New programs appear here as soon as they open.</p>';
   return page(rc, 'Programs', `<h1>Programs</h1>
-<p class="lede">What is open now. Places are only ever paid for once a seat in a scheduled group is yours.</p>
+<p class="lede">Camps, clinics and other programs open for sign-up. You only pay once your child has a place in a group.</p>
 ${list}`);
 }
 

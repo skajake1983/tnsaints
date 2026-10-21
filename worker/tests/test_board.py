@@ -100,7 +100,7 @@ print("\n=== a board member sees the board and nothing about children ===")
 role("board")
 st, _, html = admin("GET", "/board")
 check("the board pages open", st == 200, st)
-menu = re.findall(r'<nav>(.*?)</nav>', html, re.S)
+menu = re.findall(r'<nav class="side-nav"[^>]*>(.*?)</nav>', html, re.S)
 check("the menu offers the board, donations and their profile, and no page about children",
       menu and all(f'>{x}<' in menu[0] for x in ("Board", "Donations", "Profile"))
       and not any(f'>{x}<' in menu[0] for x in ("Roster", "Families", "CRM", "Teams", "Enrollments", "Evaluations")), menu[:1])

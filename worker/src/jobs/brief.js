@@ -42,6 +42,9 @@ export async function briefSummary(env, now = Date.now()) {
     one(`SELECT COUNT(*) AS n FROM enrollments e WHERE e.billed_outside = 'paypal_join' AND e.paypal_cancelled_at IS NULL
            AND EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.enrollment_id = e.id AND s.environment = ?1
                          AND s.status IN ('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused'))`, stripeEnv(env)),
+    // A family deleted its data; its old Join-page PayPal subscription is cancelled by hand.
+    one(`SELECT COUNT(*) AS n FROM enrollments e JOIN households h ON h.id = e.household_id AND h.status = 'deleted'
+          WHERE e.billed_outside = 'paypal_join' AND e.paypal_cancelled_at IS NULL AND e.outside_reference IS NOT NULL`),
   ]);
   const n = (i) => Number(results[i].results?.[0]?.n || 0);
   return {
@@ -56,6 +59,7 @@ export async function briefSummary(env, now = Date.now()) {
     paidWithoutSeat: n(8),
     deletionRequests: n(9),
     paypalToCancel: n(10),
+    deletedPaypal: n(11),
     clearancesDue,
     complianceDue: compliance.due,
     complianceUndated: compliance.undated,
@@ -69,7 +73,8 @@ export function briefLines(summary) {
   add(summary.paidWithoutSeat, (c) => `${c} ${c === 1 ? 'family' : 'families'} paid but had no seat to take — refund or place them`, '/billing');
   add(summary.complianceDue, (c) => `${c} filing ${c === 1 ? 'deadline is' : 'deadlines are'} due within 30 days or overdue`, '/board/compliance');
   add(summary.clearancesDue, (c) => `${c} ${c === 1 ? 'person has' : 'people have'} a clearance lapsed or lapsing within 30 days`, '/clearances');
-  add(summary.deletionRequests, (c) => `${c} data deletion ${c === 1 ? 'request is' : 'requests are'} waiting`, '/privacy');
+  add(summary.deletionRequests, (c) => `${c} ${c === 1 ? 'family has' : 'families have'} asked to delete their data — it happens automatically after 7 days unless you place a legal hold`, '/privacy');
+  add(summary.deletedPaypal, (c) => `${c} deleted ${c === 1 ? "family's" : "families'"} PayPal ${c === 1 ? 'subscription' : 'subscriptions'} still to cancel`, '/privacy');
   add(summary.paypalToCancel, (c) => `${c} ${c === 1 ? 'family has' : 'families have'} moved to the new payments — cancel their PayPal ${c === 1 ? 'subscription' : 'subscriptions'}`, '/billing');
   add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due`, '/families');
   add(summary.offersLapsingSoon, (c) => `${c} seat ${c === 1 ? 'offer lapses' : 'offers lapse'} in the next two days`, '/enrollments');

@@ -7,6 +7,7 @@ Admins read a note one child at a time, and every read — and every refused
 attempt — is audited without the note's text.
 """
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -164,9 +165,35 @@ try:
           and sql("SELECT status FROM accounts WHERE email_norm='new.family@example.com'") == [{"status": "active"}], loc)
     mail = [m for m in _captured if "New.Family@Example.com" in (m.get("to") or [])]
     body = (mail[0].get("text", "") + mail[0].get("html", "")) if mail else ""
-    check("and emails them where to go", mail and "parent portal" in body and "this email address" in body)
-    check("with no sign-in token in it", "#t=" not in body and "?t=" not in body)
+    check("and emails them a button that signs them straight in", mail and "Set up my family" in body and "this email address" in body)
+    m = re.search(r"/auth/email/verify#t=([A-Za-z0-9_-]{43})", body)
+    check("the sign-in token is in the link's fragment (never sent to a server or a mail scanner)", m is not None and "?t=" not in body)
+    TOKEN = m.group(1) if m else ""
+    row = sql("SELECT purpose, julianday(expires_at) - julianday(created_at) AS days FROM auth_login_tokens WHERE email_norm='new.family@example.com'")
+    check("stored as an invitation link valid for 7 days", row and row[0]["purpose"] == "invite" and abs(row[0]["days"] - 7) < 0.01, row)
+    st, _, sc, html = post(P + "/auth/email/verify", {"t": TOKEN})
+    check("opening it asks to continue, showing which address (no session yet)", st == 200 and "Welcome to the parent portal" in html
+          and "n\u2022\u2022\u2022@example.com" in html.replace("•", "\u2022") and not any("tns_session" in c for c in sc), st)
+    st, h, sc, _ = post(P + "/auth/email/verify", {"t": TOKEN, "confirm": "1"})
+    check("Continue signs them in, with no second email", st == 303 and any("tns_session" in c for c in sc)
+          and len([x for x in _captured if "New.Family@Example.com" in (x.get("to") or [])]) == 1, (st, sc))
+    check("audited as an invitation sign-in, without the address",
+          sql("SELECT 1 FROM audit_log WHERE action='portal.signin' AND detail LIKE '%invite%' AND detail NOT LIKE '%example.com%'") != [])
+    st, _, sc, html = post(P + "/auth/email/verify", {"t": TOKEN, "confirm": "1"})
+    check("the link works once", st == 400 and "expired" in html and not any("tns_session" in c for c in sc), st)
     check("the invitation is audited", sql("SELECT 1 FROM audit_log WHERE action='portal.family_invite'") != [])
+    st, loc = invite_family("second.try@example.com")
+    _time.sleep(1)
+    first = [x for x in _captured if "second.try@example.com" in (x.get("to") or [])]
+    t1 = re.search(r"#t=([A-Za-z0-9_-]{43})", first[0].get("text", "")).group(1) if first else ""
+    invite_family("second.try@example.com")
+    _time.sleep(1)
+    again = [x for x in _captured if "second.try@example.com" in (x.get("to") or [])]
+    t2 = re.search(r"#t=([A-Za-z0-9_-]{43})", again[-1].get("text", "")).group(1) if len(again) > 1 else ""
+    st1, _, _, _ = post(P + "/auth/email/verify", {"t": t1, "confirm": "1"})
+    st2, _, sc2, _ = post(P + "/auth/email/verify", {"t": t2, "confirm": "1"})
+    check("inviting again sends a fresh link and the earlier one stops working", t1 and t2 and t1 != t2 and st1 == 400
+          and st2 == 303 and any("tns_session" in c for c in sc2), (st1, st2))
     st, loc = invite_family("new.family@example.com")
     check("inviting the same family again is harmless",
           "msg=invited" in loc and len(sql("SELECT 1 FROM accounts WHERE email_norm='new.family@example.com'")) == 1)

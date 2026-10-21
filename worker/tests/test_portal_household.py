@@ -102,7 +102,8 @@ check("setup is audited by id only", audit and audit[-1]["actor"] == f"account:{
 print("\n=== the dashboard ===")
 st, _, _, html = get(P + "/", cookies=S)
 check("the dashboard names the family", st == 200 and "The Adams family" in html, st)
-check("it says emergency contacts are needed", "Add at least one person we can call" in html)
+check("it says emergency contacts are needed, beyond the guardians", "other than your family&#39;s guardians" in html
+      or "other than your family's guardians" in html)
 check("it offers the two children registered under this email", "Legacy Lane" in html and "Noted Kid" in html)
 check("but never a child registered under someone else's email", "Someone Else" not in html)
 check("and states that every guardian sees this page", "visible to every guardian" in html)
@@ -138,12 +139,21 @@ check("the dashboard flags the missing medical answer", "Medical answer needed" 
 check("and shows the grade and shirt size", "4th grade" in html and "Youth M" in html)
 
 print("\n=== the medical answer ===")
+st, _, _, html = get(P + f"/children/{KID}", cookies=S)
+check("the details box shows only after 'Yes' (pure CSS), and is marked required there",
+      re.search(r'<div class="if-yes"><div class="field[^"]*">\s*<label for="medical_notes">Details <span class="req">\(required\)', html) is not None
+      and 'form:not(:has(input[value="declared"]:checked)) .if-yes { display: none; }' in html)
+st, _, _, html = get(P + f"/children/{KID}?saved=toString", cookies=S)
+check("a made-up message name shows nothing", "function" not in html and "native code" not in html)
 st, _, _, html = post(P + f"/children/{KID}/medical", {"medical_status": "declared", "medical_notes": "  "}, cookies=S)
 check("'yes' without details is refused", st == 400 and 'href="#medical_notes"' in html, st)
 st, _, _, html = post(P + f"/children/{KID}/medical", {}, cookies=S)
 check("no answer at all is refused", st == 400 and 'href="#medical_status"' in html, st)
 st, h, _, _ = post(P + f"/children/{KID}/medical", {"medical_status": "declared",
                                                      "medical_notes": "Peanut allergy. EpiPen in blue bag."}, cookies=S)
+_, _, _, page_after = get(P + f"/children/{KID}?saved=medical", cookies=S)
+check("the save confirmation is inside the Medical section, where the page lands",
+      page_after.find("Medical answer saved") > page_after.find('id="med-h"') > 0)
 check("details are saved", st == 303 and "saved=medical" in h.get("Location", ""), st)
 med = sql(f"SELECT status, notes, updated_by FROM player_medical WHERE player_id={KID}")
 check("stored against the child, attributed to the account", med and med[0]["status"] == "declared"

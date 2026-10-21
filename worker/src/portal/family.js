@@ -32,6 +32,7 @@ import { programRoutes } from './programs.js';
 import { familyTeams } from '../programs/teams.js';
 import { familyEnrollments, getProgram, programOpen } from '../programs/enrollment.js';
 import { paymentsProvider } from '../payments/stripe-billing.js';
+import { deletionStatus } from '../privacy/deletion.js';
 
 const NOTICES = {
   joined: "Welcome — you've joined the family.",
@@ -64,6 +65,7 @@ export function isFamilyPath(pathname) {
     pathname === '/account/signout-others' ||
     pathname === '/account/export' ||
     pathname === '/account/delete-request' ||
+    pathname === '/account/delete-cancel' ||
     pathname.startsWith('/pay/') ||
     pathname === '/billing/manage' ||
     pathname === '/programs'
@@ -90,11 +92,11 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       : false;
     const notice = {
       signedout: 'Signed out everywhere else.',
-      'delete-requested': "We've received your request to delete your family's data. We'll email you to confirm, and again when it's done.",
+      'delete-requested': "Your family's data is set to be deleted. We've emailed you the date; you can cancel below until then.",
+      'delete-cancelled': "Deletion cancelled. Nothing will be deleted.",
     }[url.searchParams.get('notice')] || '';
-    return accountPage(rc, session, {
-      google, googleLinked: linked, sessions: await data.listSessions(env, accountId), notice,
-    });
+    const [sessions, deletion] = await Promise.all([data.listSessions(env, accountId), deletionStatus(env, accountId)]);
+    return accountPage(rc, session, { google, googleLinked: linked, sessions, notice, deletion });
   }
 
   const privacy = await privacyRoutes({ env, ctx, rc, session, pathname, method });
@@ -130,7 +132,7 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
   }
 
   if (pathname === '/' && method === 'GET') {
-    const [guardians, children, contacts, claimable, places, academy, teams, provider] = await Promise.all([
+    const [guardians, children, contacts, claimable, places, academy, teams, provider, deletion] = await Promise.all([
       data.listGuardians(env, accountId),
       data.listChildren(env, accountId),
       data.listEmergencyContacts(env, accountId),
@@ -139,6 +141,7 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       getProgram(env, 'academy'),
       familyTeams(env, accountId),
       paymentsProvider(env),
+      deletionStatus(env, accountId),
     ]);
     // A place paid through the old Join page, once Stripe is on and staff have
     // recorded the last day PayPal covers: the family is asked to move it.
@@ -151,7 +154,8 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
       household, guardians, children, contacts, claimable, enrollments,
       academy: academy && programOpen(academy) ? academy : null,
       teams,
-      notice: NOTICES[url.searchParams.get('notice')] || '',
+      deletion,
+      notice: Object.hasOwn(NOTICES, String(url.searchParams.get('notice'))) ? NOTICES[url.searchParams.get('notice')] : '',
     });
   }
 
@@ -216,7 +220,9 @@ export async function familyRoutes({ env, ctx, request, rc, session, pathname, m
 
     if (!childMatch[2] && method === 'GET') {
       const medical = await data.getMedical(env, accountId, playerId);
-      return childPage(rc, { child, medical, saved: SAVED[url.searchParams.get('saved')] || '' });
+      const savedKey = url.searchParams.get('saved');
+      return childPage(rc, { child, medical, saved: Object.hasOwn(SAVED, String(savedKey)) ? SAVED[savedKey] : '',
+        savedIn: savedKey === 'medical' || savedKey === 'added' ? 'medical' : 'profile' });
     }
 
     if (!childMatch[2] && method === 'POST') {

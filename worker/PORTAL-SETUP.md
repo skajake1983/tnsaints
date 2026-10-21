@@ -270,17 +270,47 @@ costs no email at all.
 ## 10. Privacy requests
 
 Families download their own data from their Account page (recorded as a
-completed request). Deletion requests land in Admin → Privacy and in the daily
-brief. To act on one:
+completed request).
 
-1. Reply by email to confirm it is really them (the request came from a
-   signed-in guardian, so this is a courtesy check).
-2. End any academy place and make sure their PayPal subscription is cancelled.
-3. Delete the family's children's details, medical answers, emergency contacts,
-   invitations, sessions and accounts. **Keep** signed waivers
-   (`consent_records`) and payment records (`payments`) until their retention
-   period ends — ask the accountant/attorney for the periods (plan item O15).
-4. Mark the request completed in Admin → Privacy, and email the family.
+**Deleting is automatic** (owner, 2026-10-20; `src/privacy/deletion.js`):
+
+1. The guardian who set up the family (the owner) asks on their Account page,
+   with a recent sign-in. Other guardians can't ask or cancel, but see the date
+   on their family page. The request is scheduled **7 days** out and the owner
+   is emailed the date. Asking is limited to 3 times a day.
+2. Until then the owner can choose **Keep our data**, which cancels it.
+3. Staff see it in Admin → Privacy and the daily brief. **To stop it** (a
+   dispute, an insurance claim, a safeguarding concern), place a **legal hold**
+   on the family, one of its children, its CRM contact or one of its
+   evaluation registrations. It waits until the hold is released. "Mark
+   completed" is not offered: completing it by hand would skip the deletion.
+   Reject is still there.
+4. After the 7 days, the hourly `family-deletion` job deletes one family per
+   run:
+   - it ends the family's places and cancels its Stripe subscriptions. If
+     Stripe can't cancel one, it waits and says why on the Privacy page;
+   - it removes every guardian's sign-in, unless that guardian also belongs to
+     another family;
+   - it removes the family's members, invitations, emergency contacts, and its
+     children's medical answers, school, grade and shirt size;
+   - it anonymizes the family's CRM records;
+   - it removes the contact, emergency and medical details from its
+     evaluation registrations, and the coaches' notes and feedback.
+   It then emails the owner that it's done.
+5. **Kept:** signed waivers (`consent_records`, and an evaluation
+   registration's own signed releases) and payment records (`payments`). They
+   keep the child's name and date of birth, and nothing else, until their
+   retention period ends. Ask the accountant/attorney for the periods (plan
+   item O15). Donation records are never touched.
+6. **PayPal is by hand:** a deleted family's old Join-page PayPal subscription
+   is listed under "PayPal to cancel for deleted families". It also appears in
+   the brief. Cancel it in PayPal, then press **Cancelled in PayPal**.
+
+The account, family and child rows stay as empty markers (status `deleted`),
+because the kept records point at them. The request records counts only.
+
+Requests from before 2026-10-20 (status `received`/`verified`) still move by
+hand: confirm by email, then delete as above, then mark completed.
 
 ### Retention and legal holds
 
@@ -344,6 +374,10 @@ is in the `job_runs` table (counts only):
 
 A job that ran out of room is `partial` and continues next hour; one that
 failed is retried next hour.
+
+`family-deletion` runs first every hour (a family was promised a date). It
+deletes at most one family per run, in at most 36 queries. Other hourly jobs
+can be deferred for that hour, and catch up the next.
 
 ## 14. When something goes wrong
 

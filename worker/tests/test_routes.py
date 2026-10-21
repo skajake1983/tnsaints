@@ -118,6 +118,7 @@ ROUTES = [
     ("POST", "/privacy/retention/check", FORM, {}),
     ("POST", "/privacy/holds", FORM, {"subject_type": "household", "subject_id": "999999", "reason": "Test"}),
     ("POST", "/privacy/holds/999999/release", FORM, {}),
+    ("POST", "/privacy/paypal/999999/cancelled", FORM, {}),
     ("GET", "/clearances", None, None),
     ("POST", "/clearances", FORM, {}),
     ("GET", "/clearances/person?email=nobody%40example.com", None, None),
@@ -285,6 +286,46 @@ _out = subprocess.run(["node", "--input-type=module", "-e", NAVCHECK], cwd=_work
 _wrong = json.loads(_out.stdout.strip() or "null") if _out.returncode == 0 else None
 (passed if _wrong == [] else failed).append(("nav caps", ""))
 print(f"  {'PASS' if _wrong == [] else 'FAIL'}  each menu link shows only to those its page admits   {_wrong if _wrong else _out.stderr[-300:]}")
+
+print("\n=== the menu: grouped, each role's own, a Menu button below 960px (admin/ui.js page()) ===")
+MENUCHECK = r"""
+import { page } from './src/admin/ui.js';
+import { NAV } from './src/admin/nav.js';
+const out = {};
+for (const role of ['admin', 'coach', 'viewer', 'board']) {
+  const html = page({ title: 't', principal: { role, displayName: 'Pat Staff' }, nav: NAV, current: '/decisions', body: '' });
+  const menu = (html.match(/<nav class="side-nav"[^>]*>([\s\S]*?)<\/nav>/) || [])[1] || '';
+  out[role] = {
+    links: [...menu.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]),
+    groups: [...menu.matchAll(/class="nav-h"[^>]*>([^<]+)</g)].map((m) => m[1]),
+    current: [...html.matchAll(/<a [^>]*aria-current="page"[^>]*>([^<]+)</g)].map((m) => m[1]),
+    home: (html.match(/class="brand" href="([^"]+)"/) || [])[1],
+    button: /<details class="menu-btn"><summary aria-controls="main-menu">[\s\S]*?Menu[\s\S]*?<\/summary><\/details>\s*<nav class="side-nav" id="main-menu"/.test(html),
+    skip: html.includes('<a class="skip" href="#main">') && html.includes('<main id="main">'),
+  };
+}
+console.log(JSON.stringify({ out, nav: NAV.map((n) => n.href) }));
+"""
+_out = subprocess.run(["node", "--input-type=module", "-e", MENUCHECK], cwd=_worker, capture_output=True, text=True)
+_m = json.loads(_out.stdout.strip() or "null") if _out.returncode == 0 else None
+if not _m:
+    unit("the menu renders", False, _out.stderr[-300:])
+else:
+    M, ALL = _m["out"], _m["nav"]
+    unit("an admin's menu has every page, Today first and Profile with their name",
+         sorted(M["admin"]["links"]) == sorted(ALL) and M["admin"]["links"][0] == "/brief" and M["admin"]["links"][-1] == "/profile",
+         M["admin"]["links"])
+    unit("in five groups, in the order a family moves through",
+         M["admin"]["groups"] == ["Families", "Evaluations", "Programs", "Money", "Organization"], M["admin"]["groups"])
+    unit("the page you are on is marked, once", M["admin"]["current"] == ["Decisions"], M["admin"]["current"])
+    unit("the logo takes staff who can open it to Today", M["admin"]["home"] == "/brief", M["admin"]["home"])
+    unit("a coach sees only their pages, and a heading only over links they have",
+         M["coach"]["links"] == ["/families", "/", "/eval", "/teams", "/profile"]
+         and M["coach"]["groups"] == ["Families", "Evaluations", "Programs"] and M["coach"]["home"] == "/", M["coach"])
+    unit("the board sees the board, donations and their profile, under Money and Organization only",
+         M["board"]["links"] == ["/donations", "/board", "/profile"] and M["board"]["groups"] == ["Money", "Organization"], M["board"])
+    unit("every role gets the Menu button wired to the menu, and a skip link",
+         all(M[r]["button"] and M[r]["skip"] for r in M), {r: (M[r]["button"], M[r]["skip"]) for r in M})
 
 print("\n=== the route table fails closed, at load (admin/routes/index.js) ===")
 UNIT = r"""

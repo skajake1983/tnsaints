@@ -3,9 +3,15 @@
 Asserted: a download needs a recent sign-in, holds the family's own data (the
 child, the medical answer, the signed waiver, parent-facing feedback) and none
 of: coaches' staff-only notes, another guardian's email, another family's
-anything; it is recorded with counts only. A deletion request is recorded once,
-reaches staff (the Privacy queue and the daily brief) and moves through its
-steps there; coaches cannot see the queue.
+anything; it is recorded with counts only.
+
+Deletion (privacy/deletion.js): only the guardian who set up the family can ask
+or cancel, with a recent sign-in to ask; it is scheduled once, 7 days out, and
+emailed; every guardian sees the date; staff see it (the Privacy queue and the
+daily brief), can stop it with a legal hold, and cannot mark it done by hand.
+The purge itself is tested against real SQL in tests/test_deletion.mjs.
+Requests from before it was automatic still move through their steps by hand;
+coaches cannot see the queue.
 """
 import json
 import os
@@ -94,7 +100,7 @@ post(P + "/children", {"child_name": "Other Child", "date_of_birth": "2015-04-04
 
 print("\n=== downloading the family's data ===")
 st, _, _, html = get(P + "/account", cookies=SA)
-check("the account page offers download and deletion", "Download our data" in html and "Ask us to delete our data" in html)
+check("the account page offers download and deletion", "Download our data" in html and "Delete our data in 7 days" in html)
 stale = session_cookies(mint_session(A, recent=False))
 st, _, body = export(stale)
 check("a download needs a recent sign-in", st == 403 and "sign in again" in body.lower(), st)
@@ -120,27 +126,115 @@ codes = [export(SA)[0] for _ in range(6)]
 check("five downloads a day, then 'try tomorrow'", codes[:5] == [200] * 5 and codes[5] == 429, codes)
 
 print("\n=== asking for deletion ===")
-st, h, _, _ = post(P + "/account/delete-request", {}, cookies=stale)
-check("a deletion request needs a recent sign-in", st == 403 and sql("SELECT 1 FROM data_requests WHERE kind='deletion'") == [], st)
-st, h, _, _ = post(P + "/account/delete-request", {}, cookies=SA)
-check("with one, it is received", st == 303 and "notice=delete-requested" in h.get("Location", ""), st)
-post(P + "/account/delete-request", {}, cookies=SA)
-d = sql("SELECT id, status, subject_id, requested_by FROM data_requests WHERE kind='deletion'")
-check("asking twice records one request", len(d) == 1 and d[0]["status"] == "received"
-      and d[0]["subject_id"] == str(KID["household_id"]) and d[0]["requested_by"] == f"account:{A}", d)
-st, _, _, html = get(P + "/account?notice=delete-requested", cookies=SA)
-# The page escapes the apostrophe in "We'll", so match the words after it.
-check("the family is told what happens next", "email you to confirm" in html)
-st, _, _, _ = post(P + "/account/delete-request", {}, cookies=SA, headers={"Sec-Fetch-Site": "cross-site"})
-check("a cross-site request is refused", st == 403, st)
+import json as _json
+import threading as _threading
+import time as _time
+from http.server import BaseHTTPRequestHandler as _H, ThreadingHTTPServer as _S
+_captured = []
 
-print("\n=== staff act on it ===")
-st, html = admin("GET", "/privacy")
-check("the Privacy queue shows the request and the steps", st == 200 and "Deletion request" in html
-      and "The Export family" in html and "Keep signed waivers" in html, st)
-st, html = admin("GET", "/brief")
-check("the daily brief counts it", "1 data deletion request is waiting" in html)
-rid = d[0]["id"]
+
+class _Sink(_H):
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self):
+        _captured.append(_json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0)))))
+        body = b'{"id":"sink"}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+_srv = _S(("127.0.0.1", 8799), _Sink)
+_threading.Thread(target=_srv.serve_forever, daemon=True).start()
+SCO = session_cookies(mint_session(co))
+H = KID["household_id"]
+try:
+    st, h, _, _ = post(P + "/account/delete-request", {}, cookies=stale)
+    check("a deletion request needs a recent sign-in", st == 403 and sql("SELECT 1 FROM data_requests WHERE kind='deletion'") == [], st)
+    st, _, _, html = get(P + "/account", cookies=SCO)
+    check("a co-guardian is not offered it", "Delete our data in 7 days" not in html
+          and "Only the guardian who set up your family can delete its data" in html)
+    st, _, _, html = post(P + "/account/delete-request", {}, cookies=SCO)
+    check("and is refused if they ask anyway", st == 403 and sql("SELECT 1 FROM data_requests WHERE kind='deletion'") == [], st)
+    st, h, _, _ = post(P + "/account/delete-request", {}, cookies=SA)
+    check("the owner can ask", st == 303 and "notice=delete-requested" in h.get("Location", ""), st)
+    post(P + "/account/delete-request", {}, cookies=SA)
+    d = sql("SELECT id, status, subject_id, requested_by, purge_after, "
+            "julianday(purge_after) - julianday(created_at) AS days FROM data_requests WHERE kind='deletion'")
+    check("asking twice schedules it once, 7 days out", len(d) == 1 and d[0]["status"] == "scheduled"
+          and abs(d[0]["days"] - 7) < 0.001 and d[0]["subject_id"] == str(H) and d[0]["requested_by"] == f"account:{A}", d)
+    _time.sleep(1)
+    mail = [m for m in _captured if "export-a@example.com" in (m.get("to") or [])]
+    body = (mail[0].get("text", "") + mail[0].get("html", "")) if mail else ""
+    check("and emails the owner the date and how to cancel", len(mail) == 1 and "will be deleted on" in body and "Keep our data" in body
+          and "/account" in body, len(mail))
+    check("naming no child", "Ada" not in body)
+    st, _, _, html = get(P + "/account?notice=delete-requested", cookies=SA)
+    check("the owner's Account page says so, with the date and a way to keep the data",
+          "emailed you the date" in html and "will be deleted on" in html and "Keep our data" in html)
+    st, _, _, html = get(P + "/", cookies=SA)
+    check("their family page shows it too", "will be deleted on" in html and "Keep your data" in html)
+    st, _, _, html = get(P + "/", cookies=SCO)
+    check("so does the co-guardian's, without a way to cancel", "will be deleted on" in html
+          and "Only the guardian who set up your family can cancel it" in html and "Keep your data" not in html)
+    st, _, _, html = get(P + "/account", cookies=SCO)
+    check("nor on their Account page", "will be deleted on" in html and "Keep our data" not in html)
+    st, _, _, _ = post(P + "/account/delete-cancel", {}, cookies=SCO)
+    check("and a co-guardian who tries is refused", st == 403 and sql(f"SELECT status FROM data_requests WHERE id={d[0]['id']}")[0]["status"] == "scheduled", st)
+    st, _, _, html = get(P + "/", cookies=SB)
+    check("another family sees nothing of it", "will be deleted on" not in html)
+    st, _, _, _ = post(P + "/account/delete-request", {}, cookies=SA, headers={"Sec-Fetch-Site": "cross-site"})
+    check("a cross-site request is refused", st == 403, st)
+
+    print("\n=== staff see it, and can stop it ===")
+    st, html = admin("GET", "/privacy")
+    check("the Privacy queue shows it runs by itself, and how to stop it", st == 200 and "Deletion request" in html
+          and "The Export family" in html and "Deletes automatically after" in html and "place a legal hold" in html, st)
+    check("with no button to mark it done by hand", f"/privacy/{d[0]['id']}/completed" not in html
+          and f"/privacy/{d[0]['id']}/rejected" in html)
+    admin("POST", f"/privacy/{d[0]['id']}/completed")
+    check("which the server refuses too", sql(f"SELECT status FROM data_requests WHERE id={d[0]['id']}")[0]["status"] == "scheduled")
+    st, html = admin("GET", "/brief")
+    check("the daily brief says it is coming, and how to stop it", "1 family has asked to delete their data" in html
+          and "legal hold" in html)
+    _req = urllib.request.Request(BASE + "/__admin/privacy/holds", method="POST", data=urllib.parse.urlencode(
+        {"subject_type": "household", "subject_id": str(H), "reason": "Insurance claim"}).encode())
+    _req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    _req.add_header("Sec-Fetch-Site", "same-origin")
+    try:
+        urllib.request.build_opener(_NoRedirect).open(_req)
+    except urllib.error.HTTPError:
+        pass
+    st, html = admin("GET", "/privacy")
+    check("a legal hold on the family shows it will not run", "On legal hold" in html)
+    sql("UPDATE legal_holds SET released_at = 'x', released_by = 'test'")
+
+    print("\n=== changing your mind ===")
+    st, h, _, _ = post(P + "/account/delete-cancel", {}, cookies=stale)
+    check("the owner cancels, even without a recent sign-in", st == 303 and "notice=delete-cancelled" in h.get("Location", ""), st)
+    r = sql(f"SELECT status, completed_by FROM data_requests WHERE id={d[0]['id']}")
+    check("the request is cancelled, by whom recorded", r == [{"status": "cancelled", "completed_by": f"account:{A}"}], r)
+    st, _, _, html = get(P + "/", cookies=SCO)
+    check("and every guardian's page stops saying so", "will be deleted on" not in html)
+    check("both are audited", {"portal.deletion_requested", "portal.deletion_cancelled"}
+          <= {x["action"] for x in sql("SELECT action FROM audit_log WHERE action LIKE 'portal.deletion%'")})
+    sql("DELETE FROM rate_limits")
+    codes = [post(P + "/account/delete-request", {}, cookies=SA)[0] for _ in range(4)]
+    check("asking is limited to 3 times a day (each one emails)", codes[:3] == [303] * 3 and codes[3] == 429, codes)
+finally:
+    _srv.shutdown()
+
+print("\n=== requests from before deletion was automatic ===")
+sql("DELETE FROM data_requests WHERE kind='deletion'")
+sql("INSERT INTO data_requests (kind, subject_type, subject_id, requested_by, status, verification, created_at, updated_at) "
+    f"VALUES ('deletion', 'household', '{H}', 'account:{A}', 'received', 'recent_sign_in', 'n', 'n')")
+rid = sql("SELECT id FROM data_requests WHERE kind='deletion'")[0]["id"]
 st, _ = admin("POST", f"/privacy/{rid}/completed")
 check("it cannot skip straight from received to completed", sql(f"SELECT status FROM data_requests WHERE id={rid}")[0]["status"] == "received")
 admin("POST", f"/privacy/{rid}/verified")

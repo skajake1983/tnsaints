@@ -2,11 +2,14 @@
  * A family's privacy rights, from the Account page.
  *
  * POST /account/export          download everything we hold about the family (JSON)
- * POST /account/delete-request  ask us to delete it; staff act on it by runbook
+ * POST /account/delete-request  delete it, GRACE_DAYS from now (privacy/deletion.js)
+ * POST /account/delete-cancel   keep it after all
  *
- * Both need a RECENT sign-in (12 h): an export is the whole family's data in
- * one file, and a deletion request is irreversible once acted on, so neither
- * should ride on a three-week-old cookie.
+ * Export and deletion need a RECENT sign-in (12 h): an export is the whole
+ * family's data in one file, and a deletion cannot be undone once it runs, so
+ * neither should ride on a three-week-old cookie. Cancelling does not: it
+ * only keeps things as they are. Only the guardian who set the family up
+ * (the owner) may ask or cancel; every guardian sees the date.
  *
  * WHAT THE EXPORT HOLDS: the family, its guardians (names and roles; the
  * requester's own email), its children's profiles and medical answers,
@@ -16,9 +19,9 @@
  * default O11) and other guardians' email addresses. Exports are recorded as
  * data requests with counts only — never the data.
  *
- * Deletion is not automatic: signed waivers and payment records are kept for
- * their retention period, and a person decides what goes (PORTAL-SETUP.md,
- * "Privacy requests").
+ * Deletion is automatic once the grace period ends, unless a legal hold is
+ * placed; signed waivers and payment records are kept for their retention
+ * period (PORTAL-SETUP.md, "Privacy requests").
  */
 
 import { json } from '../http.js';
@@ -27,6 +30,9 @@ import { rateLimit } from '../lib/ratelimit.js';
 import { redirect } from './auth-pages.js';
 import { inviteMessagePage } from './family-pages.js';
 import { esc } from './ui.js';
+import { scheduleDeletion, cancelDeletion, deletionDay, GRACE_DAYS } from '../privacy/deletion.js';
+import { sendDeletionScheduled } from '../email.js';
+import { portalOrigin, portalBase } from '../auth/magic.js';
 
 const MEMBER_OF = `SELECT household_id FROM household_members WHERE account_id = ?1`;
 const iso = () => new Date().toISOString();
@@ -124,42 +130,80 @@ export async function privacyRoutes({ env, ctx, rc, session, pathname, method })
 
   if (pathname === '/account/delete-request' && method === 'POST') {
     if (!session.recentAuth) return needRecent(rc);
-    const household = await env.DB.prepare(`SELECT household_id FROM household_members WHERE account_id = ?1 LIMIT 1`)
-      .bind(session.accountId)
-      .first();
-    const subject = household ? String(household.household_id) : `account:${session.accountId}`;
-    const now = iso();
-    const open = await env.DB.prepare(
-      `SELECT 1 FROM data_requests WHERE kind = 'deletion' AND subject_id = ?1 AND status IN ('received', 'verified', 'scheduled')`
-    ).bind(subject).first();
-    if (!open) {
-      await env.DB.prepare(
-        `INSERT INTO data_requests (kind, subject_type, subject_id, requested_by, status, verification, created_at, updated_at)
-         VALUES ('deletion', 'household', ?1, ?2, 'received', 'recent_sign_in', ?3, ?3)`
-      ).bind(subject, `account:${session.accountId}`, now).run();
+    // Each request emails the address; a few a day is plenty for a change of mind.
+    const limit = await rateLimit(env, [
+      { scope: 'delete-request-day', subject: String(session.accountId), limit: 3, windowSeconds: 24 * 60 * 60 },
+    ]);
+    if (!limit.allowed) {
+      return inviteMessagePage(rc, { title: 'Please try again tomorrow', text: 'You have asked several times today.', status: 429 });
+    }
+    const r = await scheduleDeletion(env, { accountId: session.accountId });
+    if (r.result === 'not-owner') return ownerOnly(rc);
+    if (r.result === 'scheduled') {
       ctx.waitUntil(audit(env, { actor: `account:${session.accountId}`, action: 'portal.deletion_requested',
-        subjectType: 'household', subjectId: subject }));
+        subjectType: 'household', subjectId: r.subject, detail: { grace_days: GRACE_DAYS } }));
+      ctx.waitUntil(sendDeletionScheduled(env, { to: session.email, date: deletionDay(r.purgeAfter),
+        accountUrl: `${portalOrigin(env)}${portalBase(env)}/account` }));
     }
     return redirect(rc.url('/account?notice=delete-requested'));
+  }
+
+  if (pathname === '/account/delete-cancel' && method === 'POST') {
+    const r = await cancelDeletion(env, { accountId: session.accountId });
+    if (r.result === 'not-owner') return ownerOnly(rc);
+    if (r.result === 'cancelled') {
+      ctx.waitUntil(audit(env, { actor: `account:${session.accountId}`, action: 'portal.deletion_cancelled',
+        subjectType: 'data_request', subjectId: r.id }));
+    }
+    return redirect(rc.url('/account?notice=delete-cancelled'));
   }
   return null;
 }
 
-export function privacySection(rc) {
+function ownerOnly(rc) {
+  return inviteMessagePage(rc, {
+    title: 'Only the guardian who set up your family can do this',
+    text: "Ask them to do it from their Account page. Your family's data is unchanged.",
+    status: 403,
+  });
+}
+
+/**
+ * The Account page's data section. `deletion` is privacy/deletion.js
+ * deletionStatus(): whether this guardian may ask or cancel, and any open request.
+ */
+export function privacySection(rc, deletion = { owner: true, pending: null }) {
+  const download = `<form method="post" action="${esc(rc.url('/account/export'))}" style="margin-bottom:12px">
+    <button class="btn secondary" type="submit">Download our data</button>
+  </form>`;
+  const pending = deletion.pending;
+  if (pending) {
+    const when = pending.purgeAfter ? `will be deleted on ${esc(deletionDay(pending.purgeAfter))}` : 'is being deleted';
+    return `<section class="panel" aria-labelledby="priv-h">
+  <h2 id="priv-h" style="margin-top:0">Your family's data</h2>
+  <div class="notice" role="note"><strong>Your family's data ${when}.</strong> Until then, nothing changes.
+  ${deletion.owner ? '' : 'Only the guardian who set up your family can cancel it.'}</div>
+  ${deletion.owner ? `<form method="post" action="${esc(rc.url('/account/delete-cancel'))}" style="margin-bottom:12px">
+    <button class="btn" type="submit">Keep our data</button>
+  </form>` : ''}
+  ${download}
+</section>`;
+  }
   return `<section class="panel" aria-labelledby="priv-h">
   <h2 id="priv-h" style="margin-top:0">Your family's data</h2>
-  <p>Download a copy of everything we hold about your family, or ask us to delete it. Both need a recent sign-in.</p>
-  <form method="post" action="${esc(rc.url('/account/export'))}" style="margin-bottom:12px">
-    <button class="btn secondary" type="submit">Download our data</button>
-  </form>
-  <details>
-    <summary>Ask us to delete your family's data</summary>
-    <p>We will delete your family's account, children's details, medical answers and contacts. Signed waivers and payment
-    records are kept for as long as the law requires, then deleted. Any place in a program will end, and you should cancel
-    any PayPal subscription in PayPal. We will email you when it is done.</p>
+  <p>Download a copy of everything we hold about your family${deletion.owner ? ', or delete it' : ''}. Both need a recent sign-in.</p>
+  ${download}
+  ${deletion.owner ? `<details>
+    <summary>Delete your family's data</summary>
+    <p>We delete it ${GRACE_DAYS} days after you ask, and email you now with the date. Until then you can cancel here, and
+    nothing changes.</p>
+    <p><strong>What we delete:</strong> your account and your family's other guardians' sign-ins, your children's details and
+    medical answers, your emergency contacts, and any place in a program. Card or bank payments stop.</p>
+    <p><strong>What we keep:</strong> signed waivers and payment records, with your child's name and date of birth only, for as long
+    as the law requires; then they are deleted too. If you pay through PayPal, we cancel that for you, or you can in PayPal.</p>
     <form method="post" action="${esc(rc.url('/account/delete-request'))}">
-      <button class="btn secondary" type="submit">Ask us to delete our data</button>
+      <button class="btn secondary" type="submit">Delete our data in ${GRACE_DAYS} days</button>
     </form>
-  </details>
+  </details>` : `<p class="hint">Only the guardian who set up your family can delete its data.</p>`}
 </section>`;
 }

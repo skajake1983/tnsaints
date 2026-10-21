@@ -33,9 +33,10 @@ import { sweepOrders } from '../payments/orders.js';
 import { sweepStripe } from '../payments/stripe-billing.js';
 import { expireInquiryIpHashes } from '../crm/intake.js';
 import { runStaffBrief } from './brief.js';
-import { sendRosterDigest, sendStaffBriefEmail } from '../email.js';
+import { sendRosterDigest, sendStaffBriefEmail, sendDeletionDone } from '../email.js';
 import { reconcileCrm, RECONCILE_STEPS } from '../crm/reconcile.js';
 import { runRetention, RULES as RETENTION_RULES } from '../privacy/retention.js';
+import { purgeNext, PURGE_QUERIES } from '../privacy/deletion.js';
 
 export const QUERY_BUDGET = 45;
 const STALE_MS = 30 * 60 * 1000;
@@ -90,6 +91,16 @@ export function centralClock(now = new Date()) {
  */
 export const JOBS = [
   {
+    // A family's own deletion request, once its grace period is over and no
+    // legal hold is on it (privacy/deletion.js). First, because the family was
+    // told a date; one family a run, so it always fits.
+    name: 'family-deletion', cadence: 'hourly', minQueries: PURGE_QUERIES,
+    run: async (env) => {
+      const r = await purgeNext(env, { send: sendDeletionDone });
+      return { detail: { result: r.result, ...(r.reason ? { reason: r.reason } : {}) } };
+    },
+  },
+  {
     // Lapsed seat offers back to the waiting list (their seats are already free).
     name: 'expire-offers', cadence: 'hourly', minQueries: 1,
     run: async (env) => ({ detail: { expired: await expireOffers(env) } }),
@@ -104,7 +115,7 @@ export const JOBS = [
   },
   {
     // One staff email a day, only when there is something to do.
-    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 18,
+    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 19,
     run: async (env) => {
       const r = await runStaffBrief(env, sendStaffBriefEmail);
       // Not sent because the provider failed or the day's allowance is gone:

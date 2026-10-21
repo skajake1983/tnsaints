@@ -424,11 +424,11 @@ export async function sendStaffBriefEmail(env, { lines, adminUrl }) {
  * "You're invited to the parent portal" — staff inviting a family while the
  * portal is invite-only. Receipt lane.
  *
- * Deliberately not a sign-in link. It carries no token: it tells the family
- * where to go and which address to use, and the portal's normal sign-in
- * (email link or Google) proves they control that mailbox.
+ * Its button signs the family straight in (auth/magic.js createInviteLink:
+ * single use, 7 days), so there is no second email to ask for. After that, or
+ * if it has been used, they sign in at the portal with the same address.
  */
-export async function sendPortalInvite(env, { to, url }) {
+export async function sendPortalInvite(env, { to, url, portalUrl, days = 7 }) {
   if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
   const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
@@ -443,9 +443,11 @@ export async function sendPortalInvite(env, { to, url }) {
       keep their medical and emergency details current, and apply to the academy.</p>
       <p style="margin:18px 0;">
         <a href="${escapeHtml(url)}" style="background:#06255c;color:#fff;text-decoration:none;
-          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Go to the parent portal</a>
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Set up my family</a>
       </p>
-      <p>Sign in with <strong>this email address</strong>. We'll email you a sign-in link, so there's no password to set.</p>
+      <p>The button signs you in — no password to set. It works once, within ${days} days. After that, go to
+      ${escapeHtml(portalUrl)} and sign in with <strong>this email address</strong>.</p>
+      <p style="color:#536277;font-size:14px;">Please don't forward this email: the button signs in whoever uses it.</p>
       <p style="color:#536277;font-size:14px;">Questions: ${escapeHtml(contact)}.</p>
     </div>
   </div>`;
@@ -453,12 +455,77 @@ export async function sendPortalInvite(env, { to, url }) {
     "You're invited to the Tennessee Saints parent portal, where you can add your children,",
     'keep their medical and emergency details current, and apply to the academy.',
     '',
-    `Go to: ${url}`,
+    `Set up your family (this link signs you in; it works once, within ${days} days): ${url}`,
     '',
-    "Sign in with this email address. We'll email you a sign-in link; there's no password to set.",
+    `After that, go to ${portalUrl} and sign in with this email address. Please don't forward this email.`,
     `Questions: ${contact}`,
   ].join('\n');
   return sendMetered(env, 'receipt', { to, subject: "You're invited to the Tennessee Saints parent portal", html, text, replyTo: contact });
+}
+
+/** The portal email frame: navy title bar, then the body (trusted markup). */
+function portalMail(title, inner) {
+  return `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:560px;color:#13233d;">
+    <div style="background:#06255c;color:#fff;padding:16px 18px;border-radius:8px 8px 0 0;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td style="padding-right:12px;vertical-align:middle;">${logoImg(40)}</td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">${escapeHtml(title)}</td>
+      </tr></table>
+    </div>
+    <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:20px;">${inner}</div>
+  </div>`;
+}
+
+/**
+ * "Your family's data will be deleted on <date>" (privacy/deletion.js), the
+ * moment it is scheduled, so the mailbox owner can stop a request they did not
+ * make. Receipt lane.
+ */
+export async function sendDeletionScheduled(env, { to, date, accountUrl }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const html = portalMail('Tennessee Saints — parent portal', `
+      <p style="margin-top:0;">You asked us to delete your family's data from the parent portal. It will be deleted on
+      <strong>${escapeHtml(date)}</strong>.</p>
+      <p>Changed your mind? Sign in and choose <strong>Keep our data</strong> on your Account page before then:
+      <a href="${escapeHtml(accountUrl)}">${escapeHtml(accountUrl)}</a></p>
+      <p><strong>Didn't ask for this?</strong> Sign in and cancel it, then tell us at ${escapeHtml(contact)}.</p>
+      <p style="color:#536277;font-size:14px;">Signed waivers and payment records are kept for as long as the law requires, then deleted.</p>`);
+  const text = [
+    `You asked us to delete your family's data from the parent portal. It will be deleted on ${date}.`,
+    '',
+    `Changed your mind? Sign in and choose "Keep our data" on your Account page before then: ${accountUrl}`,
+    '',
+    `Didn't ask for this? Sign in and cancel it, then tell us at ${contact}.`,
+    '',
+    'Signed waivers and payment records are kept for as long as the law requires, then deleted.',
+  ].join('\n');
+  return sendMetered(env, 'receipt', { to, subject: "Your family's data will be deleted on " + date, html, text, replyTo: contact });
+}
+
+/** "Your family's data has been deleted" (privacy/deletion.js). Receipt lane. */
+export async function sendDeletionDone(env, { to }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const html = portalMail('Tennessee Saints — parent portal', `
+      <p style="margin-top:0;">Your family's data has been deleted from the parent portal, as you asked: your account and your
+      family's other guardians' sign-ins, your children's details and medical answers, your emergency contacts, and any place in a
+      program.</p>
+      <p>We have kept signed waivers and payment records, with your child's name and date of birth only, for as long as the law
+      requires. They are deleted after that.</p>
+      <p>If you paid through PayPal, we will cancel that subscription; you can also cancel it yourself in PayPal.</p>
+      <p style="color:#536277;font-size:14px;">Questions: ${escapeHtml(contact)}.</p>`);
+  const text = [
+    "Your family's data has been deleted from the parent portal, as you asked: your account and your family's other",
+    "guardians' sign-ins, your children's details and medical answers, your emergency contacts, and any place in a program.",
+    '',
+    "We have kept signed waivers and payment records, with your child's name and date of birth only, for as long as the law",
+    'requires. They are deleted after that.',
+    '',
+    'If you paid through PayPal, we will cancel that subscription; you can also cancel it yourself in PayPal.',
+    `Questions: ${contact}`,
+  ].join('\n');
+  return sendMetered(env, 'receipt', { to, subject: "Your family's data has been deleted", html, text, replyTo: contact });
 }
 
 function row(label, value) {

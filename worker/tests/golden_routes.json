@@ -2331,6 +2331,28 @@
    "no-script"
   ]
  },
+ "POST /privacy/paypal/999999/cancelled": {
+  "admin": [
+   303,
+   "redirect /privacy?msg=paypal-cancelled",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "POST /privacy/retention/check": {
   "admin": [
    303,

@@ -125,8 +125,17 @@ or <a href="${esc(rc.url('/'))}">request a new link</a> from another browser.</d
  * end up signed in as them and type your child's details into their account.
  * Naming the account (partly masked) before continuing defeats that.
  */
-export function confirmPage(rc, token, maskedEmail) {
-  const body = `<h1>Is this you?</h1>
+export function confirmPage(rc, token, maskedEmail, { invite = false } = {}) {
+  const body = invite
+    ? `<h1>Welcome to the parent portal</h1>
+<p class="lede">You're about to set up your family as <strong>${esc(maskedEmail)}</strong>.</p>
+<p>If this invitation wasn't meant for you, close this page.</p>
+<form method="post" action="${esc(rc.url('/auth/email/verify'))}">
+  <input type="hidden" name="t" value="${esc(token)}">
+  <input type="hidden" name="confirm" value="1">
+  <button class="btn" type="submit">Continue as ${esc(maskedEmail)}</button>
+</form>`
+    : `<h1>Is this you?</h1>
 <p class="lede">You're about to sign in as <strong>${esc(maskedEmail)}</strong>.</p>
 <p>If you asked for this link from another device, that's fine — continue. If you didn't ask for it, close this page.</p>
 <form method="post" action="${esc(rc.url('/auth/email/verify'))}">
@@ -139,7 +148,7 @@ export function confirmPage(rc, token, maskedEmail) {
 
 export function linkProblemPage(rc) {
   const body = `<h1>That link has expired</h1>
-<p class="lede">Sign-in links work once and expire after 15 minutes.</p>
+<p class="lede">Sign-in links work once, and expire after 15 minutes (an invitation's after 7 days).</p>
 <p><a class="btn" href="${esc(rc.url('/'))}">Get a new link</a></p>`;
   return portalResponse(portalPage({ rc, title: 'Link expired', body }), { status: 400 });
 }

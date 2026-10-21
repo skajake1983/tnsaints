@@ -10,7 +10,7 @@
 import { can, audit } from '../../auth/staff.js';
 import { readForm } from '../../lib/body.js';
 import { sendPortalInvite } from '../../email.js';
-import { portalOrigin } from '../../auth/magic.js';
+import { portalOrigin, portalBase, createInviteLink, INVITE_DAYS } from '../../auth/magic.js';
 import { familiesView, shirtTotals, childMedical, invitedAccounts } from '../../programs/families.js';
 import { page, htmlResponse } from '../ui.js';
 import { familiesBody, medicalBody, FAMILY_STYLES } from '../families-ui.js';
@@ -61,7 +61,8 @@ export const routes = [
       ).bind(typed, emailNorm, now).run();
       const account = await env.DB.prepare(`SELECT id, status FROM accounts WHERE email_norm = ?1`).bind(emailNorm).first();
       if (!account || account.status !== 'active') return back('invalid');
-      const sent = await sendPortalInvite(env, { to: typed, url: `${portalOrigin(env)}/` });
+      const url = await createInviteLink(env, emailNorm);
+      const sent = await sendPortalInvite(env, { to: typed, url, portalUrl: `${portalOrigin(env)}${portalBase(env)}/`, days: INVITE_DAYS });
       ctx.waitUntil(audit(env, { actor: principal.email, action: 'portal.family_invite', subjectType: 'account', subjectId: account.id }));
       return back(sent.ok ? 'invited' : 'invited-no-email');
     },
