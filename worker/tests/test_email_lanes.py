@@ -379,20 +379,27 @@ except Exception:
 check("unit harness ran", u is not None, (res.stderr or b"").decode()[-400:])
 if u:
     check("today's settings (auth reserve 0) reproduce the pre-lane ceilings",
-          u["today"] == {"auth": [100, 3000], "alert": [100, 2850], "bulk": [100, 2850], "receipt": [75, 2850]},
+          u["today"] == {"auth": [100, 3000], "alert": [100, 2850], "bulk": [100, 2850], "receipt": [75, 2850],
+                         "invite": [50, 2850]},
           u["today"])
     check("a 15/day auth reserve takes 15 from alerts and batches, not from receipts' own reserve",
-          u["portal"] == {"auth": [100, 3000], "alert": [85, 2850], "bulk": [85, 2850], "receipt": [75, 2850]},
+          u["portal"] == {"auth": [100, 3000], "alert": [85, 2850], "bulk": [85, 2850], "receipt": [75, 2850],
+                          "invite": [50, 2850]},
           u["portal"])
     check("receipts always leave at least the auth reserve",
           u["big_auth"]["receipt"] == [70, 2850], u["big_auth"])
     check("EMAIL_DAILY_LIMIT=0 means zero, not the default",
           all(v[0] <= 0 for v in u["zero"].values()), u["zero"])
     check("unset settings take the free-plan defaults",
-          u["defaults"] == {"auth": [100, 3000], "alert": [100, 2850], "bulk": [100, 2850], "receipt": [75, 2850]},
+          u["defaults"] == {"auth": [100, 3000], "alert": [100, 2850], "bulk": [100, 2850], "receipt": [75, 2850],
+                            "invite": [50, 2850]},
           u["defaults"])
+    check("event invitations stop 25 short of the receipt ceiling, so the families who answer still get receipts",
+          all(u[k]["receipt"][0] - u[k]["invite"][0] == 25 for k in ("today", "portal", "big_auth")),
+          {k: (u[k]["receipt"], u[k]["invite"]) for k in ("today", "portal", "big_auth")})
     check("unreadable or negative settings fall back to the defaults", u["garbage"] == u["defaults"], u["garbage"])
-    check("the four lanes", u["lanes"] == ["auth", "alert", "bulk", "receipt"], u["lanes"])
+    check("the five lanes (invitations their own since the Events plan)",
+          u["lanes"] == ["auth", "alert", "bulk", "receipt", "invite"], u["lanes"])
     check("an unknown lane is a loud error, never an unmetered send", u["unknownThrows"] is True)
     check("so is a missing lane", u["missingThrows"] is True)
     check("recipients are counted per address (Resend bills per recipient)",

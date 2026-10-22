@@ -12,11 +12,14 @@ const INSERT_COLUMNS = `
   parent_name, parent_email, parent_email_norm, phone, school,
   emergency_contact_name, emergency_contact_phone, medical_notes,
   assumption_of_risk, medical_release, photo_release, signature, signed_at,
-  highlight_link, player_notes, created_at, ip_hash, cancel_token
+  highlight_link, player_notes, created_at, ip_hash, cancel_token,
+  group_id, waiver_version_id, waiver_sha256, source,
+  payment_state, hold_expires_at, amount_due_cents
 `;
 
 const INSERT_PLACEHOLDERS =
-  '?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25';
+  '?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ' +
+  '?26, ?27, ?28, ?29, ?30, ?31, ?32';
 
 /**
  * The only credential in a cancel link, so it has to be unguessable rather
@@ -35,9 +38,27 @@ export function sessionTimes(env) {
     .filter(Boolean);
 }
 
-export function slotCapacity(env) {
+/**
+ * How many a session holds. An event run from a program gives each session
+ * its own size (SESSION_CAPACITIES, programs/evaluation.js); otherwise every
+ * session holds SLOT_CAPACITY (wrangler.toml).
+ */
+export function slotCapacity(env, session) {
+  if (session !== undefined && env.SESSION_CAPACITIES) {
+    try {
+      const own = Number(JSON.parse(env.SESSION_CAPACITIES)[session]);
+      if (Number.isFinite(own) && own > 0) return own;
+    } catch {
+      // Fall through to the single size.
+    }
+  }
   const n = parseInt(env.SLOT_CAPACITY, 10);
   return Number.isFinite(n) && n > 0 ? n : 25;
+}
+
+/** Every session's size added up: the event's total places. */
+export function totalCapacity(env) {
+  return sessionTimes(env).reduce((sum, t) => sum + slotCapacity(env, t), 0);
 }
 
 /**
@@ -59,6 +80,12 @@ export function registrationWindow(env, now = new Date()) {
     return { open: false, reason: 'closed', closesAt };
   }
 
+  // An event can be announced before sign-ups open (programs.registration_opens_at).
+  const opensAt = env.REGISTRATION_OPENS_AT ? new Date(env.REGISTRATION_OPENS_AT) : null;
+  if (opensAt && !Number.isNaN(opensAt.getTime()) && now < opensAt) {
+    return { open: false, reason: 'not-yet', closesAt, opensAt };
+  }
+
   return { open: true, closesAt };
 }
 
@@ -66,7 +93,6 @@ export function registrationWindow(env, now = new Date()) {
  * Confirmed counts per session for the current event.
  */
 export async function getAvailability(env) {
-  const capacity = slotCapacity(env);
   const times = sessionTimes(env);
 
   const { results } = await env.DB.prepare(
@@ -82,6 +108,7 @@ export async function getAvailability(env) {
 
   const sessions = times.map((time) => {
     const used = taken.get(time) || 0;
+    const capacity = slotCapacity(env, time);
     return {
       session_time: time,
       capacity,
@@ -147,11 +174,26 @@ function bindValues(env, data, status, createdAt, ipHash, cancelToken) {
     createdAt,
     ipHash,
     cancelToken,
+    // The Events plan: which session, by id; the waiver the form showed (an
+    // event's own, versioned); where the sign-up came from. The legacy form
+    // sends none of these.
+    data.group_id ?? null,
+    data.waiver_version_id ?? null,
+    data.waiver_sha256 ?? null,
+    data.source ?? null,
+    // A paid event (EV6): 'pending' while the family pays, or 'at_check_in'.
+    data.payment_state ?? null,
+    data.hold_expires_at ?? null,
+    data.amount_due_cents ?? null,
   ];
 }
 
 /**
  * Read-only lookup behind a cancel link.
+ *
+ * By token alone, whatever the event: the link in a family's email has to
+ * keep working after staff make another event the current one. The caller
+ * runs the cancel with that event's settings (index.js), from event_id.
  *
  * Deliberately separate from the cancel itself, and deliberately GET-safe.
  * Corporate mail scanners (Outlook Safe Links, for one) fetch every URL in an
@@ -163,11 +205,11 @@ export async function lookupByCancelToken(env, token) {
   if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return null;
 
   return await env.DB.prepare(
-    `SELECT player_name, session_time, status, grade, parent_name, cancelled_at
+    `SELECT event_id, player_name, session_time, status, grade, parent_name, cancelled_at, source
        FROM registrations
-      WHERE cancel_token = ?1 AND event_id = ?2`
+      WHERE cancel_token = ?1`
   )
-    .bind(token, env.EVENT_ID)
+    .bind(token)
     .first();
 }
 
@@ -240,7 +282,7 @@ export async function cancelByToken(env, token, reason) {
  * @returns {Promise<object|null>} the promoted registration, or null
  */
 export async function promoteFirstWaitlisted(env, sessionTime) {
-  const capacity = slotCapacity(env);
+  const capacity = slotCapacity(env, sessionTime);
 
   const next = await env.DB.prepare(
     `SELECT id, player_name, grade, parent_name, parent_email, session_time, cancel_token
@@ -254,9 +296,16 @@ export async function promoteFirstWaitlisted(env, sessionTime) {
 
   if (!next) return null;
 
+  // A paid event (EV6) offers the freed place to be paid for: held for
+  // PROMOTED_HOLD_HOURS while the family pays (events/payments.js), else it
+  // goes back.
+  const online = env.PAYMENT_POLICY === 'online' && Number(env.PRICE_CENTS) > 0;
+  const hold = online ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null;
   const res = await env.DB.prepare(
     `UPDATE registrations
-        SET status = 'confirmed'
+        SET status = 'confirmed',
+            payment_state = CASE WHEN ?5 = 1 THEN 'pending' ELSE payment_state END,
+            hold_expires_at = CASE WHEN ?5 = 1 THEN ?6 ELSE hold_expires_at END
       WHERE id = ?1
         AND status = 'waitlist'
         AND (
@@ -264,10 +313,10 @@ export async function promoteFirstWaitlisted(env, sessionTime) {
            WHERE event_id = ?2 AND session_time = ?3 AND status = 'confirmed'
         ) < ?4`
   )
-    .bind(next.id, env.EVENT_ID, sessionTime, capacity)
+    .bind(next.id, env.EVENT_ID, sessionTime, capacity, online ? 1 : 0, hold)
     .run();
 
-  return res.meta.changes > 0 ? next : null;
+  return res.meta.changes > 0 ? { ...next, hold_expires_at: hold } : null;
 }
 
 /**
@@ -284,7 +333,7 @@ export async function promoteFirstWaitlisted(env, sessionTime) {
  */
 export async function adminCancelRegistration(env, registrationId, reason) {
   const existing = await env.DB.prepare(
-    `SELECT id, player_name, session_time, status FROM registrations
+    `SELECT id, player_name, session_time, status, source FROM registrations
       WHERE id = ?1 AND event_id = ?2`
   )
     .bind(registrationId, env.EVENT_ID)
@@ -329,7 +378,7 @@ export async function adminCancelRegistration(env, registrationId, reason) {
  */
 export async function adminDeleteRegistration(env, registrationId) {
   const existing = await env.DB.prepare(
-    `SELECT id, player_name, session_time, status FROM registrations
+    `SELECT id, player_name, session_time, status, source FROM registrations
       WHERE id = ?1 AND event_id = ?2`
   )
     .bind(registrationId, env.EVENT_ID)
@@ -358,6 +407,12 @@ export async function adminDeleteRegistration(env, registrationId) {
 
   if (Number(sent?.n || 0) > 0) {
     return { ok: false, code: 'already-messaged' };
+  }
+
+  // A payment is a financial record: a paid sign-up is cancelled, never erased.
+  const paid = await env.DB.prepare(`SELECT COUNT(*) AS n FROM payments WHERE registration_id = ?1`).bind(registrationId).first();
+  if (Number(paid?.n || 0) > 0) {
+    return { ok: false, code: 'paid' };
   }
 
   // One transaction: the player and everything about them go together, or
@@ -423,7 +478,7 @@ function isUniqueViolation(err) {
  */
 export async function claimSpot(env, data, ipHash) {
   const createdAt = new Date().toISOString();
-  const capacity = slotCapacity(env);
+  const capacity = slotCapacity(env, data.session_time);
 
   try {
     const cancelToken = newCancelToken();
@@ -434,7 +489,7 @@ export async function claimSpot(env, data, ipHash) {
         WHERE (
           SELECT COUNT(*) FROM registrations
            WHERE event_id = ?1 AND session_time = ?2 AND status = 'confirmed'
-        ) < ?26`
+        ) < ?33`
     )
       .bind(...bindValues(env, data, 'confirmed', createdAt, ipHash, cancelToken), capacity)
       .run();
@@ -443,11 +498,14 @@ export async function claimSpot(env, data, ipHash) {
       return { status: 'confirmed', cancelToken };
     }
 
-    // Session filled — record as waitlist instead of rejecting outright.
+    // Session filled — record as waitlist instead of rejecting outright. A
+    // waiting family holds nothing and owes nothing yet: if a place opens for
+    // a paid event, it is offered with a pay link (promoteFirstWaitlisted).
+    const waiting = data.payment_state === 'pending' ? { ...data, payment_state: null, hold_expires_at: null } : data;
     await env.DB.prepare(
       `INSERT INTO registrations (${INSERT_COLUMNS}) VALUES (${INSERT_PLACEHOLDERS})`
     )
-      .bind(...bindValues(env, data, 'waitlist', createdAt, ipHash, cancelToken))
+      .bind(...bindValues(env, waiting, 'waitlist', createdAt, ipHash, cancelToken))
       .run();
 
     // Scoped to the session, because promotion is per-session. Counting the

@@ -119,6 +119,23 @@ ROUTES = [
     ("POST", "/privacy/holds", FORM, {"subject_type": "household", "subject_id": "999999", "reason": "Test"}),
     ("POST", "/privacy/holds/999999/release", FORM, {}),
     ("POST", "/privacy/paypal/999999/cancelled", FORM, {}),
+    ("GET", "/events", None, None),
+    ("GET", "/events/new", None, None),
+    ("GET", "/events/new/form?kind=evaluation&from=", None, None),
+    ("POST", "/events/new", FORM, {}),
+    ("POST", "/events/no-such-event/publish", FORM, {}),
+    ("POST", "/events/no-such-event/interest/999999/confirm", FORM, {}),
+    ("POST", "/events/no-such-event/teams/999999/withdraw", FORM, {}),
+    ("GET", "/events/no-such-event", None, None),
+    ("GET", "/events/no-such-event/registrations.csv", None, None),
+    ("POST", "/events/view", FORM, {"event": "no-such-event", "return": "/"}),
+    ("GET", "/events/no-such-event/invite", None, None),
+    ("POST", "/events/no-such-event/invite", FORM, {}),
+    ("GET", "/events/no-such-event/invites/999999", None, None),
+    ("POST", "/events/no-such-event/invites/999999/approve", FORM, {}),
+    ("POST", "/events/no-such-event/invites/999999/send", FORM, {}),
+    ("POST", "/events/no-such-event/invites/999999/cancel", FORM, {}),
+    ("GET", "/events/no-such-event/invites/999999/addresses", None, None),
     ("GET", "/clearances", None, None),
     ("POST", "/clearances", FORM, {}),
     ("GET", "/clearances/person?email=nobody%40example.com", None, None),
@@ -316,12 +333,12 @@ else:
          sorted(M["admin"]["links"]) == sorted(ALL) and M["admin"]["links"][0] == "/brief" and M["admin"]["links"][-1] == "/profile",
          M["admin"]["links"])
     unit("in five groups, in the order a family moves through",
-         M["admin"]["groups"] == ["Families", "Evaluations", "Programs", "Money", "Organization"], M["admin"]["groups"])
+         M["admin"]["groups"] == ["Families", "Events", "Programs", "Money", "Organization"], M["admin"]["groups"])
     unit("the page you are on is marked, once", M["admin"]["current"] == ["Decisions"], M["admin"]["current"])
     unit("the logo takes staff who can open it to Today", M["admin"]["home"] == "/brief", M["admin"]["home"])
     unit("a coach sees only their pages, and a heading only over links they have",
          M["coach"]["links"] == ["/families", "/", "/eval", "/teams", "/profile"]
-         and M["coach"]["groups"] == ["Families", "Evaluations", "Programs"] and M["coach"]["home"] == "/", M["coach"])
+         and M["coach"]["groups"] == ["Families", "Events", "Programs"] and M["coach"]["home"] == "/", M["coach"])
     unit("the board sees the board, donations and their profile, under Money and Organization only",
          M["board"]["links"] == ["/donations", "/board", "/profile"] and M["board"]["groups"] == ["Money", "Organization"], M["board"])
     unit("every role gets the Menu button wired to the menu, and a skip link",

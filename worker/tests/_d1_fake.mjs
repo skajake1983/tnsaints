@@ -29,6 +29,9 @@ export function fakeD1({ migrate = true } = {}) {
     for (const f of readdirSync(dir).filter((n) => /^\d{3}_.*\.sql$/.test(n)).sort()) {
       const sql = readFileSync(join(dir, f), 'utf8');
       try {
+        // Statement by statement, NOT one transaction: D1 does not hold
+        // deferred foreign keys across a migration file (proven 2026-10-21),
+        // so a test must not be kinder than D1 is.
         db.exec(sql);
       } catch (err) {
         // The local migrator's rule (tests/migrate_local_db.py): an ALTER-only

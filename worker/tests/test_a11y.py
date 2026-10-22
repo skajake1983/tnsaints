@@ -205,7 +205,29 @@ print("\n=== the admin ===")
 for path in ["/", "/profile", "/eval", "/decisions", "/programs", "/programs/academy", "/enrollments", "/families", "/billing",
              "/crm", "/crm/list", "/crm/tasks", "/crm/customers", "/crm/contacts/new", "/crm/import", "/inbox", "/privacy",
              "/users", "/clearances", "/teams", "/brief", "/board", "/board/members", "/board/meetings",
-             "/board/documents", "/board/compliance", "/board/disclosures", "/donations", f"/families/children/{KID}/place"]:
+             "/board/documents", "/board/compliance", "/board/disclosures", "/donations", f"/families/children/{KID}/place",
+             "/events", "/events/new", "/events/new/form?kind=evaluation&from=last"]:
+    audit(f"admin {path}", BASE + A + path)
+
+# An open gym with an invitation draft, one address in it.
+EVA = "2099-07-11-open-gym"
+sql("DELETE FROM event_invitations")
+sql("DELETE FROM invite_campaigns")
+sql(f"DELETE FROM program_groups WHERE program_id = '{EVA}'")
+sql(f"DELETE FROM programs WHERE id = '{EVA}'")
+sql("INSERT INTO programs (id, kind, event_kind, name, status, enrollment_mode, billing, grade_min, grade_max, public, "
+    "waitlist_enabled, created_at, updated_at, signup_mode, starts_on, location) VALUES "
+    f"('{EVA}', 'clinic', 'open_gym', 'Open Gym', 'draft', 'approval', 'free', 3, 8, 1, 1, 'n', 'n', 'spot', '2099-07-11', 'The gym')")
+sql("INSERT INTO program_groups (program_id, name, schedule_summary, start_time, end_time, starts_on, capacity, status, "
+    f"created_at, updated_at) VALUES ('{EVA}', '6:00 PM', '6:00 PM', '18:00', '19:30', '2099-07-11', 20, 'active', 'n', 'n')")
+sql("INSERT INTO invite_campaigns (event_id, subject, message, audience, status, created_by, created_at) VALUES "
+    f"('{EVA}', 'Come shoot with us', 'Open gym is back.', "
+    "'{\"events\":[],\"academy\":true,\"teams\":[],\"crmKinds\":[],\"crmStage\":\"\"}', 'draft', 'a11y', 'n')")
+CID = one("SELECT id FROM invite_campaigns ORDER BY id DESC LIMIT 1")["id"]
+sql("INSERT INTO event_invitations (campaign_id, event_id, email, email_norm, email_hash, name, token, created_at, updated_at) "
+    f"VALUES ({CID}, '{EVA}', 'ann@example.com', 'ann@example.com', '{'e' * 64}', 'Ann Parent', '{'7' * 64}', 'n', 'n')")
+for path in [f"/events/{EVA}", f"/events/{EVA}/invite", f"/events/{EVA}/invite?academy=1", f"/events/{EVA}/invites/{CID}",
+             f"/events/{EVA}/invites/{CID}/addresses"]:
     audit(f"admin {path}", BASE + A + path)
 
 check.finish()

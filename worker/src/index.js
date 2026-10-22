@@ -6,6 +6,7 @@
  *   GET  /api/availability          remaining spots per session
  *   POST /api/register              claim a spot (or land on the waitlist)
  *   GET  /api/admin/registrations   roster export, Bearer token required
+ *   GET  /api/events[/:id], POST /api/events/:id/register   the website's events (events/register.js)
  *
  * Everything that decides who gets a spot — the capacity check, the
  * registration deadline, Turnstile verification, and field validation —
@@ -22,7 +23,10 @@ import { handlePaypalWebhook } from './payments/webhook.js';
 import { handleStripeWebhook } from './payments/stripe-webhook.js';
 import { handleLead } from './crm/lead-route.js';
 import { runJobs } from './jobs/runner.js';
-import { withActiveEvent, publicPrograms } from './programs/evaluation.js';
+import { withActiveEvent, withEvent, publicPrograms } from './programs/evaluation.js';
+import { chosenEvent } from './admin/event-choice.js';
+import { handleEventsList, handleEventDetail, handleEventRegister, handleEventPay, lookupEventToken, withdrawByToken } from './events/register.js';
+import { handleUnsubscribe } from './events/unsubscribe.js';
 import { flag } from './lib/flags.js';
 import { configureSchoolYear } from './lib/grades.js';
 import { audit } from './auth/staff.js';
@@ -52,8 +56,9 @@ export default {
     const route = resolveSurface(request, env);
     if (route.surface === 'admin') {
       try {
-        // The evaluation's settings: wrangler.toml, or the current evaluation program.
-        return await handleAdmin(request, await withActiveEvent(env), ctx, route.path, route.base);
+        // The event's settings: the one this person chose (admin/event-choice.js),
+        // else the current evaluation program, else wrangler.toml.
+        return await handleAdmin(request, await adminEventEnv(request, env), ctx, route.path, route.base);
       } catch (err) {
         console.error('Unhandled admin error:', err?.stack || err?.message || err);
         return new Response('Something went wrong. Try again, or text Jacob.', {
@@ -106,6 +111,27 @@ export default {
         return json({ ok: true, programs: await publicPrograms(env) }, { cors });
       }
 
+      // Unsubscribing from event invitations (events/unsubscribe.js).
+      if (url.pathname === '/api/unsubscribe' || url.pathname === '/api/unsubscribe/one-click') {
+        const answer = await handleUnsubscribe(request, env, cors, url);
+        if (answer) return answer;
+      }
+
+      // Events on the website (the Events plan): each with its own settings.
+      if (url.pathname === '/api/events' && request.method === 'GET') {
+        return await handleEventsList(env, cors);
+      }
+      const eventPath = /^\/api\/events\/([a-z0-9][a-z0-9-]{0,59})(\/register|\/pay)?$/.exec(url.pathname);
+      if (eventPath && !eventPath[2] && request.method === 'GET') {
+        return await handleEventDetail(env, cors, eventPath[1]);
+      }
+      if (eventPath && eventPath[2] === '/register' && request.method === 'POST') {
+        return await handleEventRegister(request, env, ctx, cors, eventPath[1]);
+      }
+      if (eventPath && eventPath[2] === '/pay' && request.method === 'POST') {
+        return await handleEventPay(request, env, cors, eventPath[1]);
+      }
+
       // The evaluation's settings: wrangler.toml, or the current evaluation
       // program (programs/evaluation.js). Everything below reads them.
       const ev = await withActiveEvent(env);
@@ -118,13 +144,14 @@ export default {
         return await handleRegister(request, ev, ctx, cors);
       }
 
-      // GET is read-only by design — see lookupByCancelToken().
+      // GET is read-only by design — see lookupByCancelToken(). A cancel link
+      // works for any event, with that event's settings.
       if (url.pathname === '/api/cancel/lookup' && request.method === 'GET') {
-        return await handleCancelLookup(url, ev, cors);
+        return await handleCancelLookup(url, env, cors);
       }
 
       if (url.pathname === '/api/cancel' && request.method === 'POST') {
-        return await handleCancel(request, ev, ctx, cors);
+        return await handleCancel(request, env, ctx, cors);
       }
 
       if (url.pathname === '/api/admin/registrations' && request.method === 'GET') {
@@ -152,6 +179,26 @@ export default {
     ctx.waitUntil(withActiveEvent(env).then((ev) => runJobs(ev)));
   },
 };
+
+/** The admin's event: the one chosen (a cookie), else the current evaluation, else wrangler.toml. */
+async function adminEventEnv(request, env) {
+  const chosen = chosenEvent(request);
+  if (chosen) {
+    if (chosen === env.EVENT_ID) return { ...env, EVENT_CHOSEN: '1' };
+    const ev = await withEvent(env, chosen);
+    if (ev !== env) return { ...ev, EVENT_CHOSEN: '1' };
+  }
+  return withActiveEvent(env);
+}
+
+/** env for the event a registration belongs to: that event's program, else wrangler.toml's event. */
+async function registrationEventEnv(env, eventId) {
+  const current = await withActiveEvent(env);
+  if (!eventId || eventId === current.EVENT_ID) return current;
+  if (eventId === env.EVENT_ID) return env;
+  const ev = await withEvent(env, eventId);
+  return ev === env ? { ...env, EVENT_ID: eventId } : ev;
+}
 
 /** Local-development-only prefixes — see resolveSurface(). */
 const DEV_ADMIN_PREFIX = '/__admin';
@@ -355,19 +402,25 @@ async function handleRegister(request, env, ctx, cors) {
       ok: true,
       status: 'confirmed',
       message:
-        'Your player is registered. Watch for a confirmation email with details for August 29.',
+        'Your player is registered. Watch for a confirmation email with the details.',
       sessions: publicSessions(availability),
     },
     { cors }
   );
 }
 
-async function handleCancelLookup(url, env, cors) {
-  const registration = await lookupByCancelToken(env, url.searchParams.get('t'));
+async function handleCancelLookup(url, baseEnv, cors) {
+  const registration = await lookupByCancelToken(baseEnv, url.searchParams.get('t'));
 
   if (!registration) {
-    return errorResponse('That cancellation link is not valid.', 404, cors);
+    // Interest, or a team entry: the same link withdraws them.
+    const other = await lookupEventToken(baseEnv, url.searchParams.get('t'));
+    if (!other) return errorResponse('That cancellation link is not valid.', 404, cors);
+    return json({ ok: true, player_name: other.name, session_time: null, grade: null, status: other.status,
+      event_label: other.event_label, kind: other.table === 'event_teams' ? 'team' : 'interest',
+      already_cancelled: other.status === 'withdrawn' }, { cors });
   }
+  const env = await registrationEventEnv(baseEnv, registration.event_id);
 
   return json(
     {
@@ -376,13 +429,14 @@ async function handleCancelLookup(url, env, cors) {
       session_time: registration.session_time,
       grade: registration.grade,
       status: registration.status,
+      event_label: env.EVENT_LABEL || '',
       already_cancelled: registration.status === 'cancelled',
     },
     { cors }
   );
 }
 
-async function handleCancel(request, env, ctx, cors) {
+async function handleCancel(request, baseEnv, ctx, cors) {
   if (!cors['Access-Control-Allow-Origin']) {
     return errorResponse('Requests from this origin are not allowed.', 403, cors);
   }
@@ -394,6 +448,15 @@ async function handleCancel(request, env, ctx, cors) {
     return errorResponse('We could not read that request. Please try again.', 400, cors);
   }
 
+  // The seat that frees, and who moves up, belong to that registration's event.
+  const found = await lookupByCancelToken(baseEnv, body.token);
+  if (!found) {
+    const other = await withdrawByToken(baseEnv, body.token);
+    if (other.ok) return json({ ok: true, message: 'Done — you have been taken off the list. Thank you for letting us know.' }, { cors });
+    if (other.code === 'already-cancelled') return json({ ok: true, already_cancelled: true, message: 'That was already withdrawn.' }, { cors });
+    return errorResponse('That cancellation link is not valid.', 404, cors);
+  }
+  const env = await registrationEventEnv(baseEnv, found?.event_id);
   const result = await cancelByToken(env, body.token, body.reason);
 
   if (!result.ok) {
@@ -407,8 +470,11 @@ async function handleCancel(request, env, ctx, cors) {
   }
 
   // Told after the row is already updated, so a mail failure cannot leave the
-  // spot occupied.
-  ctx.waitUntil(sendCancellationAlert(env, result));
+  // spot occupied. A sign-up made through an event's own form (it has a
+  // source) is told nothing unless EVENT_EMAILS_ENABLED is "true" — neither
+  // the family moved up nor staff (the owner, 2026-10-21).
+  if (!found.source) ctx.waitUntil(sendCancellationAlert(env, result));
+  else if (flag(env, 'EVENT_EMAILS_ENABLED', false)) ctx.waitUntil(sendCancellationAlert(env, result, { eventSignup: true }));
 
   return json(
     {

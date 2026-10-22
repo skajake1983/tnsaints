@@ -50,13 +50,21 @@ def read(path):
         return fh.read()
 
 
+def run_file(db, path):
+    """One migration file, statement by statement. Deliberately NOT one
+    transaction: D1 does not hold deferred foreign keys across a file (proven on
+    a copy of production, 2026-10-21), so rebuilding a table other tables point
+    at fails there, and must fail here too."""
+    db.executescript(read(path))
+
+
 def build():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys = ON")
     db.executescript(read(os.path.join(WORKER_DIR, "schema.sql")))
     for path in migrations():
         try:
-            db.executescript(read(path))
+            run_file(db, path)
         except sqlite3.OperationalError as exc:
             # A fresh database already has columns that ALTER-only migrations
             # add to old ones (schema.sql carries staff.first_seen_at). That
@@ -102,7 +110,7 @@ print("\n=== re-running is safe ===")
 for path in migrations():
     name = os.path.basename(path)
     try:
-        db.executescript(read(path))
+        run_file(db, path)
         ok = True
     except sqlite3.OperationalError as exc:
         ok = "duplicate column name" in str(exc)
@@ -194,6 +202,17 @@ check("nor as a subscription with no PayPal plan", refused(db,
 check("with price, plan and waiver it opens", accepted(db,
       "UPDATE programs SET status='open', price_cents=15000, waiver_version_id='academy-v1' WHERE id='academy'"))
 check("an inverted grade range is refused", refused(db, "UPDATE programs SET grade_min=6, grade_max=3 WHERE id='academy'"))
+
+print("\n=== events (migration 023) ===")
+EV = ("INSERT INTO programs (id, kind, event_kind, name, billing, created_at, updated_at, signup_mode, starts_on) "
+      "VALUES (?, 'clinic', ?, 'An event', 'free', 'n', 'n', ?, ?)")
+check("an open gym is a program: event_kind says so, kind holds 'clinic'",
+      accepted(db, EV, ("2026-11-03-open-gym", "open_gym", "spot", "2026-11-03")))
+check("an unknown event kind is refused", refused(db, EV, ("x-party", "party", "spot", "2026-11-03")))
+check("so is an unknown sign-up mode", refused(db, EV, ("x-mode", "scrimmage", "walk-in", "2026-11-03")))
+check("and a day that isn't YYYY-MM-DD", refused(db, EV, ("x-day", "camp", "spot", "Nov 3")))
+check("existing programs stay portal programs; evaluations became events",
+      db.execute("SELECT signup_mode, event_kind FROM programs WHERE id = 'academy'").fetchone() == ("enroll", None))
 
 print("\n=== enrollments ===")
 ENR = ("INSERT INTO enrollments (ref, player_id, household_id, program_id, group_id, status, offer_expires_at, "

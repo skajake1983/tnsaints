@@ -145,6 +145,8 @@ RETENTION_MODE = "report"
 # RETENTION_WAIVER_YEARS = "7"
 # RETENTION_WAIVER_MIN_AGE = "21"
 # RETENTION_PAYMENT_YEARS = "7"
+# RETENTION_INTEREST_MONTHS = "12"
+# RETENTION_INVITE_DAYS = "30"
 
 # The day each child's grade goes up by one ("MM-DD", Central time). Default
 # shown. A date that is not in every year (02-29) or malformed keeps July 1.
@@ -206,6 +208,23 @@ STRIPE_WEBHOOK_ENABLED = "false"
 # Website forms -> CRM (POST /api/lead). Anything but "true" answers 503 and the
 # site falls back to Formspree, so turning this off loses no inquiries.
 LEADS_ENABLED = "false"
+
+# Events on the website (the Events plan, 2026-10-21): GET /api/events, one
+# event, and POST /api/events/:id/register. Anything but "true" lists nothing
+# and refuses sign-ups, so the site shows no events. Staff can still create,
+# preview and publish events in the admin.
+EVENTS_ENABLED = "false"
+# Emails about events — sign-up receipts and staff alerts for event sign-ups,
+# interest confirmations — are sent ONLY when this is "true". The owner
+# (2026-10-21): no email goes out without their approval. Sign-ups are still
+# recorded, reach the CRM and the daily brief.
+EVENT_EMAILS_ENABLED = "false"
+
+# Event invitations (the Events plan, EV5): drafted by staff, sent only after
+# approval AND only while this is "true". Every invitation's footer needs the
+# academy's postal address (CAN-SPAM): set MAILING_ADDRESS, or approval is refused.
+INVITES_ENABLED = "false"
+MAILING_ADDRESS = ""
 
 # The daily staff brief (jobs/brief.js): one email to NOTIFY_EMAIL_TO a day,
 # only when there is something to do. Costs at most one credit a day.

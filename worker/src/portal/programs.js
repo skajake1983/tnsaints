@@ -19,7 +19,9 @@ import { getChild } from './data.js';
 import { waiverSection, validateApplication } from './apply.js';
 import {
   getProgram, listGroups, currentWaiver, programOpen, applicationBlockers, liveEnrollment, priceLine, enrollmentEnabled,
+  portalProgram,
 } from '../programs/enrollment.js';
+import { PORTAL_PROGRAM_SQL } from '../programs/evaluation.js';
 import { register, joinWaitlist, HOLD_MINUTES } from '../programs/selfserve.js';
 import { hashIp, clientIp } from '../http.js';
 import { audit } from '../auth/staff.js';
@@ -39,7 +41,8 @@ const shortDate = (v) => new Date(v).toLocaleDateString('en-US', { timeZone: 'Am
 /** Open programs families can see, with their active groups. */
 async function catalog(env) {
   const { results } = await env.DB.prepare(
-    `SELECT * FROM programs WHERE status = 'open' AND public = 1
+    // Portal programs only; events take their sign-ups on the website.
+    `SELECT * FROM programs WHERE status = 'open' AND public = 1 AND ${PORTAL_PROGRAM_SQL}
       ORDER BY kind = 'academy' DESC, registration_closes_at IS NULL, registration_closes_at, name LIMIT 50`
   ).all();
   const programs = (results || []).filter((p) => programOpen(p));
@@ -153,7 +156,7 @@ export async function programRoutes({ env, ctx, request, rc, session, pathname, 
   }
   const child = await getChild(env, session.accountId, Number(m[1]));
   const program = await getProgram(env, m[2]);
-  if (!child || !program || program.enrollment_mode !== 'self_serve') return notFoundResponse(rc);
+  if (!child || !program || program.enrollment_mode !== 'self_serve' || !portalProgram(program)) return notFoundResponse(rc);
   if (!programOpen(program)) {
     return page(rc, program.name, `<p><a href="${esc(rc.url('/programs'))}">&larr; All programs</a></p>
 <h1>${esc(program.name)}</h1><p class="lede">Sign-up isn't open right now.</p>`);

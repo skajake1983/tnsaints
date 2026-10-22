@@ -9,7 +9,9 @@
 
 import { json } from '../../http.js';
 import { can, audit, rosterView } from '../../auth/staff.js';
-import { getAvailability, registrationWindow, slotCapacity, sessionTimes } from '../../registration.js';
+import { getAvailability, registrationWindow, slotCapacity, sessionTimes, totalCapacity } from '../../registration.js';
+import { eventsWithCurrent } from './events.js';
+import { eventBar, EVENT_STYLES } from '../events-ui.js';
 import { page, esc, htmlResponse, adminHeaders } from '../ui.js';
 import { rowActions, registrationTemplate, fmtRegDate, ROSTER_STYLES, ROSTER_MARKUP, ROSTER_SCRIPT, rosterCsp } from '../roster-ui.js';
 import { NAV, denyHtml, denyJson, seeOther } from '../nav.js';
@@ -21,7 +23,7 @@ export const routes = [
     method: 'GET', path: '/', cap: 'roster:view',
     // A board member has no roster; their home is the board.
     deny: (rc) => (can(rc.principal, 'board:view') ? seeOther(rc.base, '/board') : denyRoster(rc)),
-    handler: ({ env, principal }) => renderRoster(env, principal),
+    handler: ({ env, principal, base }) => renderRoster(env, principal, base),
   },
   {
     method: 'GET', path: '/profile', cap: 'staff',
@@ -129,14 +131,14 @@ function renderWhoami(principal) {
   );
 }
 
-async function renderRoster(env, principal) {
-  const [rows, availability] = await Promise.all([
+async function renderRoster(env, principal, base) {
+  const [rows, availability, events] = await Promise.all([
     rosterView(env, principal),
     getAvailability(env),
+    eventsWithCurrent(env),
   ]);
 
   const window = registrationWindow(env);
-  const capacity = slotCapacity(env);
   const times = sessionTimes(env);
 
   const count = (time, status) =>
@@ -150,7 +152,7 @@ async function renderRoster(env, principal) {
   const showsContact = can(principal, 'roster:contact');
 
   const cards = [
-    { n: `${confirmed} / ${capacity * times.length}`, l: 'Confirmed' },
+    { n: `${confirmed} / ${totalCapacity(env)}`, l: 'Confirmed' },
     { n: waitlisted, l: 'Waiting list' },
     { n: cancelled, l: 'Cancelled' },
     { n: medical, l: 'Medical note on file' },
@@ -160,6 +162,7 @@ async function renderRoster(env, principal) {
 
   const sessionRows = times
     .map((t) => {
+      const capacity = slotCapacity(env, t);
       const c = count(t, 'confirmed');
       const w = count(t, 'waitlist');
       const full = availability.sessions.find((s) => s.session_time === t)?.full;
@@ -218,8 +221,9 @@ async function renderRoster(env, principal) {
     principal,
     nav: NAV,
     current: '/',
-    extraStyles: ROSTER_STYLES,
+    extraStyles: ROSTER_STYLES + EVENT_STYLES,
     body: `
+  ${eventBar({ base, env, events, returnTo: '/' })}
   <h1>${esc(env.EVENT_LABEL || env.EVENT_ID)}</h1>
   <p class="sub">${windowNote}${env.EVALUATION_SOURCE === 'program'
     ? ` Running from the evaluation program <a href="programs/${esc(env.EVENT_ID)}">${esc(env.EVENT_ID)}</a>.`

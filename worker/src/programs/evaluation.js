@@ -52,21 +52,106 @@ export function shortLabel(sessions) {
   return Number.isNaN(day) ? null : `${WEEKDAYS[day]}'s evaluation`;
 }
 
-/** The current evaluation program with its sessions, or null. */
-export async function currentEvaluation(env) {
+// Events (the Events plan, 2026-10-21): programs whose sign-ups are public
+// — a place in a session ('spot', as evaluations always were), "register
+// interest", or a team entry — rather than portal enrollments. An evaluation
+// is always one, whatever created it. Event ids look like program ids.
+// An event's kind is programs.event_kind (migration 023: programs.kind can't
+// take new values on D1, so an open gym or scrimmage stores 'clinic' there).
+export const KIND_SQL = 'COALESCE(p.event_kind, p.kind)';
+/** A program families sign up for in the portal (the academy, teams, portal camps), not an event. */
+export const PORTAL_PROGRAM_SQL = `(signup_mode = 'enroll' AND kind != 'evaluation')`;
+export const EVENT_KINDS = ['evaluation', 'open_gym', 'camp', 'scrimmage', 'tournament'];
+export const EVENT_MODES = ['spot', 'interest', 'team'];
+const IS_EVENT = `(p.signup_mode IN ('spot', 'interest', 'team') OR p.kind = 'evaluation')`;
+export const EVENT_ID_RE = /^[a-z0-9][a-z0-9-]{0,59}$/;
+
+/**
+ * One event (a program of a registration kind) with its active sessions, or
+ * null. `id` null means the current evaluation (app_settings), in the same
+ * single query.
+ */
+async function loadEvent(env, id) {
   const row = await env.DB.prepare(
-    `SELECT p.id, p.name, p.grade_min, p.grade_max, p.registration_closes_at, p.status,
-            (SELECT json_group_array(json_object('name', s.name, 'capacity', s.capacity, 'starts_on', s.starts_on))
-               FROM (SELECT g.name, g.capacity, g.starts_on FROM program_groups g
+    `SELECT p.id, ${KIND_SQL} AS kind, p.name, p.grade_min, p.grade_max, p.registration_opens_at, p.registration_closes_at,
+            p.status,
+            CASE WHEN p.kind = 'evaluation' AND p.signup_mode = 'enroll' THEN 'spot' ELSE p.signup_mode END AS signup_mode,
+            p.payment_policy, p.billing, p.price_cents, p.starts_on, p.ends_on, p.location, p.share_text,
+            p.notify_each_signup,
+            (SELECT json_group_array(json_object('name', s.name, 'capacity', s.capacity, 'starts_on', s.starts_on,
+                                                 'start_time', s.start_time, 'end_time', s.end_time, 'location', s.location))
+               FROM (SELECT g.name, g.capacity, g.starts_on, g.start_time, g.end_time, g.location FROM program_groups g
                       WHERE g.program_id = p.id AND g.status = 'active'
-                      ORDER BY g.start_time IS NULL, g.start_time, g.name) s) AS sessions
+                      ORDER BY g.starts_on IS NULL, g.starts_on, g.start_time IS NULL, g.start_time, g.name) s) AS sessions
        FROM programs p
-      WHERE p.kind = 'evaluation' AND p.id = (SELECT value FROM app_settings WHERE key = ?1)`
-  ).bind(CURRENT_KEY).first();
+      WHERE ${IS_EVENT}
+        AND p.id = CASE WHEN ?1 IS NULL
+                        THEN (SELECT value FROM app_settings WHERE key = '${CURRENT_KEY}') ELSE ?1 END
+        AND (?1 IS NOT NULL OR p.kind = 'evaluation')`
+  ).bind(id ?? null).first();
   if (!row) return null;
   let sessions = [];
   try { sessions = JSON.parse(row.sessions || '[]'); } catch { sessions = []; }
   return { ...row, sessions };
+}
+
+/** The current evaluation program with its sessions, or null. */
+export async function currentEvaluation(env) {
+  return loadEvent(env, null);
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
+  'November', 'December'];
+
+/** "Saturday, August 29", or "Saturday, August 29 – Sunday, August 30", from YYYY-MM-DD dates; '' with none. */
+export function dateLine(dates) {
+  const days = [...new Set(dates.map(String).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort();
+  const fmt = (d) => {
+    const t = new Date(`${d}T12:00:00Z`);
+    return `${WEEKDAYS[t.getUTCDay()]}, ${MONTHS[t.getUTCMonth()]} ${t.getUTCDate()}`;
+  };
+  if (!days.length) return '';
+  return days.length === 1 ? fmt(days[0]) : `${fmt(days[0])} – ${fmt(days[days.length - 1])}`;
+}
+
+/** env with one event's settings in place of wrangler.toml's. */
+function overlay(env, ev) {
+  // Each session's own size (registration.js slotCapacity); SLOT_CAPACITY
+  // stays the smallest, for anything that still reads one number.
+  const capacities = {};
+  for (const s of ev.sessions) if (Number(s.capacity) > 0) capacities[s.name] = Number(s.capacity);
+  const sizes = Object.values(capacities);
+  const location = String(ev.location || '').trim()
+    || ev.sessions.map((s) => String(s.location || '').trim()).find(Boolean) || '';
+  const days = [ev.starts_on, ev.ends_on].filter(Boolean);
+  return {
+    ...env,
+    // What wrangler.toml said, so a page can still offer that event.
+    BASE: env.BASE ?? env,
+    BASE_EVENT_ID: env.BASE_EVENT_ID ?? env.EVENT_ID,
+    BASE_EVENT_LABEL: env.BASE_EVENT_LABEL ?? env.EVENT_LABEL,
+    EVENT_ID: ev.id,
+    EVENT_KIND: ev.kind,
+    EVENT_LABEL: ev.name,
+    EVENT_SHORT_LABEL: shortLabel(ev.sessions) || env.EVENT_SHORT_LABEL,
+    EVENT_DATE_LINE: dateLine(days.length ? days : ev.sessions.map((s) => s.starts_on)),
+    EVENT_LOCATION: location,
+    SIGNUP_MODE: ev.signup_mode || 'spot',
+    PAYMENT_POLICY: ev.payment_policy || 'free',
+    PRICE_CENTS: ev.billing === 'free' || ev.price_cents === null || ev.price_cents === undefined ? '' : String(ev.price_cents),
+    SHARE_TEXT: ev.share_text || '',
+    // Whether staff are emailed for each sign-up (and cancellation), or only the daily brief.
+    NOTIFY_EACH_SIGNUP: Number(ev.notify_each_signup ?? 1) ? '1' : '0',
+    // An event with no sessions, or closed, takes no registrations:
+    // validation finds no session to accept, and the window says closed.
+    SESSION_TIMES: ev.sessions.map((s) => s.name).join(','),
+    SESSION_CAPACITIES: JSON.stringify(capacities),
+    SLOT_CAPACITY: String(sizes.length ? Math.min(...sizes) : 0),
+    ALLOWED_GRADES: gradeList(ev.grade_min, ev.grade_max),
+    REGISTRATION_OPENS_AT: ev.registration_opens_at || '',
+    REGISTRATION_CLOSES_AT: ev.status === 'open' ? (ev.registration_closes_at || '') : '1970-01-01T00:00:00Z',
+    EVALUATION_SOURCE: 'program',
+  };
 }
 
 /**
@@ -81,21 +166,54 @@ export async function withActiveEvent(env) {
     console.error(JSON.stringify({ event: 'evaluation_overlay_failed', message: err?.message }));
     return env;
   }
-  if (!ev) return env;
-  const capacities = ev.sessions.map((s) => Number(s.capacity)).filter((n) => n > 0);
-  return {
-    ...env,
-    EVENT_ID: ev.id,
-    EVENT_LABEL: ev.name,
-    EVENT_SHORT_LABEL: shortLabel(ev.sessions) || env.EVENT_SHORT_LABEL,
-    // An evaluation with no sessions, or closed, takes no registrations:
-    // validation finds no session to accept, and the window says closed.
-    SESSION_TIMES: ev.sessions.map((s) => s.name).join(','),
-    SLOT_CAPACITY: String(capacities.length ? Math.min(...capacities) : 0),
-    ALLOWED_GRADES: gradeList(ev.grade_min, ev.grade_max),
-    REGISTRATION_CLOSES_AT: ev.status === 'open' ? (ev.registration_closes_at || '') : '1970-01-01T00:00:00Z',
-    EVALUATION_SOURCE: 'program',
-  };
+  return ev ? overlay(env, ev) : env;
+}
+
+/**
+ * env with a particular event's settings — any event, past or future, not
+ * only the current one (staff looking back at a roster; a cancel link for
+ * an earlier event). env unchanged if there is no such event.
+ */
+export async function withEvent(env, id) {
+  if (typeof id !== 'string' || !EVENT_ID_RE.test(id)) return env;
+  let ev;
+  try {
+    ev = await loadEvent(env, id);
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'event_overlay_failed', message: err?.message }));
+    return env;
+  }
+  return ev ? overlay(env, ev) : env;
+}
+
+/**
+ * Every event staff can look at, newest first, with its dates and sign-up
+ * counts. The wrangler.toml event is included while it is not a program.
+ */
+export async function listEvents(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT p.id, ${KIND_SQL} AS kind, p.name, p.status, p.public, p.registration_closes_at, p.created_at, p.series_id,
+            CASE WHEN p.kind = 'evaluation' AND p.signup_mode = 'enroll' THEN 'spot' ELSE p.signup_mode END AS signup_mode,
+            COALESCE(p.starts_on, (SELECT MIN(g.starts_on) FROM program_groups g WHERE g.program_id = p.id)) AS first_day,
+            COALESCE(p.ends_on, p.starts_on, (SELECT MAX(g.starts_on) FROM program_groups g WHERE g.program_id = p.id)) AS last_day,
+            (SELECT COUNT(*) FROM registrations r WHERE r.event_id = p.id AND r.status = 'confirmed') AS confirmed,
+            (SELECT COUNT(*) FROM registrations r WHERE r.event_id = p.id AND r.status = 'waitlist') AS waiting
+       FROM programs p
+      WHERE ${IS_EVENT} AND p.status != 'archived'
+      ORDER BY first_day IS NULL, first_day DESC, p.created_at DESC
+      LIMIT 200`
+  ).all();
+  const events = (results || []).map((e) => ({ ...e, confirmed: Number(e.confirmed), waiting: Number(e.waiting) }));
+  const baseId = env.BASE_EVENT_ID ?? env.EVENT_ID;
+  if (baseId && !events.some((e) => e.id === baseId)) {
+    const n = await env.DB.prepare(
+      `SELECT SUM(status = 'confirmed') AS confirmed, SUM(status = 'waitlist') AS waiting FROM registrations WHERE event_id = ?1`
+    ).bind(baseId).first();
+    const day = /^\d{4}-\d{2}-\d{2}/.test(baseId) ? baseId.slice(0, 10) : null;
+    events.push({ id: baseId, kind: 'evaluation', name: env.BASE_EVENT_LABEL ?? env.EVENT_LABEL ?? baseId, status: 'closed',
+      settings: true, first_day: day, last_day: day, confirmed: Number(n?.confirmed || 0), waiting: Number(n?.waiting || 0) });
+  }
+  return events;
 }
 
 /** Make a program the current evaluation (or, with null, go back to wrangler.toml). */
@@ -124,7 +242,7 @@ export async function publicPrograms(env) {
       `SELECT id, kind, name, description, billing, price_cents, grade_min, grade_max, enrollment_mode,
               registration_opens_at, registration_closes_at, preview_title, preview_image
          FROM programs
-        WHERE status = 'open' AND public = 1
+        WHERE status = 'open' AND public = 1 AND (signup_mode = 'enroll' OR kind = 'evaluation')
           AND (registration_opens_at IS NULL OR registration_opens_at <= ?1)
           AND (registration_closes_at IS NULL OR registration_closes_at > ?1)
         ORDER BY kind = 'academy' DESC, registration_closes_at IS NULL, registration_closes_at, name LIMIT 50`

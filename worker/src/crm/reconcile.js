@@ -36,10 +36,16 @@ const ACADEMY_TARGET = (player) => `(SELECT CASE MAX(CASE WHEN e.status IN ('act
                                        WHERE e.player_id = ${player} AND e.status IN ${LIVE})`;
 
 /** The stage an evaluation implies: evaluated if any coach wrote about the child. */
+// Only an evaluation: a camp or open gym sign-up is a registration too (the
+// Events plan) but says nothing about the family card. An event_id that is
+// no program is the pre-programs evaluation (8/29 ran from wrangler.toml).
+const IS_EVALUATION = (r) => `(NOT EXISTS (SELECT 1 FROM programs ep WHERE ep.id = ${r}.event_id)
+                               OR EXISTS (SELECT 1 FROM programs ep WHERE ep.id = ${r}.event_id
+                                          AND COALESCE(ep.event_kind, ep.kind) = 'evaluation'))`;
 const EVAL_TARGET = (player) => `(CASE WHEN EXISTS (SELECT 1 FROM eval_feedback f JOIN registrations r ON r.id = f.registration_id
                                                     WHERE r.player_id = ${player}) THEN 'eval_attended'
                                        WHEN EXISTS (SELECT 1 FROM registrations r WHERE r.player_id = ${player}
-                                                    AND r.status != 'cancelled') THEN 'eval_registered' END)`;
+                                                    AND r.status != 'cancelled' AND ${IS_EVALUATION('r')}) THEN 'eval_registered' END)`;
 
 /** The child a prospect names: in the linked family, else registered under the lead's email. */
 const PROSPECT_PLAYER = `COALESCE(

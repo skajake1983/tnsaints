@@ -45,8 +45,10 @@ console.log('\n=== the real jobs, run by the hourly cron ===');
   check('hourly jobs are keyed to the hour, daily jobs to the day',
     keys['expire-offers'] === '2026-10-07T09' && keys['staff-brief'] === '2026-10-07', keys);
   const again = await runJobs({ ...quiet, DB }, { now: new Date(NINE.getTime() + 20 * 60000) });
+  // Nothing that ran at 9:00 runs again at 9:20. A job the 9:00 run had no
+  // room for (deferred) may run now: that is the runner catching up, not a repeat.
   check('the cron firing again in the same hour runs nothing twice',
-    Object.values(again).every((s) => s === 'already-done'), again);
+    Object.entries(again).every(([job, s]) => s === 'already-done' || (first[job] === 'deferred' && s === 'done')), again);
   const ten = await runJobs({ ...quiet, DB }, { now: new Date(NINE.getTime() + 60 * 60000) });
   check('the next hour: hourly jobs run again, daily ones do not',
     ten['expire-offers'] === 'done' && ten['paypal-sweep'] === 'done' && ten['staff-brief'] === 'already-done', ten);

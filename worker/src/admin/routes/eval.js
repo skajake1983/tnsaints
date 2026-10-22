@@ -14,13 +14,15 @@ import { page, htmlResponse, adminHeaders } from '../ui.js';
 import { saveEvaluation, evaluationForStaff, completeness, deleteCoachEvaluation } from '../../feedback/notes.js';
 import { evalFormBody, evalListBody, EVAL_STYLES, evalCsp } from '../eval-ui.js';
 import { NAV, denyHtml, denyJson } from '../nav.js';
+import { eventsWithCurrent } from './events.js';
+import { eventBar, EVENT_STYLES } from '../events-ui.js';
 
 const denyEval = denyHtml('Not permitted', 'Evaluations are limited to coaches and admins.');
 
 export const routes = [
   {
     method: 'GET', path: '/eval', cap: 'notes:write', deny: denyEval,
-    handler: ({ env, principal }) => renderEvalList(env, principal),
+    handler: ({ env, principal, base }) => renderEvalList(env, principal, base),
   },
   {
     method: 'GET', path: /^\/eval\/(\d+)$/, cap: 'notes:write', deny: denyEval,
@@ -105,8 +107,8 @@ async function handleEvalSave(request, env, ctx, principal, registrationId) {
   return json({ ok: true, saved_as: principal.authorLabel });
 }
 
-async function renderEvalList(env, principal) {
-  const summary = await completeness(env);
+async function renderEvalList(env, principal, base) {
+  const [summary, events] = await Promise.all([completeness(env), eventsWithCurrent(env)]);
 
   const { results } = await env.DB.prepare(
     `SELECT registration_id FROM eval_feedback WHERE event_id = ?1 AND author_email = ?2`
@@ -122,8 +124,9 @@ async function renderEvalList(env, principal) {
       principal,
       nav: NAV,
       current: '/eval',
-      extraStyles: EVAL_STYLES,
-      body: evalListBody({ summary, mineByRegistration }),
+      extraStyles: EVAL_STYLES + EVENT_STYLES,
+      body: eventBar({ base, env, events: events.filter((e) => e.kind === 'evaluation'), returnTo: '/eval' })
+        + evalListBody({ summary, mineByRegistration }),
     })
   );
 }

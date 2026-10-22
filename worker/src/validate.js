@@ -6,10 +6,10 @@
  * honest visitors; anything that reaches the database has to pass here.
  */
 
-const NAME_RE = /^[A-Za-zÀ-ÿ' -]{2,60}$/;
-const SCHOOL_RE = /^[A-Za-z0-9À-ÿ'&., -]{2,80}$/;
+export const NAME_RE = /^[A-Za-zÀ-ÿ' -]{2,60}$/;
+export const SCHOOL_RE = /^[A-Za-z0-9À-ÿ'&., -]{2,80}$/;
 export const PHONE_RE = /^(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[ -]?\d{3}[ -]?\d{4}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const URL_RE = /^https?:\/\/.+/i;
 
 const ALL_GRADES = ['3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
@@ -32,9 +32,13 @@ function str(value) {
 }
 
 /**
+ * An evaluation asks everything below. Any other event (`kind`: an open gym, a
+ * camp: the Events plan) asks less — school and player notes are optional —
+ * and keeps every safety field: emergency contact, releases, signature.
  * @returns {{ok: true, value: object} | {ok: false, errors: string[]}}
  */
-export function validateRegistration(body, env) {
+export function validateRegistration(body, env, { kind = 'evaluation' } = {}) {
+  const evaluation = kind === 'evaluation';
   const errors = [];
   const sessions = String(env.SESSION_TIMES || '')
     .split(',')
@@ -78,7 +82,7 @@ export function validateRegistration(body, env) {
   if (!PHONE_RE.test(phone)) errors.push('Please enter a valid parent phone number.');
 
   const school = str(body.school);
-  if (!SCHOOL_RE.test(school)) errors.push('Please enter a valid school name.');
+  if ((evaluation || school) && !SCHOOL_RE.test(school)) errors.push('Please enter a valid school name.');
 
   const emergencyName = str(body.emergency_contact_name);
   if (!NAME_RE.test(emergencyName)) errors.push('Please enter a valid emergency contact name.');
@@ -92,8 +96,8 @@ export function validateRegistration(body, env) {
   }
 
   const playerNotes = str(body.player_notes);
-  if (playerNotes.length < 15 || playerNotes.length > 1000) {
-    errors.push('Player notes must be between 15 and 1000 characters.');
+  if (evaluation ? (playerNotes.length < 15 || playerNotes.length > 1000) : playerNotes.length > 1000) {
+    errors.push(evaluation ? 'Player notes must be between 15 and 1000 characters.' : 'Please keep the note to 1000 characters.');
   }
 
   const medicalNotes = str(body.medical_notes);
@@ -144,7 +148,7 @@ export function validateRegistration(body, env) {
       photo_release: photoRelease ? 1 : 0,
       signature,
       highlight_link: highlightLink || null,
-      player_notes: playerNotes,
+      player_notes: evaluation ? playerNotes : (playerNotes || null),
     },
   };
 }

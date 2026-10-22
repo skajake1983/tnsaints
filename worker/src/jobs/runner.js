@@ -37,6 +37,8 @@ import { sendRosterDigest, sendStaffBriefEmail, sendDeletionDone } from '../emai
 import { reconcileCrm, RECONCILE_STEPS } from '../crm/reconcile.js';
 import { runRetention, RULES as RETENTION_RULES } from '../privacy/retention.js';
 import { purgeNext, PURGE_QUERIES } from '../privacy/deletion.js';
+import { drainInvitations, PER_RUN as INVITES_PER_RUN } from '../events/invitations.js';
+import { expireEventHolds, HOLD_QUERIES } from '../events/payments.js';
 
 export const QUERY_BUDGET = 45;
 const STALE_MS = 30 * 60 * 1000;
@@ -106,6 +108,13 @@ export const JOBS = [
     run: async (env) => ({ detail: { expired: await expireOffers(env) } }),
   },
   {
+    // An event place held for payment that lapsed unpaid goes back, and the
+    // next family waiting is offered it (events/payments.js). Early: a held
+    // place is a seat nobody else can take.
+    name: 'event-holds', cadence: 'hourly', minQueries: HOLD_QUERIES,
+    run: async (env) => ({ detail: await expireEventHolds(env) }),
+  },
+  {
     // Spent sign-in links, OIDC flows, rate-limit windows and old sessions, bounded per run.
     name: 'auth-cleanup', cadence: 'hourly', minQueries: 4,
     run: async (env) => {
@@ -115,7 +124,7 @@ export const JOBS = [
   },
   {
     // One staff email a day, only when there is something to do.
-    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 19,
+    name: 'staff-brief', cadence: 'daily', notBeforeHour: 8, minQueries: 21,
     run: async (env) => {
       const r = await runStaffBrief(env, sendStaffBriefEmail);
       // Not sent because the provider failed or the day's allowance is gone:
@@ -164,6 +173,17 @@ export const JOBS = [
     run: async (env) => {
       const r = await runRetention(env);
       return { detail: { mode: r.mode, due: Object.fromEntries(r.rules.map((x) => [x.key, x.due])), removed: r.removed } };
+    },
+  },
+  {
+    // Approved event invitations, a few an hour, 9 AM to 8 PM Central, only
+    // while INVITES_ENABLED is "true" (events/invitations.js). Late in the
+    // order: the sweeps keep their room; anything left waits for the next hour
+    // (or staff's "Send the next 10").
+    name: 'event-invites', cadence: 'hourly', notBeforeHour: 9, minQueries: 2 + INVITES_PER_RUN * 4,
+    run: async (env) => {
+      if (centralClock().hour >= 20) return { detail: { skipped: 'evening' } };
+      return { detail: await drainInvitations(env, { limit: INVITES_PER_RUN }) };
     },
   },
   {

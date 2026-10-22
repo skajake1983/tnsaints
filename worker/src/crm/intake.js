@@ -140,21 +140,16 @@ function tomorrowCentral(now = Date.now()) {
 }
 
 /**
- * Record a validated lead. Idempotent enough for a double-click: one contact
- * per email, one open card per prospect child, one open auto task per contact.
- * @returns {Promise<{inquiryId: number, contactId: number}>}
+ * Create a CRM contact, or refresh what we know about one (by email): the
+ * website's forms and event sign-ups (crm/events.js). Linked to the person's
+ * portal family if they have one. A converted or merged contact has no email
+ * any more, so this never resurrects one.
+ * @returns {Promise<{id: number, household_id: number|null}>}
  */
-export async function recordLead(env, { value, ipHash }) {
+export async function upsertContact(env, { kind, name, email, phone = null, organization = null, owner = null, source }) {
   const now = iso();
-  const { config, contact, message, fields, prospect } = value;
-  const emailNorm = normEmail(contact.email);
-  const phoneNorm = contact.phone ? contact.phone.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '') : null;
-  const owner = await env.DB.prepare(`SELECT value FROM app_settings WHERE key = ?1`)
-    .bind(`crm.owner.${config.purpose}`)
-    .first();
-
-  // Contact: create, or refresh what we know. A converted/merged contact has
-  // no email any more, so this never resurrects one.
+  const emailNorm = normEmail(email);
+  const phoneNorm = phone ? phone.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '') : null;
   await env.DB.prepare(
     `INSERT INTO crm_contacts (kind, name, email, email_norm, phone, phone_norm, organization, owner_email, source,
                                account_id, household_id, created_at, updated_at)
@@ -171,10 +166,28 @@ export async function recordLead(env, { value, ipHash }) {
        household_id = COALESCE(crm_contacts.household_id, excluded.household_id),
        updated_at = excluded.updated_at`
   )
-    .bind(config.kind, contact.name, contact.email, emailNorm, contact.phone || null, phoneNorm, contact.organization,
-      owner?.value || null, `website:${config.purpose}`, now)
+    .bind(kind, name, email, emailNorm, phone || null, phoneNorm, organization || null, owner, source, now)
     .run();
   const c = await env.DB.prepare(`SELECT id, household_id FROM crm_contacts WHERE email_norm = ?1`).bind(emailNorm).first();
+  return { id: Number(c.id), household_id: c.household_id === null ? null : Number(c.household_id) };
+}
+
+/**
+ * Record a validated lead. Idempotent enough for a double-click: one contact
+ * per email, one open card per prospect child, one open auto task per contact.
+ * @returns {Promise<{inquiryId: number, contactId: number}>}
+ */
+export async function recordLead(env, { value, ipHash }) {
+  const now = iso();
+  const { config, contact, message, fields, prospect } = value;
+  const owner = await env.DB.prepare(`SELECT value FROM app_settings WHERE key = ?1`)
+    .bind(`crm.owner.${config.purpose}`)
+    .first();
+
+  const c = await upsertContact(env, {
+    kind: config.kind, name: contact.name, email: contact.email, phone: contact.phone, organization: contact.organization,
+    owner: owner?.value || null, source: `website:${config.purpose}`,
+  });
 
   const inquiry = await env.DB.prepare(
     `INSERT INTO crm_inquiries (contact_id, household_id, purpose, fields, message, ip_hash, received_at)

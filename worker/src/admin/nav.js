@@ -11,17 +11,20 @@ import { page, esc, htmlResponse, adminHeaders } from './ui.js';
 // here against the route it links to.
 //
 // Grouped in the order a family moves through the academy (owner,
-// 2026-10-20): leads and families, evaluations, programs, money, then running
-// the organization. `group` is the menu heading, in order of first
+// 2026-10-20): leads and families, events (evaluations among them), programs,
+// money, then running the organization. `group` is the menu heading, in order of first
 // appearance; "Today" (the daily brief) sits above the groups as the place to
 // start, and `account` links sit with the signed-in name.
 export const NAV = [
   { href: '/brief', label: 'Today', cap: 'events:manage' },
   { href: '/crm', label: 'Leads (CRM)', cap: 'crm:view', group: 'Families' },
   { href: '/families', label: 'Families', cap: 'roster:view', group: 'Families' },
-  { href: '/', label: 'Roster', cap: 'roster:view', group: 'Evaluations' },
-  { href: '/eval', label: 'Evaluations', cap: 'notes:write', group: 'Evaluations' },
-  { href: '/decisions', label: 'Decisions', cap: 'decisions:set', group: 'Evaluations' },
+  // Every event, past and upcoming (the Events plan, 2026-10-21); Roster,
+  // Evaluations and Decisions show the one chosen there.
+  { href: '/events', label: 'Events', cap: 'events:manage', group: 'Events' },
+  { href: '/', label: 'Roster', cap: 'roster:view', group: 'Events' },
+  { href: '/eval', label: 'Evaluations', cap: 'notes:write', group: 'Events' },
+  { href: '/decisions', label: 'Decisions', cap: 'decisions:set', group: 'Events' },
   { href: '/programs', label: 'Programs', cap: 'events:manage', group: 'Programs' },
   { href: '/enrollments', label: 'Enrollments', cap: 'enrollments:manage', group: 'Programs' },
   { href: '/teams', label: 'Teams', cap: 'teams:view', group: 'Programs' },

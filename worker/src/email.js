@@ -13,6 +13,8 @@
 
 import { toCsv, toBase64 } from './http.js';
 import { reserveSend, refundSend, recipientCount } from './email-budget.js';
+import { flag } from './lib/flags.js';
+import { slotCapacity } from './registration.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
@@ -62,7 +64,7 @@ export function emailConfigured(env) {
   return Boolean(env.RESEND_API_KEY && env.NOTIFY_EMAIL_FROM && env.NOTIFY_EMAIL_TO);
 }
 
-async function send(env, { to, subject, html, text, replyTo, attachments }) {
+async function send(env, { to, subject, html, text, replyTo, attachments, headers }) {
   const payload = {
     from: env.NOTIFY_EMAIL_FROM,
     to: Array.isArray(to) ? to : [to],
@@ -74,6 +76,8 @@ async function send(env, { to, subject, html, text, replyTo, attachments }) {
   if (text) payload.text = text;
   if (replyTo) payload.reply_to = replyTo;
   if (attachments) payload.attachments = attachments;
+  // An invitation's one-click unsubscribe (List-Unsubscribe, RFC 8058).
+  if (headers) payload.headers = headers;
 
   const res = await fetch(endpointFor(env), {
     method: 'POST',
@@ -598,9 +602,54 @@ function alertHtml(env, data, result) {
   </div>`;
 }
 
+/** "3rd–6th" from ALLOWED_GRADES ("3rd,4th,5th,6th"); '' with none. */
+function gradeRange(allowed) {
+  const grades = String(allowed || '').split(',').map((g) => g.trim()).filter(Boolean);
+  if (!grades.length) return '';
+  return grades.length === 1 ? grades[0] : `${grades[0]}–${grades[grades.length - 1]}`;
+}
+
+/**
+ * Date, place and the ready-to-paste share wording for the family's email.
+ * An event run from a program says what its program says; wrangler.toml's
+ * 8/29 evaluation keeps the words it went out with.
+ */
+function eventDetails(env) {
+  const grades = gradeRange(env.ALLOWED_GRADES);
+  if (env.EVALUATION_SOURCE !== 'program') {
+    return {
+      dateLine: '',
+      gradeNote: '(this evaluation is open to 3rd–6th grade)',
+      locationHtml: `<strong>Grassland Heights Baptist Church</strong><br />
+          <a href="${VENUE_MAP_URL}" style="color:#0b3a8d;">2316 Hillsboro Rd, Franklin, TN 37069</a>
+          <span style="color:#536277;">&mdash; tap for directions</span>`,
+      shareHtml: `Tennessee Saints is hosting a FREE basketball evaluation for 3rd&ndash;6th graders &mdash;
+          Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration
+          closes 8/27. https://tnsaints.com`,
+      flyer: true,
+    };
+  }
+  const location = String(env.EVENT_LOCATION || '').trim();
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+  const label = env.EVENT_LABEL || 'a Tennessee Saints event';
+  const share = [`Tennessee Saints is hosting ${label}`, env.EVENT_DATE_LINE, location ? `at ${location}` : '']
+    .filter(Boolean).join(' — ');
+  return {
+    dateLine: env.EVENT_DATE_LINE || '',
+    gradeNote: grades ? `(open to ${grades} grade)` : '',
+    locationHtml: location
+      ? `<a href="${escapeHtml(mapUrl)}" style="color:#0b3a8d;">${escapeHtml(location)}</a>
+          <span style="color:#536277;">&mdash; tap for directions</span>`
+      : '',
+    shareHtml: `${escapeHtml(share)}. Spots are limited. https://tnsaints.com`,
+    flyer: false,
+  };
+}
+
 function parentHtml(env, data, result) {
   const isWaitlist = result.status === 'waitlist';
   const eventLabel = env.EVENT_LABEL || 'our upcoming evaluation';
+  const details = eventDetails(env);
   const siteUrl = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
   const cancelUrl = `${siteUrl}/cancel.html?t=${encodeURIComponent(result.cancelToken || '')}`;
 
@@ -617,11 +666,10 @@ function parentHtml(env, data, result) {
     <div style="border:1px solid #dfe3ea;border-top:0;border-radius:0 0 8px 8px;padding:18px;color:#13233d;font-size:15px;line-height:1.55;">
       <p style="margin-top:0;">${lead}</p>
       <table style="border-collapse:collapse;font-size:14px;margin:14px 0;">
+        ${row('Date', details.dateLine)}
         ${row('Session', data.session_time)}
-        ${row('Grade', `${data.grade} (this evaluation is open to 3rd–6th grade)`)}
-        ${rowHtml('Location', `<strong>Grassland Heights Baptist Church</strong><br />
-          <a href="${VENUE_MAP_URL}" style="color:#0b3a8d;">2316 Hillsboro Rd, Franklin, TN 37069</a>
-          <span style="color:#536277;">&mdash; tap for directions</span>`)}
+        ${row('Grade', [data.grade, details.gradeNote].filter(Boolean).join(' '))}
+        ${details.locationHtml ? rowHtml('Location', details.locationHtml) : ''}
       </table>
 
       <!-- Asked here because a family that just registered is the most likely
@@ -637,14 +685,12 @@ function parentHtml(env, data, result) {
              the email. Handing them the sentence removes that entirely. -->
         <p style="margin:0 0 6px;font-size:13px;color:#536277;">Copy and paste this anywhere:</p>
         <div style="background:#fff;border:1px solid #dfe3ea;border-left:3px solid #f5cf00;border-radius:6px;padding:12px 14px;margin:0 0 14px;font-size:14px;line-height:1.55;color:#13233d;">
-          Tennessee Saints is hosting a FREE basketball evaluation for 3rd&ndash;6th graders &mdash;
-          Saturday, August 29, 9&ndash;11 AM in Franklin, TN. Spots are limited and registration
-          closes 8/27. https://tnsaints.com
+          ${details.shareHtml}
         </div>
         <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Ftnsaints.com%2F"
            style="display:inline-block;background:#1877f2;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Share on Facebook</a>
-        <a href="https://tnsaints.com/tnsaints-evaluation-flyer.jpg"
-           style="display:inline-block;background:#f5cf00;color:#06255c;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Download the flyer</a>
+        ${details.flyer ? `<a href="https://tnsaints.com/tnsaints-evaluation-flyer.jpg"
+           style="display:inline-block;background:#f5cf00;color:#06255c;text-decoration:none;font-weight:700;font-size:14px;padding:10px 16px;border-radius:8px;margin:0 6px 6px 0;">Download the flyer</a>` : ''}
       </div>
 
       <!-- Self-service cancellation. Without an obvious way out, a family whose
@@ -751,13 +797,14 @@ export async function sendRosterDigest(env, { reason = 'scheduled' } = {}) {
   const closesAt = env.REGISTRATION_CLOSES_AT ? new Date(env.REGISTRATION_CLOSES_AT) : null;
   const windowOpen = Boolean(closesAt && !Number.isNaN(closesAt.getTime()) && new Date() <= closesAt);
 
-  const capacity = parseInt(env.SLOT_CAPACITY, 10) || 25;
-  const totalCapacity = capacity * times.length;
+  // Each session's own size (an event run from a program can differ by session).
+  const totalCapacity = times.reduce((sum, t) => sum + slotCapacity(env, t), 0);
   const spotsLeft = Math.max(0, totalCapacity - confirmed.length);
 
   const cell = 'padding:7px 14px 7px 0;';
   const summaryRows = times
     .map((t) => {
+      const capacity = slotCapacity(env, t);
       const taken = bySession(t, 'confirmed');
       const left = Math.max(0, capacity - taken);
       const waiting = bySession(t, 'waitlist');
@@ -895,8 +942,13 @@ async function sendPromotionEmail(env, promoted) {
  * rather than reckless is that the promoted family receives their own cancel
  * link, so one who has already made other plans releases the seat in a tap and
  * the next person moves up.
+ *
+ * An event sign-up (events/register.js) is told in its event's words, with a
+ * pay link if the place is held for payment, and staff are alerted only if
+ * the event asks for every sign-up. The caller sends neither unless
+ * EVENT_EMAILS_ENABLED is "true" (and sendEventPlaceOpened checks again).
  */
-export async function sendCancellationAlert(env, result) {
+export async function sendCancellationAlert(env, result, { eventSignup = false } = {}) {
   if (!emailConfigured(env)) {
     console.error('Cancellation alert skipped: email is not configured.');
     return;
@@ -907,9 +959,14 @@ export async function sendCancellationAlert(env, result) {
 
   // Tell the promoted family first. They are the ones with a decision to make,
   // and their seat is already committed in the database either way.
-  if (result.promoted) {
+  if (result.promoted && eventSignup) {
+    const p = result.promoted;
+    await sendEventPlaceOpened(env, { to: p.parent_email, name: p.player_name, session: p.session_time,
+      cancelToken: p.cancel_token, holdUntil: p.hold_expires_at || null });
+  } else if (result.promoted) {
     await sendPromotionEmail(env, result.promoted);
   }
+  if (eventSignup && String(env.NOTIFY_EACH_SIGNUP ?? '1') === '0') return;
 
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;">
     <div style="background:#b42318;color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;">
@@ -958,7 +1015,7 @@ export async function sendCancellationAlert(env, result) {
  * Fire both notifications. Never throws — callers pass this to ctx.waitUntil()
  * after the registration is already durable.
  */
-export async function sendRegistrationEmails(env, data, result) {
+export async function sendRegistrationEmails(env, data, result, { alert: sendAlert = true } = {}) {
   if (!emailConfigured(env)) {
     // Loud, because silently not notifying anyone is the worst failure here.
     console.error(
@@ -972,13 +1029,16 @@ export async function sendRegistrationEmails(env, data, result) {
   const subject = `${label}: ${data.player_name} — ${data.session_time} (${data.grade})`;
 
   // The academy alert goes first and spends budget down to the last credit:
-  // this is the notification the whole feature exists for.
-  const alert = await sendMetered(env, 'alert', {
-    to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
-    subject,
-    html: alertHtml(env, data, result),
-    replyTo: data.parent_email,
-  });
+  // this is the notification the whole feature exists for. An event can turn
+  // it off (programs.notify_each_signup): its sign-ups are in the daily brief.
+  const alert = sendAlert
+    ? await sendMetered(env, 'alert', {
+      to: env.NOTIFY_EMAIL_TO.split(',').map((s) => s.trim()).filter(Boolean),
+      subject,
+      html: alertHtml(env, data, result),
+      replyTo: data.parent_email,
+    })
+    : { ok: true };
   if (alert.budget) {
     console.error(
       `EMAIL BUDGET EXHAUSTED — no alert sent for ${data.player_name} (${data.session_time}). ` +
@@ -1010,4 +1070,161 @@ export async function sendRegistrationEmails(env, data, result) {
   } else if (!receipt.ok) {
     console.error('Failed to send parent confirmation email:', receipt.error);
   }
+}
+
+/**
+ * A register-interest or team-entry sign-up (events/register.js): a receipt
+ * for the family or coach, and a staff alert if the event asks for one.
+ * Called only when EVENT_EMAILS_ENABLED is "true" (the owner's approval).
+ */
+export async function sendEventSignupEmails(env, { event, mode, value, result }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const siteUrl = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
+  const cancelUrl = `${siteUrl}/cancel.html?t=${encodeURIComponent(result.cancelToken || '')}`;
+  const team = mode === 'team';
+  const who = team ? value.team_name : value.player_name;
+  const when = [env.EVENT_DATE_LINE, env.EVENT_LOCATION].filter(Boolean).join(' · ');
+  const lead = team
+    ? (result.status === 'waitlist'
+      ? `<strong>${escapeHtml(who)}</strong> is on the waiting list for the ${escapeHtml(value.division)} division.`
+      : `<strong>${escapeHtml(who)}</strong> is entered in the ${escapeHtml(value.division)} division.`)
+    : `We have <strong>${escapeHtml(who)}</strong>'s interest. We'll be in touch to confirm a place.`;
+  const html = portalMail('Tennessee Saints', `
+      <p style="margin-top:0;">${lead}</p>
+      <p><strong>${escapeHtml(event.name)}</strong>${when ? `<br>${escapeHtml(when)}` : ''}</p>
+      <p style="font-size:14px;">Can't make it? <a href="${escapeHtml(cancelUrl)}">Withdraw here</a>, or reply to this email.</p>
+      <p style="color:#536277;font-size:14px;">Questions: ${escapeHtml(contact)}.</p>`);
+  const text = [team ? `${who} — ${event.name}` : `We have ${who}'s interest in ${event.name}. We'll be in touch to confirm.`,
+    when, '', `Withdraw: ${cancelUrl}`, `Questions: ${contact}`].filter((l) => l !== undefined).join('\n');
+  const receipt = await sendMetered(env, 'receipt', {
+    to: team ? value.coach_email : value.parent_email,
+    subject: team ? `Team entry — ${who}, ${event.name}` : `Interest received — ${who}, ${event.name}`,
+    html, text, replyTo: contact,
+  });
+  if (Number(event.notify_each_signup)) {
+    await sendMetered(env, 'alert', {
+      to: env.NOTIFY_EMAIL_TO.split(',').map((x) => x.trim()).filter(Boolean),
+      subject: `${team ? 'Team entry' : 'Interest'}: ${who} — ${event.name}`,
+      text: `${team ? 'Team' : 'Player'}: ${who}\nEvent: ${event.name}\nSee Admin -> Events.`,
+      html: `<p>${team ? 'Team' : 'Player'}: <strong>${escapeHtml(who)}</strong><br>Event: ${escapeHtml(event.name)}</p><p>See Admin &rarr; Events.</p>`,
+      replyTo: team ? value.coach_email : value.parent_email,
+    });
+  }
+  return receipt;
+}
+
+/**
+ * A place opened for someone on an event's waiting list: a family cancelled,
+ * or a payment hold lapsed. On a paid event the place is only held while they
+ * pay, so the email carries the pay link and the deadline instead of "you're
+ * confirmed". env is that event's (withEvent).
+ *
+ * Sends nothing unless EVENT_EMAILS_ENABLED is exactly "true" (the owner's
+ * approval, 2026-10-21) — checked here, so no caller can forget it.
+ */
+export async function sendEventPlaceOpened(env, { to, name, session, cancelToken, holdUntil = null, team = false }) {
+  if (!flag(env, 'EVENT_EMAILS_ENABLED', false)) return { ok: false, skipped: 'disabled' };
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const site = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
+  const token = encodeURIComponent(cancelToken || '');
+  const cancelUrl = `${site}/cancel.html?t=${token}`;
+  const payUrl = `${site}/?event=${encodeURIComponent(env.EVENT_ID || '')}&pay=${token}#contact`;
+  const event = env.EVENT_LABEL || 'the event';
+  const when = [env.EVENT_DATE_LINE, env.EVENT_LOCATION].filter(Boolean).join(' · ');
+  const where = team ? `the ${session} division` : `the ${session} session`;
+  const by = holdUntil
+    ? new Date(holdUntil).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit' })
+    : '';
+  const lead = holdUntil
+    ? `A place opened in ${escapeHtml(where)}, and <strong>${escapeHtml(name)}</strong> was next on the waiting list.
+       It is held for you until <strong>${escapeHtml(by)}</strong> (Central). Pay by then to keep it.`
+    : `A place opened in ${escapeHtml(where)}, and <strong>${escapeHtml(name)}</strong> was next on the waiting list.
+       You are now confirmed.`;
+  const html = portalMail('Tennessee Saints', `
+      <p style="margin-top:0;">${lead}</p>
+      <p><strong>${escapeHtml(event)}</strong>${when ? `<br>${escapeHtml(when)}` : ''}</p>
+      ${holdUntil ? `<p><a href="${escapeHtml(payUrl)}" style="display:inline-block;background:#06255c;color:#fff;padding:10px 18px;
+        border-radius:999px;font-weight:700;text-decoration:none;">Pay now</a></p>` : ''}
+      <p style="font-size:14px;">If plans have changed, <a href="${escapeHtml(cancelUrl)}">release the place here</a> so the next
+        ${team ? 'team' : 'family'} can have it.</p>
+      <p style="color:#536277;font-size:14px;">Questions: reply to this email, or write to ${escapeHtml(contact)}.</p>`);
+  const text = [
+    `A place opened in ${where}, and ${name} was next on the waiting list.`,
+    holdUntil ? `It is held until ${by} (Central). Pay by then to keep it: ${payUrl}` : 'You are now confirmed.',
+    '', [event, when].filter(Boolean).join(' · '), '', `Release the place: ${cancelUrl}`, `Questions: ${contact}`,
+  ].join('\n');
+  // Alert lane, like the evaluation's promotion email: the place is already
+  // theirs (or held for them) and they need to know today.
+  const sent = await sendMetered(env, 'alert', {
+    to, subject: holdUntil ? `A place opened — pay to keep it: ${name}, ${event}` : `You're in — ${name}, ${event}`,
+    html, text, replyTo: contact,
+  });
+  if (!sent.ok && !sent.budget) console.error('Failed to send event place-opened email:', sent.error);
+  return sent;
+}
+
+/** Staff confirmed someone who registered interest (Admin -> Events). Only with EVENT_EMAILS_ENABLED. */
+export async function sendInterestConfirmed(env, { to, playerName, event }) {
+  if (!emailConfigured(env)) return { ok: false, error: 'email not configured' };
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const when = [env.EVENT_DATE_LINE, env.EVENT_LOCATION].filter(Boolean).join(' · ');
+  const html = portalMail('Tennessee Saints', `
+      <p style="margin-top:0;"><strong>${escapeHtml(playerName)}</strong> has a place at <strong>${escapeHtml(event.name)}</strong>.</p>
+      ${when ? `<p>${escapeHtml(when)}</p>` : ''}
+      <p style="color:#536277;font-size:14px;">Questions, or can't make it? Reply to this email or write to ${escapeHtml(contact)}.</p>`);
+  return sendMetered(env, 'receipt', {
+    to, subject: `You're in — ${playerName}, ${event.name}`, html,
+    text: `${playerName} has a place at ${event.name}.${when ? `\n${when}` : ''}\nQuestions: ${contact}`, replyTo: contact,
+  });
+}
+
+/**
+ * An invitation to an event (events/invitations.js). The sender has already
+ * reserved its place in the 'invite' lane and claimed the row; this throws on
+ * failure so the sender can put it back. Every invitation carries an
+ * unsubscribe link, the one-click header mail providers show as their own
+ * button, and the academy's legal name and mailing address (CAN-SPAM).
+ */
+export async function sendEventInvitation(env, { invitation }) {
+  if (!emailConfigured(env)) throw new Error('email not configured');
+  const site = (env.SITE_URL || 'https://tnsaints.com').replace(/\/$/, '');
+  const api = (env.PUBLIC_API_ORIGIN || 'https://api.tnsaints.com').replace(/\/$/, '');
+  const token = encodeURIComponent(invitation.token);
+  const signUp = `${site}/?event=${encodeURIComponent(invitation.event_id)}&inv=${token}#contact`;
+  const unsubscribe = `${site}/unsubscribe.html?t=${token}`;
+  const oneClick = `${api}/api/unsubscribe/one-click?t=${token}`;
+  const contact = env.NOTIFY_EMAIL_TO ? env.NOTIFY_EMAIL_TO.split(',')[0].trim() : 'info@tnsaints.com';
+  const address = String(env.MAILING_ADDRESS || '').trim();
+  const footerLine = `Tennessee Saints Basketball Academy LLC${address ? ` · ${address}` : ''}`;
+  const when = [env.EVENT_DATE_LINE, env.EVENT_LOCATION].filter(Boolean).join(' · ');
+  const first = String(invitation.name || '').trim().split(/\s+/)[0];
+  const greeting = first ? `Hi ${first},` : 'Hi,';
+  const paragraphs = String(invitation.message || '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const html = portalMail('Tennessee Saints', `
+      <p style="margin-top:0;">${escapeHtml(greeting)}</p>
+      ${paragraphs.map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}
+      <div style="background:#f3f5f9;border-radius:10px;padding:14px 16px;margin:18px 0;">
+        <strong style="color:#06255c;">${escapeHtml(env.EVENT_LABEL || 'Tennessee Saints event')}</strong>
+        ${when ? `<div style="margin-top:4px;">${escapeHtml(when)}</div>` : ''}
+        <p style="margin:14px 0 0;"><a href="${escapeHtml(signUp)}" style="background:#06255c;color:#fff;text-decoration:none;
+          padding:12px 22px;border-radius:8px;font-weight:700;display:inline-block;">Sign up</a></p>
+      </div>
+      <p style="color:#536277;font-size:13px;">You're getting this because you've been in touch with Tennessee Saints.
+      <a href="${escapeHtml(unsubscribe)}" style="color:#536277;">Unsubscribe from event invitations</a>.<br>${escapeHtml(footerLine)}</p>`);
+  const text = [greeting, '', ...paragraphs.flatMap((p) => [p, '']), env.EVENT_LABEL || '', when, `Sign up: ${signUp}`, '',
+    `Unsubscribe from event invitations: ${unsubscribe}`, footerLine].join('\n');
+  return send(env, {
+    to: invitation.email,
+    subject: invitation.subject,
+    html,
+    text,
+    replyTo: contact,
+    headers: {
+      'List-Unsubscribe': `<${oneClick}>, <mailto:${contact}?subject=unsubscribe>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+  });
 }

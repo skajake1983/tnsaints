@@ -42,6 +42,12 @@ export async function briefSummary(env, now = Date.now()) {
     one(`SELECT COUNT(*) AS n FROM enrollments e WHERE e.billed_outside = 'paypal_join' AND e.paypal_cancelled_at IS NULL
            AND EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.enrollment_id = e.id AND s.environment = ?1
                          AND s.status IN ('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'paused'))`, stripeEnv(env)),
+    // Event sign-ups from the website in the last day: places, interest, team entries.
+    one(`SELECT (SELECT COUNT(*) FROM registrations WHERE created_at >= ?1 AND source = 'website')
+              + (SELECT COUNT(*) FROM event_interest WHERE created_at >= ?1)
+              + (SELECT COUNT(*) FROM event_teams WHERE created_at >= ?1) AS n`, since),
+    // Invitations drafted and waiting for someone to approve them.
+    one(`SELECT COUNT(*) AS n FROM invite_campaigns WHERE status = 'draft'`),
     // A family deleted its data; its old Join-page PayPal subscription is cancelled by hand.
     one(`SELECT COUNT(*) AS n FROM enrollments e JOIN households h ON h.id = e.household_id AND h.status = 'deleted'
           WHERE e.billed_outside = 'paypal_join' AND e.paypal_cancelled_at IS NULL AND e.outside_reference IS NOT NULL`),
@@ -59,7 +65,9 @@ export async function briefSummary(env, now = Date.now()) {
     paidWithoutSeat: n(8),
     deletionRequests: n(9),
     paypalToCancel: n(10),
-    deletedPaypal: n(11),
+    eventSignups: n(11),
+    invitesToApprove: n(12),
+    deletedPaypal: n(13),
     clearancesDue,
     complianceDue: compliance.due,
     complianceUndated: compliance.undated,
@@ -79,6 +87,8 @@ export function briefLines(summary) {
   add(summary.pastDue, (c) => `${c} academy ${c === 1 ? 'place is' : 'places are'} past due`, '/families');
   add(summary.offersLapsingSoon, (c) => `${c} seat ${c === 1 ? 'offer lapses' : 'offers lapse'} in the next two days`, '/enrollments');
   add(summary.applied, (c) => `${c} new academy ${c === 1 ? 'application' : 'applications'} to review`, '/enrollments');
+  add(summary.eventSignups, (c) => `${c} new event ${c === 1 ? 'sign-up' : 'sign-ups'} in the last day`, '/events');
+  add(summary.invitesToApprove, (c) => `${c} event ${c === 1 ? 'invitation is' : 'invitations are'} waiting for approval`, '/events');
   add(summary.newInquiries, (c) => `${c} website ${c === 1 ? 'inquiry' : 'inquiries'} in the last day (${summary.unhandledInquiries} not yet handled)`, '/inbox');
   add(summary.tasksDue, (c) => `${c} follow-up ${c === 1 ? 'task is' : 'tasks are'} due or overdue`, '/crm/tasks?view=overdue');
   add(summary.unlinkedSubscriptions, (c) => `${c} PayPal ${c === 1 ? 'subscription' : 'subscriptions'} not yet matched to a child`, '/billing');

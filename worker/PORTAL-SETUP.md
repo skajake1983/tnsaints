@@ -29,6 +29,9 @@ misspelled, `"True"` — is off.
 | `RETENTION_MODE` | `"report"` counts what the retention rules would remove; `"enforce"` removes it (section 10) | yes — back to `"report"` stops removal |
 | `STRIPE_WEBHOOK_ENABLED` | Stripe's webhook answers 503; Stripe retries for 3 days, nothing lost | yes |
 | `DONATIONS_ENABLED` | gifts can still be recorded, but no receipt saying a gift is tax-deductible can be issued (section 19) | yes — keep it `"false"` until the IRS determination letter |
+| `EVENTS_ENABLED` | the website shows no events, banner or event forms, and event sign-ups are refused; staff can still create and publish events (section 20) | yes |
+| `EVENT_EMAILS_ENABLED` | **no event email of any kind**: no sign-up receipt, staff alert, "you're confirmed" or pay link. Sign-ups are still recorded | yes |
+| `INVITES_ENABLED` | approved invitations wait in their queue; nothing is sent, by the hourly job or by "Send the next 10" | yes — the queue picks up where it stopped |
 
 `PAYPAL_ENV` is `"sandbox"` (test money, TEST MODE banner on the portal) or
 `"live"`.
@@ -98,10 +101,37 @@ production:
 | 018 | `staff_board_role.sql` | the `board` staff role (rebuilds the `staff` table; export it first, as the file says) |
 | 019 | `places_paid_outside.sql` | how a place staff added is paid today (PayPal Join page, or other) |
 | 020 | `stripe.sql` | Stripe customers, checkouts, subscriptions and events; scholarships; the PayPal paid-through day |
+| 021 | `invite_signin.sql` | the one-click family invitation link (rebuilds `auth_login_tokens`) |
+| 022 | `events_past_evaluation.sql` | the 8/29 evaluation recorded as a past event (a closed program with its two sessions) |
+| 023 | `events_programs.sql` | event kind, sign-up mode, days, place, payment, banner and share wording on programs (adds columns) |
+| 024 | `events_signups.sql` | "register interest" sign-ups, tournament team entries, the event/invite/unsubscribe CRM activity kinds (rebuilds `crm_activities`, which nothing points at), and session, waiver and source on registrations |
+| 025 | `invitations.sql` | invitation drafts, one row per invited address, and the unsubscribe list (by keyed hash only) |
+| 026 | `event_payments.sql` | payment state and hold time on event sign-ups and team entries, and Stripe checkouts for events |
 
-All of them are safe to re-run except 008, 015, 019 and 020 (018 re-runs harmlessly). Those end in ALTERs, so a
-re-run fails with "duplicate column name", which means the file was already
-applied.
+All of them are safe to re-run except 008, 015, 019, 020 and 023–026 (018 and 021 re-run harmlessly). Those add
+columns, so a re-run fails with "duplicate column name", which means the file
+was already applied.
+
+**024 to 026 have not been tried on a copy of production yet.** Do that first,
+as below, before applying them for real. 024 is the one to watch, because it
+rebuilds `crm_activities`.
+
+**Never rebuild a table other tables point at.** D1 doesn't keep foreign
+keys deferred across a migration file, so copying such a table aside and
+recreating it fails. D1 then says it "was reset and rolled back to its last
+known good state". This was proven on a copy of production on 2026-10-21.
+That's why 023 adds an `event_kind` column instead of new `programs.kind`
+values. Rebuilding a table nothing points at is fine (018, 021).
+
+To try a migration on a copy of production first:
+1. Export production.
+2. Load the export into a scratch SQLite.
+3. Write it back out in this order: tables, then rows (parents before
+   children), then indexes and triggers.
+4. Import that into a scratch D1 database.
+5. Run the migration there.
+6. Check that `PRAGMA foreign_key_check` returns nothing.
+7. Delete the scratch database and the export.
 
 ## 4. Google sign-in (plan item O6)
 
@@ -376,8 +406,13 @@ A job that ran out of room is `partial` and continues next hour; one that
 failed is retried next hour.
 
 `family-deletion` runs first every hour (a family was promised a date). It
-deletes at most one family per run, in at most 36 queries. Other hourly jobs
+deletes at most one family per run, in at most 39 queries. Other hourly jobs
 can be deferred for that hour, and catch up the next.
+
+`event-holds` gives back event places whose 35-minute payment hold ran out,
+and offers them to the waiting list. `event-invites` sends approved invitations
+(4 a run, 9 AM–8 PM Central) and runs near the end, so it never crowds out the
+payment sweeps.
 
 ## 14. When something goes wrong
 
@@ -512,3 +547,96 @@ An issued receipt and its gift's details cannot be changed. If something is
 wrong, void it with a reason and record the gift again. Print a receipt, or
 save it as a PDF, and send it from your own email. A donor's yearly summary
 lists all their gifts that year, for their tax records.
+
+## 20. Events: evaluations, open gyms, camps, scrimmages, tournaments
+
+The owner decided how events work on 2026-10-21. Every event is a program, and its
+sessions (or tournament divisions) are its groups. Staff run events from
+**Admin → Events**, and the website reads them from `api.tnsaints.com/api/events`.
+
+**Settings.** The three switches are in section 1: `EVENTS_ENABLED`,
+`EVENT_EMAILS_ENABLED` and `INVITES_ENABLED`. All three start off. Turn them on
+one at a time, after testing. Also set `MAILING_ADDRESS` in `wrangler.toml` to
+the academy's postal address; a PO box is fine. Every invitation's footer
+carries it (CAN-SPAM), and an invitation can't be approved without it.
+
+**Creating one.**
+1. Go to Events → New event and pick the kind. The form starts from the last
+   event of that kind.
+2. Change the date and save it as a hidden draft.
+3. On the event's page, check the preview.
+4. Press **Publish**. Publishing needs a waiver and a session.
+5. Optionally, press **Put in the website banner**.
+
+**Duplicate** copies any event. **Repeat weekly** (open gyms) makes up to 12
+more, a week apart.
+
+**How people sign up:**
+- **Evaluation, open gym, camp:** a place in a session, with a waiting list.
+  When a place frees up, the next family on the waiting list moves into it.
+- **Scrimmage, and "our players" tournaments:** register interest. Staff then
+  Confirm or Decline on the event's page.
+- **"Teams register" tournaments:** a coach enters a team in a division. When
+  a team withdraws, the first waiting team moves up.
+
+**Past events.** Every event, past ones included, opens from Events. Roster,
+Evaluations and Decisions show whichever event is chosen in their picker. The
+choice lasts 12 hours in that browser, and "Back to the current evaluation"
+undoes it.
+
+**Paying.** A price is paid either at check-in or online when the family
+signs up.
+- Online payment uses Stripe Checkout, card only, and holds the place for 35
+  minutes.
+- It needs Stripe set up (section 5b) and Admin → Billing switched to Stripe.
+  Until then, publishing an online-paid event is refused.
+- If a hold lapses unpaid, the place goes back. The next family or team waiting
+  is offered it, with 48 hours to pay. A team moved up owes the entry fee like
+  any other.
+
+**Emails.** With `EVENT_EMAILS_ENABLED` off, **no event email goes to anyone**:
+- no sign-up receipt or staff alert;
+- no "you're confirmed" when staff confirm interest;
+- no "a place opened" for a family or team moved up from a waiting list,
+  whether after a cancellation, a withdrawal or a lapsed payment hold. **Call
+  them yourselves**; they show as confirmed on the event's roster.
+
+Sign-ups are still recorded and appear in the daily brief. With the switch on,
+staff get an email for each sign-up and cancellation only when the event's
+"Email staff on every sign-up" box is ticked.
+
+The evaluation form on the website is the older one, used for 8/29. It still
+sends its usual emails, but only for an evaluation marked "current" in
+Programs (section 17).
+
+**Invitations.** On the event's page, choose **Invite people**, then:
+1. Pick the sources: earlier events' sign-ups, academy or team families, CRM
+   kinds or stages. These are always left out: do-not-contact, unsubscribed,
+   already invited, already signed up.
+2. Check the count, write the message, and **save a draft**. Nothing is sent
+   yet. "Send the next 10" does nothing for a draft.
+3. Someone with approval rights presses **Approve and start sending**. That is
+   the consent to send.
+4. Invitations go out within their own email lane: about 50 a day, which always
+   leaves room for sign-up receipts. They send only while `INVITES_ENABLED`
+   is on.
+
+To send from Outlook instead, use **Copy addresses for Outlook (BCC)**. It
+needs CRM export rights, and the audit records how many addresses were copied.
+Every invitation has an unsubscribe link and a one-click header. Unsubscribing
+stops invitations only.
+
+**Retention.** These are the Events plan's defaults, pending the attorney
+(O15). Each period is a setting:
+- interest sign-ups: removed 12 months after the event
+  (`RETENTION_INTEREST_MONTHS`);
+- team entries: removed 24 months after the event (the leads period);
+- invitation addresses and names: cleared 30 days after the event
+  (`RETENTION_INVITE_DAYS`). The unsubscribe hash stays.
+- an evaluation's medical notes: cleared 90 days after it, as before.
+
+Family deletion covers all of these.
+
+**Migrations:** 022–026, in order, before deploying the code that reads them
+(section 3). All of them only add tables or columns, except 024, which
+rebuilds `crm_activities`. Nothing points at that table.

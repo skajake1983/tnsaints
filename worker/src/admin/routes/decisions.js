@@ -9,6 +9,7 @@
 import { json } from '../../http.js';
 import { can, audit } from '../../auth/staff.js';
 import { adminCancelRegistration, adminDeleteRegistration } from '../../registration.js';
+import { sendEventPlaceOpened } from '../../email.js';
 import { page, adminHeaders } from '../ui.js';
 import { gateMessage, textToHtml } from '../../feedback/compose.js';
 import { checkEditedBody } from '../../feedback/safety.js';
@@ -17,6 +18,8 @@ import {
 } from '../../feedback/batches.js';
 import { decisionsBody, DECISION_STYLES, decisionsCsp } from '../decisions-ui.js';
 import { NAV, denyHtml, denyJson } from '../nav.js';
+import { eventsWithCurrent } from './events.js';
+import { eventBar, EVENT_STYLES } from '../events-ui.js';
 
 async function readJsonBody(request) {
   try {
@@ -188,7 +191,7 @@ export const routes = [
   {
     method: 'GET', path: '/decisions', cap: 'decisions:set',
     deny: denyHtml('Decisions', 'Decisions and sending are limited to academy admins.'),
-    handler: ({ env, principal }) => renderDecisions(env, principal),
+    handler: ({ env, principal, base }) => renderDecisions(env, principal, base),
   },
   // Cancel keeps the record and frees the seat; delete destroys it. Both are
   // admin-only and both are audited. See registration.js for why cancel is the
@@ -222,6 +225,15 @@ export const routes = [
           detail: { promoted: Boolean(result.promoted) },
         })
       );
+      // An event sign-up's next family is told (with a pay link on a paid
+      // event) -- only while EVENT_EMAILS_ENABLED is "true", which
+      // sendEventPlaceOpened checks. The evaluation's own staff cancel stays
+      // silent, as it always was.
+      if (result.promoted && result.registration?.source) {
+        const p = result.promoted;
+        ctx.waitUntil(sendEventPlaceOpened(env, { to: p.parent_email, name: p.player_name, session: p.session_time,
+          cancelToken: p.cancel_token, holdUntil: p.hold_expires_at || null }).catch(() => {}));
+      }
       return json({ ok: true, promoted: Boolean(result.promoted) });
     },
   },
@@ -237,9 +249,11 @@ export const routes = [
             error:
               result.code === 'already-messaged'
                 ? 'This family has already been emailed, so the record cannot be deleted. Cancel it instead.'
-                : 'No such player in this event.',
+                : result.code === 'paid'
+                  ? 'This sign-up has a payment on record, so it cannot be deleted. Cancel it instead.'
+                  : 'No such player in this event.',
           },
-          { status: result.code === 'already-messaged' ? 409 : 404 }
+          { status: result.code === 'already-messaged' || result.code === 'paid' ? 409 : 404 }
         );
       }
       // Audited with what was destroyed, because this is the one action with no
@@ -428,8 +442,8 @@ async function handleMessageEdit(env, ctx, principal, messageId, bodyText) {
   return json({ ok: true });
 }
 
-async function renderDecisions(env, principal) {
-  const rows = await decisionGrid(env);
+async function renderDecisions(env, principal, base) {
+  const [rows, events] = await Promise.all([decisionGrid(env), eventsWithCurrent(env)]);
 
   // The most recent batch for this event. Only one can be in flight at a time,
   // enforced by a partial unique index, so "most recent" is unambiguous.
@@ -469,8 +483,8 @@ async function renderDecisions(env, principal) {
     principal,
     nav: NAV,
     current: '/decisions',
-    extraStyles: DECISION_STYLES,
-    body: decisionsBody({
+    extraStyles: DECISION_STYLES + EVENT_STYLES,
+    body: eventBar({ base, env, events: events.filter((e) => e.kind === 'evaluation'), returnTo: '/decisions' }) + decisionsBody({
       rows,
       batch,
       messages,

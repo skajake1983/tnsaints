@@ -6,7 +6,8 @@
  * Proved: report mode removes nothing; each rule finds exactly what it should
  * and nothing it should not (live places, children who never had a place,
  * leads with recent contact, onboarded volunteers, children under 21, waivers
- * of unknown age); a legal hold keeps its subject out of every rule until
+ * of unknown age; event interest, team entries and invitation addresses
+ * counted from their event's date); a legal hold keeps its subject out of every rule until
  * released; enforcement removes what was due, leaves no dangling waiver
  * pointer, records counts only, and a second run finds nothing more.
  *
@@ -102,6 +103,48 @@ const HELDLEAD = lead('Hank Held', '2026-01-01T15:00:00.000Z');
 run(`INSERT INTO crm_activities (kind, body, contact_id, actor, occurred_at, created_at) VALUES ('note', 'LEAD-NOTE-CANARY', ?, 'staff', ?, ?)`,
   OLDLEAD, OLD, OLD);
 
+// Events, dated against NOW (2034-06-01): interest 12 months, teams 24 months, invitation addresses 30 days.
+const event = (eid, stored, kind, mode, day) => run(`INSERT INTO programs (id, kind, event_kind, name, status, enrollment_mode,
+  billing, grade_min, grade_max, signup_mode, starts_on, created_at, updated_at)
+  VALUES (?, ?, ?, ?, 'closed', 'approval', 'free', 3, 8, ?, ?, ?, ?)`, eid, stored, kind, eid, mode, day, OLD, OLD);
+event('2033-05-01-scrimmage', 'clinic', 'scrimmage', 'interest', '2033-05-01'); // 13 months ago
+event('2033-08-01-scrimmage', 'clinic', 'scrimmage', 'interest', '2033-08-01'); // 10 months ago
+event('2032-04-01-tournament', 'tournament', 'tournament', 'team', '2032-04-01'); // 26 months ago
+event('2033-04-01-tournament', 'tournament', 'tournament', 'team', '2033-04-01'); // 14 months ago
+event('2034-04-15-open-gym', 'clinic', 'open_gym', 'spot', '2034-04-15'); // 47 days ago
+event('2034-05-20-open-gym', 'clinic', 'open_gym', 'spot', '2034-05-20'); // 12 days ago
+const interest = (eid, name, playerId = null) => id(run(`INSERT INTO event_interest (event_id, player_name, player_name_norm, grade,
+  parent_name, parent_email, parent_email_norm, phone, cancel_token, player_id, created_at, updated_at)
+  VALUES (?, ?, ?, '5th', 'P', 'p@example.com', 'p@example.com', '615', ?, ?, ?, ?)`, eid, name, name.toLowerCase(),
+  `it-${name}`, playerId, OLD, OLD));
+const I_OLD = interest('2033-05-01-scrimmage', 'Ivy Old');
+const I_NEW = interest('2033-08-01-scrimmage', 'Ike New');
+interest('2033-05-01-scrimmage', 'Hal Held', HELDKID); // the held family
+const team = (eid, name) => {
+  const g = id(run(`INSERT INTO program_groups (program_id, name, schedule_summary, capacity, created_at, updated_at)
+    VALUES (?, '5th grade', '5th grade', 8, ?, ?)`, eid, OLD, OLD));
+  return id(run(`INSERT INTO event_teams (event_id, group_id, team_name, team_name_norm, coach_name, coach_email, coach_email_norm,
+    coach_phone, players_count, status, agreement, signature, signed_at, cancel_token, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'Coach', 'c@example.com', 'c@example.com', '615', 8, 'entered', 1, 'Coach', ?, ?, ?, ?)`,
+    eid, g, name, name.toLowerCase(), OLD, `tt-${name}`, OLD, OLD));
+};
+const T_OLD = team('2032-04-01-tournament', 'Old Hawks');
+const T_NEW = team('2033-04-01-tournament', 'New Hawks');
+const invite = (eid, email) => {
+  const c = id(run(`INSERT INTO invite_campaigns (event_id, subject, message, audience, status, created_by, created_at)
+    VALUES (?, 'S', 'M', '{}', 'approved', 'staff', ?)`, eid, OLD));
+  return id(run(`INSERT INTO event_invitations (campaign_id, event_id, email, email_norm, email_hash, name, token, send_state,
+    created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'INVITE-NAME-CANARY', ?, 'sent', ?, ?)`, c, eid, email, email,
+    `${email}-hash`, `tok-${email}`, OLD, OLD));
+};
+const V_OLD = invite('2034-04-15-open-gym', 'oldgym@example.com');
+const V_NEW = invite('2034-05-20-open-gym', 'newgym@example.com');
+// A camp that began 120 days before NOW but ended 83 days before: its medical notes count from the last day.
+run(`INSERT INTO programs (id, kind, event_kind, name, status, enrollment_mode, billing, grade_min, grade_max, signup_mode, starts_on,
+  ends_on, created_at, updated_at) VALUES ('2034-02-01-camp', 'camp', 'camp', 'Long camp', 'closed', 'approval', 'free', 3, 8,
+  'spot', '2034-02-01', '2034-03-10', ?, ?)`, OLD, OLD);
+const R4 = registration('Cam Camper', '2034-02-01-camp');
+
 console.log('\n=== legal holds ===');
 const env = { DB };
 check('a hold needs a real subject', (await placeHold(env, { subjectType: 'household', subjectId: 999999, reason: 'Dispute', actor: 'admin' })).result === 'not-found');
@@ -125,6 +168,10 @@ check('leads: the untouched one due; recent contact and onboarded volunteers are
 check('waivers: only the adult whose place ended (under-21s and live places kept; one held)',
   JSON.stringify(due.waivers) === '[1,1]', due.waivers);
 check('payments: the 2026 one due; 2030 not yet; one held', JSON.stringify(due.payments) === '[1,1]', due.payments);
+check('event interest: 13 months after the event due, 10 months not; the held family kept',
+  JSON.stringify(due.event_interest) === '[1,1]', due.event_interest);
+check('team entries: 26 months after the event due, 14 months not', JSON.stringify(due.event_teams) === '[1,0]', due.event_teams);
+check('invitation addresses: 47 days after the event due, 12 days not', JSON.stringify(due.invitations) === '[1,0]', due.invitations);
 check('a waiver whose child has no date of birth is kept and counted', report.waiversAgeUnknown === 1, report.waiversAgeUnknown);
 check('report mode removed nothing', get(`SELECT COUNT(*) AS n FROM player_medical`).n === 4 && get(`SELECT COUNT(*) AS n FROM payments`).n === 3
   && get(`SELECT COUNT(*) AS n FROM consent_records`).n === 5 && Object.keys(report.removed).length === 0);
@@ -134,13 +181,16 @@ console.log('\n=== enforce mode ===');
 const enforce = retentionConfig({ RETENTION_MODE: 'enforce' });
 const done = await runRetention(env, { now: NOW, config: enforce });
 check('it reports what it removed', JSON.stringify(done.removed) ===
-  JSON.stringify({ medical_portal: 1, medical_eval: 1, leads: 1, waivers: 1, payments: 1 }), done.removed);
+  JSON.stringify({ medical_portal: 1, medical_eval: 1, leads: 1, waivers: 1, event_interest: 1, event_teams: 1, invitations: 1,
+    payments: 1 }), done.removed);
 check("the adult's medical answer is gone; the active child's, the never-enrolled child's and the held child's remain",
   !get(`SELECT 1 AS x FROM player_medical WHERE player_id = ?`, ADULT) && get(`SELECT COUNT(*) AS n FROM player_medical`).n === 3);
 check('the old evaluation medical note is cleared; the held and recent ones remain',
   get(`SELECT medical_notes FROM registrations WHERE id = ?`, R1).medical_notes === null
   && get(`SELECT medical_notes FROM registrations WHERE id = ?`, R2).medical_notes === 'EVAL-MEDICAL-CANARY'
   && get(`SELECT medical_notes FROM registrations WHERE id = ?`, R3).medical_notes === 'EVAL-MEDICAL-CANARY');
+check("a camp's medical note counts from the camp's last day, not its first",
+  get(`SELECT medical_notes FROM registrations WHERE id = ?`, R4).medical_notes === 'EVAL-MEDICAL-CANARY');
 const ol = get(`SELECT status, name, email FROM crm_contacts WHERE id = ?`, OLDLEAD);
 check('the untouched lead is anonymized, with what staff wrote', ol.status === 'anonymized' && ol.name === null && ol.email === null
   && get(`SELECT COUNT(*) AS n FROM crm_activities WHERE body LIKE '%LEAD-NOTE-CANARY%'`).n === 0, ol);
@@ -153,6 +203,15 @@ check("the teen's, the active child's, the unknown-age and the held waivers rema
   [c2, c3, c5].every((c) => get(`SELECT 1 AS x FROM consent_records WHERE id = ?`, c)) && get(`SELECT COUNT(*) AS n FROM consent_records`).n === 4);
 check('the 2026 payment is gone; the 2030 and held ones remain',
   !get(`SELECT 1 AS x FROM payments WHERE paypal_transaction_id = 'TXN-OLD'`) && get(`SELECT COUNT(*) AS n FROM payments`).n === 2);
+check('the old interest sign-up is gone; the recent and held ones remain',
+  !get(`SELECT 1 AS x FROM event_interest WHERE id = ?`, I_OLD) && get(`SELECT 1 AS x FROM event_interest WHERE id = ?`, I_NEW)
+  && get(`SELECT COUNT(*) AS n FROM event_interest`).n === 2);
+check('the old team entry is gone; the recent one remains',
+  !get(`SELECT 1 AS x FROM event_teams WHERE id = ?`, T_OLD) && get(`SELECT 1 AS x FROM event_teams WHERE id = ?`, T_NEW));
+const vo = get(`SELECT email, email_norm, name, email_hash FROM event_invitations WHERE id = ?`, V_OLD);
+check("the old invitation's address and name are cleared, its unsubscribe hash kept; the recent one untouched",
+  vo.email === null && vo.email_norm === null && vo.name === null && vo.email_hash === 'oldgym@example.com-hash'
+  && get(`SELECT email FROM event_invitations WHERE id = ?`, V_NEW).email === 'newgym@example.com', vo);
 const a = get(`SELECT actor, detail FROM audit_log WHERE action = 'retention.enforced'`);
 check('enforcement is audited with counts only', a?.actor === 'system' && !/CANARY|Ada|Olive/.test(a.detail), a);
 const again = await runRetention(env, { now: NOW, config: enforce });
@@ -164,12 +223,14 @@ check('a hold can be released', await releaseHold(env, { id: familyHold.id, acto
 check('and not released twice', !(await releaseHold(env, { id: familyHold.id, actor: 'admin' })));
 const after = await retentionCounts(env, { now: NOW, config: enforce });
 const byKey = Object.fromEntries(after.rules.map((r) => [r.key, r.due]));
-check('once released, what it kept becomes due', byKey.medical_portal === 1 && byKey.waivers === 1 && byKey.payments === 1, byKey);
+check('once released, what it kept becomes due', byKey.medical_portal === 1 && byKey.waivers === 1 && byKey.payments === 1
+  && byKey.event_interest === 1, byKey);
 
 console.log('\n=== settings ===');
 const odd = retentionConfig({ RETENTION_MODE: 'ENFORCE', RETENTION_MEDICAL_DAYS: '5', RETENTION_LEAD_MONTHS: 'two', RETENTION_PAYMENT_YEARS: '10' });
 check('only exactly "enforce" enforces; out-of-range or malformed periods fall back to the defaults',
-  odd.mode === 'report' && odd.medicalDays === 90 && odd.leadMonths === 24 && odd.paymentYears === 10, odd);
+  odd.mode === 'report' && odd.medicalDays === 90 && odd.leadMonths === 24 && odd.paymentYears === 10
+  && odd.interestMonths === 12 && odd.inviteDays === 30, odd);
 const before = DB.stats.queries;
 await retentionCounts(env, { now: NOW });
 check('the report is one fixed batch', DB.stats.queries - before === RULES.length * 2 + 1, DB.stats.queries - before);

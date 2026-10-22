@@ -100,6 +100,11 @@ export async function currentWaiver(env, program) {
 }
 
 /** Is the program taking applications right now? */
+/** A program families sign up for in the portal, not an event (PORTAL_PROGRAM_SQL, programs/evaluation.js). */
+export function portalProgram(program) {
+  return Boolean(program) && (program.signup_mode ?? 'enroll') === 'enroll' && program.kind !== 'evaluation';
+}
+
 export function programOpen(program, now = Date.now()) {
   if (!program || program.status !== 'open') return false;
   if (program.registration_opens_at && Date.parse(program.registration_opens_at) > now) return false;

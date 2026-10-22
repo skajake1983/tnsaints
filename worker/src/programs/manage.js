@@ -50,7 +50,8 @@ export function isoToCentral(value) {
 
 export async function listPrograms(env) {
   const { results } = await env.DB.prepare(
-    `SELECT p.id, p.kind, p.name, p.status, p.billing, p.enrollment_mode, p.public, p.registration_closes_at,
+    `SELECT p.id, COALESCE(p.event_kind, p.kind) AS kind, p.signup_mode, p.name, p.status, p.billing, p.enrollment_mode,
+            p.public, p.registration_closes_at,
             (SELECT COUNT(*) FROM enrollments e WHERE e.program_id = p.id AND e.status IN ('active', 'past_due')) AS enrolled,
             (SELECT COUNT(*) FROM enrollments e WHERE e.program_id = p.id AND e.status IN ('applied', 'waitlist', 'offered')) AS waiting,
             (SELECT COUNT(*) FROM program_groups g WHERE g.program_id = p.id AND g.status = 'active') AS groups
@@ -80,11 +81,13 @@ export async function createProgram(env, form) {
   const mode = ['team', 'evaluation'].includes(kind) ? 'approval' : 'self_serve';
   const now = iso();
   try {
+    // An evaluation takes public sign-ups for a place (an event: the Events
+    // plan); every other kind made here is a portal program.
     await env.DB.prepare(
       `INSERT INTO programs (id, kind, name, status, enrollment_mode, billing, currency, public, waitlist_enabled,
-                             created_at, updated_at)
-       VALUES (?1, ?2, ?3, 'draft', ?4, ?5, 'USD', 0, 1, ?6, ?6)`
-    ).bind(id, kind, name, mode, billing, now).run();
+                             created_at, updated_at, signup_mode, event_kind)
+       VALUES (?1, ?2, ?3, 'draft', ?4, ?5, 'USD', 0, 1, ?6, ?6, ?7, ?8)`
+    ).bind(id, kind, name, mode, billing, now, kind === 'evaluation' ? 'spot' : 'enroll', kind === 'evaluation' ? 'evaluation' : null).run();
     return { result: 'created', id };
   } catch (err) {
     if (/UNIQUE|PRIMARY/i.test(String(err?.message))) return { result: 'exists', errors: { id: 'A program with that id already exists.' } };

@@ -17,6 +17,12 @@
  *   waivers          a signed waiver, once BOTH 7 years have passed AND the
  *                    child has turned 21 (kept while their age is unknown)
  *   payments         a payment record, after 7 years
+ *   event_interest   a "register interest" sign-up, 12 months after the event
+ *   event_teams      a tournament team entry, once the leads period (24
+ *                    months) has passed since the event
+ *   invitations      an invitation's address and name, cleared 30 days after
+ *                    the event (the unsubscribe hash stays)
+ *                    (these three: the Events plan's defaults, 2026-10-21)
  *
  * A LEGAL HOLD (legal_holds) on a family, child, contact or registration keeps
  * everything about it out of every rule until released.
@@ -35,8 +41,8 @@ const BATCH = 200;
 const LIVE = `('applied', 'waitlist', 'offered', 'active', 'past_due')`;
 const REPORT_KEY = 'retention.report';
 // D1 wants exactly as many bound values as the highest ?N in a statement.
-// Every rule statement binds all six cutoffs, so each names ?6.
-const ALL = `?6 IS NOT NULL`;
+// Every rule statement binds all eight cutoffs, so each names ?8.
+const ALL = `?8 IS NOT NULL`;
 
 function bounded(raw, fallback, min, max) {
   const n = Number(raw);
@@ -51,6 +57,8 @@ export function retentionConfig(env) {
     waiverYears: bounded(env.RETENTION_WAIVER_YEARS, 7, 1, 30),
     waiverMinAge: bounded(env.RETENTION_WAIVER_MIN_AGE, 21, 18, 30),
     paymentYears: bounded(env.RETENTION_PAYMENT_YEARS, 7, 1, 30),
+    interestMonths: bounded(env.RETENTION_INTEREST_MONTHS, 12, 3, 120),
+    inviteDays: bounded(env.RETENTION_INVITE_DAYS, 30, 7, 3650),
   };
 }
 
@@ -58,14 +66,18 @@ const HOLD = (type, expr) =>
   `EXISTS (SELECT 1 FROM legal_holds lh WHERE lh.released_at IS NULL AND lh.subject_type = '${type}' AND lh.subject_id = ${expr})`;
 const HELD_PLAYER = (expr) =>
   `(${HOLD('player', expr)} OR ${HOLD('household', `(SELECT hp.household_id FROM players hp WHERE hp.id = ${expr})`)})`;
-const EVENT_DATE = `(CASE WHEN r.event_id GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
-                          THEN substr(r.event_id, 1, 10) ELSE substr(r.created_at, 1, 10) END)`;
+// The event's last day (a camp runs several), else the date its id starts
+// with, else the sign-up's own date (the Events plan).
+const EVENT_DATE = `COALESCE((SELECT COALESCE(ep.ends_on, ep.starts_on) FROM programs ep WHERE ep.id = r.event_id),
+                    CASE WHEN r.event_id GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+                         THEN substr(r.event_id, 1, 10) ELSE substr(r.created_at, 1, 10) END)`;
 
 /**
  * Each rule: the rows it covers (`from`), when one is due (`due`, binding the
  * cutoffs below), what keeps it (`held`), and its key column.
  * Cutoffs: ?1 medical (ISO), ?2 medical (date), ?3 leads (ISO), ?4 waivers
- * (ISO), ?5 today minus the minimum age (date), ?6 payments (ISO).
+ * (ISO), ?5 today minus the minimum age (date), ?6 payments (ISO), ?7 event
+ * interest (date), ?8 invitation addresses (date).
  */
 export const RULES = [
   {
@@ -104,6 +116,27 @@ export const RULES = [
     held: `(${HELD_PLAYER('cr.player_id')} OR ${HOLD('household', 'cr.household_id')})`,
   },
   {
+    key: 'event_interest', label: 'Event interest sign-ups, 12 months after the event',
+    from: 'event_interest ei', id: 'ei.id',
+    due: `COALESCE((SELECT COALESCE(ep.ends_on, ep.starts_on) FROM programs ep WHERE ep.id = ei.event_id),
+                   substr(ei.created_at, 1, 10)) < ?7`,
+    held: `(ei.player_id IS NOT NULL AND ${HELD_PLAYER('ei.player_id')})`,
+  },
+  {
+    key: 'event_teams', label: 'Tournament team entries, 24 months after the event',
+    from: 'event_teams et', id: 'et.id',
+    due: `COALESCE((SELECT COALESCE(ep.ends_on, ep.starts_on) FROM programs ep WHERE ep.id = et.event_id),
+                   substr(et.created_at, 1, 10)) < substr(?3, 1, 10)`,
+    held: `0`,
+  },
+  {
+    key: 'invitations', label: 'Invitation addresses, 30 days after the event',
+    from: 'event_invitations iv', id: 'iv.id',
+    due: `iv.email IS NOT NULL AND COALESCE((SELECT COALESCE(ep.ends_on, ep.starts_on) FROM programs ep WHERE ep.id = iv.event_id),
+                                             substr(iv.created_at, 1, 10)) < ?8`,
+    held: `0`,
+  },
+  {
     key: 'payments', label: 'Payment records, after 7 years',
     from: 'payments p', id: 'p.id',
     due: `p.paid_at < ?6`,
@@ -127,6 +160,8 @@ function cutoffs(config, now) {
     minus(config.waiverYears).toISOString(),
     minus(config.waiverMinAge).toISOString().slice(0, 10),
     minus(config.paymentYears).toISOString(),
+    minus(0, config.interestMonths).toISOString().slice(0, 10),
+    iso(t - config.inviteDays * DAY_MS).slice(0, 10),
   ];
 }
 
@@ -140,7 +175,8 @@ export async function retentionCounts(env, { now = new Date(), config = retentio
   statements.push(env.DB.prepare(
     `SELECT COUNT(*) AS n FROM consent_records cr
       WHERE cr.signed_at < ?4 AND (SELECT p.date_of_birth FROM players p WHERE p.id = cr.player_id) IS NULL
-        AND ?1 IS NOT NULL AND ?2 IS NOT NULL AND ?3 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL`
+        AND ?1 IS NOT NULL AND ?2 IS NOT NULL AND ?3 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL AND ?7 IS NOT NULL
+        AND ?8 IS NOT NULL`
   ).bind(...binds));
   const results = await env.DB.batch(statements);
   const n = (i) => Number(results[i].results?.[0]?.n || 0);
@@ -154,7 +190,7 @@ export async function retentionCounts(env, { now = new Date(), config = retentio
 
 /** The statements that remove one batch of a rule's rows, given their ids (JSON). Each re-checks the rule. */
 function enforcement(env, rule, idsJson, binds) {
-  const recheck = `${rule.id} IN (SELECT value FROM json_each(?7)) AND ${rule.due} AND NOT ${rule.held}`;
+  const recheck = `${rule.id} IN (SELECT value FROM json_each(?9)) AND ${rule.due} AND NOT ${rule.held}`;
   const p = (sql) => env.DB.prepare(sql).bind(...binds, idsJson);
   switch (rule.key) {
     case 'medical_portal':
@@ -163,8 +199,8 @@ function enforcement(env, rule, idsJson, binds) {
       return [p(`UPDATE registrations SET medical_notes = NULL WHERE id IN (SELECT r.id FROM registrations r WHERE ${recheck})`)];
     case 'leads': {
       const now = new Date().toISOString();
-      const mine = `contact_id IN (SELECT value FROM json_each(?7)) AND ?1 IS NOT NULL AND ?2 IS NOT NULL AND ?3 IS NOT NULL
-                    AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL
+      const mine = `contact_id IN (SELECT value FROM json_each(?9)) AND ?1 IS NOT NULL AND ?2 IS NOT NULL AND ?3 IS NOT NULL
+                    AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ?6 IS NOT NULL AND ?7 IS NOT NULL AND ?8 IS NOT NULL
                     AND contact_id IN (SELECT id FROM crm_contacts WHERE status = 'anonymized')`;
       return [
         p(`UPDATE crm_contacts SET status = 'anonymized', name = NULL, email = NULL, email_norm = NULL, phone = NULL,
@@ -189,6 +225,13 @@ function enforcement(env, rule, idsJson, binds) {
       ];
     case 'payments':
       return [p(`DELETE FROM payments WHERE id IN (SELECT p.id FROM payments p WHERE ${recheck})`)];
+    case 'invitations':
+      return [p(`UPDATE event_invitations SET email = NULL, email_norm = NULL, name = NULL
+                  WHERE id IN (SELECT iv.id FROM event_invitations iv WHERE ${recheck})`)];
+    case 'event_interest':
+      return [p(`DELETE FROM event_interest WHERE id IN (SELECT ei.id FROM event_interest ei WHERE ${recheck})`)];
+    case 'event_teams':
+      return [p(`DELETE FROM event_teams WHERE id IN (SELECT et.id FROM event_teams et WHERE ${recheck})`)];
     default:
       return [];
   }

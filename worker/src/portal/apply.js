@@ -17,6 +17,7 @@ import { getChild } from './data.js';
 import {
   getProgram, listGroups, currentWaiver, programOpen, applicationBlockers, liveEnrollment, apply, priceLine,
   signForExistingPlace, enrollmentEnabled,
+  portalProgram,
 } from '../programs/enrollment.js';
 import { waiverSeasonStart, needsWaiver } from '../programs/waiver-season.js';
 import { hashIp, clientIp } from '../http.js';
@@ -147,7 +148,8 @@ export async function applyRoutes({ env, ctx, request, rc, session, pathname, me
   if (!enrollmentEnabled(env)) return applicationsPausedPage(rc);
   const child = await getChild(env, session.accountId, Number(m[1]));
   const program = await getProgram(env, m[2]);
-  if (!child || !program) return notFoundResponse(rc);
+  // Only a portal program takes applications; an event signs up on the website.
+  if (!child || !program || !portalProgram(program)) return notFoundResponse(rc);
 
   if (!programOpen(program)) {
     return page(rc, program.name, `<p><a href="${esc(rc.url('/'))}">&larr; Back to your family</a></p>

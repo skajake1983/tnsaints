@@ -813,6 +813,182 @@
    "no-script"
   ]
  },
+ "GET /events": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/new": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/new/form?kind=evaluation&from=": {
+  "admin": [
+   200,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/no-such-event": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/no-such-event/invite": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/no-such-event/invites/999999": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/no-such-event/invites/999999/addresses": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "GET /events/no-such-event/registrations.csv": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
  "GET /families": {
   "admin": [
    200,
@@ -2196,6 +2372,204 @@
   "viewer": [
    403,
    "html",
+   "no-script"
+  ]
+ },
+ "POST /events/new": {
+  "admin": [
+   303,
+   "redirect /events/new",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/interest/999999/confirm": {
+  "admin": [
+   303,
+   "redirect /events/no-such-event?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/invite": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/invites/999999/approve": {
+  "admin": [
+   303,
+   "redirect /events/no-such-event/invites/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/invites/999999/cancel": {
+  "admin": [
+   303,
+   "redirect /events/no-such-event/invites/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/invites/999999/send": {
+  "admin": [
+   303,
+   "redirect /events/no-such-event/invites/999999?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/publish": {
+  "admin": [
+   404,
+   "html",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/no-such-event/teams/999999/withdraw": {
+  "admin": [
+   303,
+   "redirect /events/no-such-event?msg=invalid",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "viewer": [
+   403,
+   "html",
+   "no-script"
+  ]
+ },
+ "POST /events/view": {
+  "admin": [
+   303,
+   "redirect /",
+   "no-script"
+  ],
+  "board": [
+   403,
+   "html",
+   "no-script"
+  ],
+  "coach": [
+   303,
+   "redirect /",
+   "no-script"
+  ],
+  "viewer": [
+   303,
+   "redirect /",
    "no-script"
   ]
  },

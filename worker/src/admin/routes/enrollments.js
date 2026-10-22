@@ -102,7 +102,8 @@ async function renderEnrollments(env, principal, url, base) {
       current: '/enrollments',
       body: enrollmentsBody({
         program, groups, rows, message: url.searchParams.get('msg'), base, paused: !enrollmentEnabled(env),
-        programs: (await listPrograms(env)).filter((p) => p.kind !== 'evaluation'),
+        // Portal programs only: an event's sign-ups are on its own page (Events).
+        programs: (await listPrograms(env)).filter((p) => p.signup_mode === 'enroll' && p.kind !== 'evaluation'),
       }),
       extraStyles: ENROLLMENT_STYLES,
     })

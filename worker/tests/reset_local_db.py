@@ -44,6 +44,25 @@ TABLES = [
     # Privacy and safety (014)
     "legal_holds",
     "clearances",
+    # Event payments (026): before the sign-ups and payments' other parents.
+    "event_checkouts",
+    "payments",
+    # Event sign-ups (024)
+    "event_teams",
+    "event_interest",
+    # Evaluation pipeline (schema.sql, 002). Before program_groups: a
+    # registration names its session by id (024).
+    "parent_feedback",
+    "parent_messages",
+    "decisions",
+    "decision_batches",
+    "eval_notes_internal",
+    "eval_feedback",
+    "registrations",
+    # Invitations (025): after what points at them, before the contacts and events they name.
+    "event_invitations",
+    "invite_campaigns",
+    "email_suppressions",
     # CRM screens (013)
     "crm_activities",
     "crm_household_meta",
@@ -63,7 +82,6 @@ TABLES = [
     "stripe_subscriptions",
     "stripe_customers",
     # Billing (010)
-    "payments",
     "paypal_events",
     "billing_subscriptions",
     # Programs and enrollment (009)
@@ -74,14 +92,6 @@ TABLES = [
     "waiver_versions",
     # Children's medical (007)
     "player_medical",
-    # Evaluation pipeline (schema.sql, 002)
-    "parent_feedback",
-    "parent_messages",
-    "decisions",
-    "decision_batches",
-    "eval_notes_internal",
-    "eval_feedback",
-    "registrations",
     "players",
     # Households and sign-in (007)
     "household_emergency_contacts",

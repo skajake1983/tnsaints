@@ -11,7 +11,9 @@
  *   node --no-warnings tests/test_evaluation_overlay.mjs
  */
 import { fakeD1, checker } from './_d1_fake.mjs';
-import { withActiveEvent, setCurrentEvaluation, gradeList, publicPrograms, shortLabel } from '../src/programs/evaluation.js';
+import { withActiveEvent, withEvent, setCurrentEvaluation, gradeList, publicPrograms, shortLabel, dateLine, listEvents }
+  from '../src/programs/evaluation.js';
+import { slotCapacity, totalCapacity, registrationWindow } from '../src/registration.js';
 
 const check = checker();
 const DB = fakeD1();
@@ -61,6 +63,37 @@ run(`UPDATE programs SET status = 'closed' WHERE id = '2027-03-06-evaluation'`);
 check('a closed evaluation takes no registrations', Date.parse((await withActiveEvent(env)).REGISTRATION_CLOSES_AT) < Date.now());
 check('going back to wrangler.toml', (await setCurrentEvaluation({ DB }, null, 'admin')) === 'cleared' && (await withActiveEvent(env)) === env);
 check('grade lists read naturally', gradeList(0, 2) === 'K,1st,2nd' && gradeList(null, 5) === '' && gradeList(11, 12) === '11th,12th');
+
+console.log('\n=== any event, by id (the Events plan) ===');
+program('2027-04-10-evaluation', 'evaluation', { name: 'April Evaluation', opens: '2027-03-01T00:00:00.000Z',
+  closes: '2027-04-08T00:00:00.000Z' });
+group('2027-04-10-evaluation', '9:00 AM', '09:00', 12);
+group('2027-04-10-evaluation', '10:00 AM', '10:00', 30);
+run(`UPDATE program_groups SET starts_on = '2027-04-10', location = 'North Gym, Franklin' WHERE program_id = '2027-04-10-evaluation'`);
+const april = await withEvent(env, '2027-04-10-evaluation');
+check('any event, not only the current one', april.EVENT_ID === '2027-04-10-evaluation' && april.EVENT_KIND === 'evaluation'
+  && april.EVENT_LABEL === 'April Evaluation', april.EVENT_ID);
+check('each session keeps its own size', JSON.parse(april.SESSION_CAPACITIES)['9:00 AM'] === 12
+  && slotCapacity(april, '9:00 AM') === 12 && slotCapacity(april, '10:00 AM') === 30 && totalCapacity(april) === 42,
+  april.SESSION_CAPACITIES);
+check('the smallest is still there for anything reading one number', april.SLOT_CAPACITY === '12'
+  && slotCapacity(april) === 12 && slotCapacity(env, '9:00 AM') === 25);
+check('its date and place, for emails', april.EVENT_DATE_LINE === 'Saturday, April 10' && april.EVENT_LOCATION === 'North Gym, Franklin',
+  [april.EVENT_DATE_LINE, april.EVENT_LOCATION]);
+check('and when sign-ups open', april.REGISTRATION_OPENS_AT === '2027-03-01T00:00:00.000Z'
+  && registrationWindow(april, new Date('2027-02-01T00:00:00Z')).reason === 'not-yet'
+  && registrationWindow(april, new Date('2027-03-02T00:00:00Z')).open === true);
+check("wrangler.toml's event is remembered", april.BASE_EVENT_ID === 'from-toml' && april.BASE === env
+  && (await withEvent(april, '2027-03-06-evaluation')).BASE === env);
+check('no such event, a bad id, or a program that is not an event: env unchanged',
+  (await withEvent(env, 'no-such-event')) === env && (await withEvent(env, "x'; --")) === env
+  && (await withEvent(env, 'academy')) === env && (await withEvent(env, null)) === env);
+check('a day, or a run of days, reads naturally', dateLine(['2027-04-10']) === 'Saturday, April 10'
+  && dateLine(['2027-07-16', '2027-07-12', '2027-07-12']) === 'Monday, July 12 – Friday, July 16' && dateLine([null, 'x']) === '');
+const listed = await listEvents(env);
+check("the Events list has every evaluation, newest first, and wrangler.toml's event while it is not a program",
+  listed.map((e) => e.id).join() === '2027-04-10-evaluation,2027-03-06-evaluation,2026-08-29-evaluation,from-toml'
+  && listed[3].settings === true && listed[2].first_day === '2026-08-29' && !listed[2].settings, listed.map((e) => e.id));
 
 console.log('\n=== the public programs feed ===');
 program('summer-camp', 'camp', { name: 'Summer Camp', public: 1, billing: 'one_time', price: 15000, min: 3, max: 8 });

@@ -91,7 +91,9 @@ function retentionPanel({ report, config, base }) {
     : '';
   return `<div class="panel"><h2>Retention</h2><div style="padding:12px 16px;font-size:14px">
 <p style="margin:0 0 8px">${mode} Periods (defaults pending the attorney): medical answers ${esc(config.medicalDays)} days after the last place or evaluation;
-contacts never converted ${esc(config.leadMonths)} months; waivers ${esc(config.waiverYears)} years and age ${esc(config.waiverMinAge)}; payments ${esc(config.paymentYears)} years.</p>
+contacts never converted ${esc(config.leadMonths)} months; waivers ${esc(config.waiverYears)} years and age ${esc(config.waiverMinAge)}; payments ${esc(config.paymentYears)} years;
+event interest sign-ups ${esc(config.interestMonths)} months and team entries ${esc(config.leadMonths)} months after the event;
+invitation addresses ${esc(config.inviteDays)} days after the event.</p>
 ${report ? `<p class="sub" style="margin:0 0 8px">Last checked ${esc(String(report.at).slice(0, 16).replace('T', ' '))} UTC.${
     report.waiversAgeUnknown ? ` ${esc(report.waiversAgeUnknown)} old waiver(s) kept because the child's date of birth is unknown.` : ''}</p>
 <div class="scroll"><table class="stack"><thead><tr><th>Rule</th><th>Due now</th><th>Kept by a hold</th><th>Removed last run</th></tr></thead>

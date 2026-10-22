@@ -52,7 +52,7 @@ const LIVE_SUB = `('incomplete', 'trialing', 'active', 'past_due', 'unpaid', 'pa
 
 // Every D1 statement the purge can make, including the email's budget
 // reservation and refund. The job runner gives it at least this many.
-export const PURGE_QUERIES = 36;
+export const PURGE_QUERIES = 39;
 
 /** A legal hold touching the family a request names (`subject` is the SQL for its subject_id). */
 export function heldSql(subject) {
@@ -203,6 +203,12 @@ function purgeStatements(env, { requestId, H, A, nowIso, stripeCancelled }) {
                  school = '', emergency_contact_name = '', emergency_contact_phone = '', medical_notes = NULL,
                  highlight_link = NULL, player_notes = NULL, ip_hash = NULL
            WHERE id IN ${REGS}`),
+    // Event sign-ups that aren't a place (the Events plan): interest, and a
+    // team entered by one of these guardians.
+    both(`DELETE FROM event_interest WHERE parent_email_norm IN ${EMAILS} OR player_id IN ${PLAYERS}`),
+    both(`DELETE FROM event_teams WHERE coach_email_norm IN ${EMAILS}`),
+    // Invitations sent to these guardians keep only their hash (an unsubscribe still works).
+    s(`UPDATE event_invitations SET email = NULL, email_norm = NULL, name = NULL WHERE email_norm IN ${EMAILS.replace('?2', '?1')}`, accts),
     // CRM, as retention anonymizes a lead (privacy/retention.js); contacts last, since the others find them.
     both(`UPDATE crm_prospect_players SET name = '', school = NULL, position = NULL
            WHERE contact_id IN ${CONTACTS} OR player_id IN ${PLAYERS}`),
@@ -244,8 +250,8 @@ const KEEPS_NAME = `(EXISTS (SELECT 1 FROM consent_records c WHERE c.player_id =
 
 // Which statement's changes each count reports (by position in purgeStatements).
 const COUNTS = {
-  places: 1, medical: 3, emergencyContacts: 4, evaluationNotes: 8, registrations: 11, crmContacts: 18,
-  children: 19, guardians: 20, sessions: 22, accounts: 25,
+  places: 1, medical: 3, emergencyContacts: 4, evaluationNotes: 8, registrations: 11, eventInterest: 12, eventTeams: 13,
+  invitations: 14, crmContacts: 21, children: 22, guardians: 23, sessions: 25, accounts: 28,
 };
 
 /**

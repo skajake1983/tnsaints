@@ -19,6 +19,7 @@
  * Stripe keeps the events to retry, so nothing is lost.
  */
 
+import { syncEventCheckout } from '../events/payments.js';
 import { flag } from '../lib/flags.js';
 import { readBytesCapped, BodyTooLarge } from '../lib/body.js';
 import { safeEqual } from '../lib/crypto.js';
@@ -62,7 +63,10 @@ async function processEvent(env, event) {
   const type = String(event.type || '');
   const id = String(event.data?.object?.id || '');
   if (type.startsWith('checkout.session.')) {
-    return (await syncCheckout(env, id)).ok ? 'synced' : 'ignored';
+    const r = await syncCheckout(env, id);
+    // Not a portal place: perhaps an event's (events/payments.js).
+    if (!r.ok && r.reason === 'unknown') return (await syncEventCheckout(env, id)).ok ? 'synced' : 'ignored';
+    return r.ok ? 'synced' : 'ignored';
   }
   if (type.startsWith('customer.subscription.')) {
     return (await syncSubscription(env, id)).ok ? 'synced' : 'ignored';

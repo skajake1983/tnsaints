@@ -49,7 +49,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 const MONTH_WINDOW_DAYS = 31;
 
-export const LANES = ['auth', 'alert', 'bulk', 'receipt'];
+export const LANES = ['auth', 'alert', 'bulk', 'receipt', 'invite'];
 
 /**
  * A non-negative integer setting, or `fallback` when it is unset or unreadable.
@@ -69,6 +69,9 @@ export function budgetLimits(env) {
   const alertReserve = count(env.EMAIL_ALERT_RESERVE, 25);
   const monthly = count(env.EMAIL_MONTHLY_LIMIT, 3000);
   const monthlyAuthReserve = count(env.EMAIL_MONTHLY_AUTH_RESERVE, 150);
+  // Invitations stop this many short of the receipt ceiling, so the families
+  // who answer one still get their receipt the same day (the Events plan).
+  const inviteHeadroom = count(env.EMAIL_INVITE_HEADROOM, 25);
 
   return {
     daily,
@@ -79,6 +82,10 @@ export function budgetLimits(env) {
       bulk: { daily: daily - authReserve, monthly: monthly - monthlyAuthReserve },
       receipt: {
         daily: daily - Math.max(alertReserve, authReserve),
+        monthly: monthly - monthlyAuthReserve,
+      },
+      invite: {
+        daily: Math.max(0, daily - Math.max(alertReserve, authReserve) - inviteHeadroom),
         monthly: monthly - monthlyAuthReserve,
       },
     },
