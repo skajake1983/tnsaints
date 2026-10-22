@@ -30,7 +30,10 @@ export const KIND_DEFAULTS = {
   open_gym: { mode: 'spot', name: 'Open Gym Shoot-Around', grades: [3, 8], notify: 0,
     sessions: [['6:00 PM', '18:00', '19:30', 20]] },
   camp: { mode: 'spot', name: 'Basketball Camp', grades: [3, 8], notify: 0, multiDay: true,
-    sessions: [['Morning', '09:00', '12:00', 30]] },
+    sessions: [['Morning', '09:00', '12:00', 30]],
+    // The owner's refund policy for camps (2026-10-21). Staff refund in Stripe by hand.
+    description: 'Refunds: cancel at least 7 days before the camp for a full refund. After that the fee '
+      + "isn't refundable, unless Tennessee Saints cancels the camp." },
   scrimmage: { mode: 'interest', name: 'Scrimmage', grades: [3, 8], notify: 0,
     sessions: [['Game', '18:00', '19:30', 20]] },
   tournament: { mode: 'team', name: 'Tournament', grades: [3, 8], notify: 0, multiDay: true,
@@ -96,7 +99,7 @@ export async function eventPrefill(env, kind, fromId) {
       .map(([name, start, end, cap]) => ({ name, start, end, cap })),
     opens: '',
     closes: '',
-    description: src?.description || '',
+    description: src?.description || d.description || '',
     banner_title: src?.banner_title || '',
     banner_text: '',
     share_text: '',

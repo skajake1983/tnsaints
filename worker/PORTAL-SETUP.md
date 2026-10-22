@@ -112,9 +112,9 @@ All of them are safe to re-run except 008, 015, 019, 020 and 023–026 (018 and 
 columns, so a re-run fails with "duplicate column name", which means the file
 was already applied.
 
-**024 to 026 have not been tried on a copy of production yet.** Do that first,
-as below, before applying them for real. 024 is the one to watch, because it
-rebuilds `crm_activities`.
+022 to 026 and `seeds/events-waivers-2026-10.sql` were tried on a copy of
+production on 2026-10-22, as below: all applied, `PRAGMA foreign_key_check`
+returned nothing, and the copy was deleted.
 
 **Never rebuild a table other tables point at.** D1 doesn't keep foreign
 keys deferred across a migration file, so copying such a table aside and
@@ -554,11 +554,16 @@ The owner decided how events work on 2026-10-21. Every event is a program, and i
 sessions (or tournament divisions) are its groups. Staff run events from
 **Admin → Events**, and the website reads them from `api.tnsaints.com/api/events`.
 
-**Settings.** The three switches are in section 1: `EVENTS_ENABLED`,
-`EVENT_EMAILS_ENABLED` and `INVITES_ENABLED`. All three start off. Turn them on
-one at a time, after testing. Also set `MAILING_ADDRESS` in `wrangler.toml` to
+**Settings.** The three switches are in section 1. `EVENTS_ENABLED` has been
+on since 2026-10-22, at the owner's word. `EVENT_EMAILS_ENABLED` and
+`INVITES_ENABLED` stay off until the owner decides, after testing. Also set `MAILING_ADDRESS` in `wrangler.toml` to
 the academy's postal address; a PO box is fine. Every invitation's footer
 carries it (CAN-SPAM), and an invitation can't be approved without it.
+
+**Waivers.** `seeds/events-waivers-2026-10.sql` loads the two approved
+texts: `event-v1` (evaluations, open gyms, camps, scrimmages) and
+`tournament-team-v1` (a visiting coach entering a team). Pick one in each
+event's Waiver box.
 
 **Creating one.**
 1. Go to Events → New event and pick the kind. The form starts from the last

@@ -59,6 +59,10 @@ def call(method, path, body=None, token=None, origin=ORIGIN):
         req.add_header("Content-Type", "application/json")
     if origin:
         req.add_header("Origin", origin)
+    if path.startswith(ADMIN):
+        # What a browser on an admin page sends: the admin refuses cross-site
+        # posts (ADMIN_CSRF_MODE "enforce", the owner, 2026-10-22).
+        req.add_header("Sec-Fetch-Site", "same-origin")
     if token:
         req.add_header("Authorization", "Bearer " + token)
     try:

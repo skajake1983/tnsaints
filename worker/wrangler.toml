@@ -85,11 +85,11 @@ ACCESS_EMAIL_MODE = "domain"
 # Sec-Fetch-Site is always enforced. This mode controls only the Origin
 # fallback used when a client sends no Sec-Fetch-Site:
 #   "report"  — log admin_csrf_would_block and let it through (rollout default)
-#   "enforce" — refuse it. Switch once Workers Logs show no unexpected
-#               would-block events for ~2 weeks; the test helpers must then
-#               send Origin: https://admin.tnsaints.com.
+#   "enforce" — refuse it. The owner chose "enforce" on 2026-10-22, before
+#               event invitations can be sent (the Events plan). Test helpers
+#               send Sec-Fetch-Site: same-origin, as the admin's own pages do.
 # Missing or misspelled reads as "enforce".
-ADMIN_CSRF_MODE = "report"
+ADMIN_CSRF_MODE = "enforce"
 
 # ---------------------------------------------------------------------------
 # Parent portal (src/portal). Closed by default: PORTAL_ENABLED must be exactly
@@ -212,12 +212,15 @@ LEADS_ENABLED = "false"
 # Events on the website (the Events plan, 2026-10-21): GET /api/events, one
 # event, and POST /api/events/:id/register. Anything but "true" lists nothing
 # and refuses sign-ups, so the site shows no events. Staff can still create,
-# preview and publish events in the admin.
-EVENTS_ENABLED = "false"
+# preview and publish events in the admin. On since 2026-10-22 (the owner:
+# "I want the features on"); the live site shows events only once the
+# website branch is merged.
+EVENTS_ENABLED = "true"
 # Emails about events — sign-up receipts and staff alerts for event sign-ups,
-# interest confirmations — are sent ONLY when this is "true". The owner
-# (2026-10-21): no email goes out without their approval. Sign-ups are still
-# recorded, reach the CRM and the daily brief.
+# interest confirmations, "a place opened" for a family or team moved up from
+# a waiting list — are sent ONLY when this is "true". The owner (2026-10-21,
+# again 2026-10-22): no email goes out until they decide, after testing.
+# Sign-ups are still recorded, reach the CRM and the daily brief.
 EVENT_EMAILS_ENABLED = "false"
 
 # Event invitations (the Events plan, EV5): drafted by staff, sent only after

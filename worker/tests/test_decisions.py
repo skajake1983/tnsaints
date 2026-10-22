@@ -60,6 +60,10 @@ def call(method, path, body=None):
     if body is not None:
         req.add_header("Content-Type", "application/json")
     req.add_header("Origin", ORIGIN)
+    if path.startswith(ADMIN):
+        # What a browser on an admin page sends: the admin refuses cross-site
+        # posts (ADMIN_CSRF_MODE "enforce", the owner, 2026-10-22).
+        req.add_header("Sec-Fetch-Site", "same-origin")
     try:
         with urllib.request.urlopen(req) as r:
             raw = r.read().decode()

@@ -62,11 +62,12 @@ export function adminOriginAllowed(origin, { env, requestUrl, isDev }) {
  * Two layers, rolled out separately:
  *   - Sec-Fetch-Site is ENFORCED now. Every current browser sends it, and our
  *     own pages always send "same-origin", so nothing legitimate is refused.
- *     Clients that omit it (the Python suites) are unaffected.
- *   - The Origin fallback, for requests with no Sec-Fetch-Site, starts in
- *     REPORT mode (ADMIN_CSRF_MODE="report"): it logs what it would have
- *     refused. Once the logs show only expected traffic it moves to "enforce",
- *     which also means the test helpers must start sending the admin Origin.
+ *   - The Origin fallback, for requests with no Sec-Fetch-Site (older
+ *     browsers), started in REPORT mode (ADMIN_CSRF_MODE="report": log what it
+ *     would have refused) and has been "enforce" since 2026-10-22, the owner's
+ *     choice, before event invitations can be sent. An older browser still
+ *     passes with the admin's own Origin; the test helpers send
+ *     Sec-Fetch-Site: same-origin, as the admin's pages do.
  *
  * An unset or misspelled mode enforces — a protection must not switch itself
  * off because a config line went missing.

@@ -135,13 +135,18 @@ st, body = save("NULL-ORIGIN-FORM", {"Sec-Fetch-Site": "same-origin", "Origin": 
 check("a same-origin form POST with Origin: null (Referrer-Policy: no-referrer) is accepted",
       st == 200 and body.get("ok"), f"got {st} {str(body)[:160]}")
 
-st, body = save("NO-HEADERS", {})
-check("a client sending neither header still works (report mode)", st == 200 and body.get("ok"), f"got {st}")
+st, body = save("OLD-BROWSER", {"Origin": "https://admin.tnsaints.com"})
+check("an older browser that sends no Sec-Fetch-Site, but the admin's own Origin, still works",
+      st == 200 and body.get("ok"), f"got {st} {str(body)[:160]}")
 
+# ADMIN_CSRF_MODE = "enforce" (the owner, 2026-10-22): the Origin fallback refuses too.
+before = count(NOTES)
+st, body = save("NO-HEADERS", {})
+check("a client sending neither header is refused (ADMIN_CSRF_MODE=enforce)", st == 403, f"got {st}")
 st, body = save("FOREIGN-ORIGIN", {"Origin": "https://evil.example"})
-check("a foreign Origin without Sec-Fetch-Site is only reported for now (ADMIN_CSRF_MODE=report)",
-      st == 200, f"got {st}")
-check("report mode writes no audit rows", count(BLOCKED) == 5)
+check("a foreign Origin without Sec-Fetch-Site is refused", st == 403, f"got {st}")
+check("  ...nothing was saved, and both refusals are audited", count(NOTES) == before and count(BLOCKED) == 7,
+      count(BLOCKED))
 
 print("\n=== Safe methods and ordering ===")
 st, _ = call("GET", ADMIN + "/", headers={"Sec-Fetch-Site": "cross-site"})

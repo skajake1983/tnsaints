@@ -336,6 +336,9 @@ st, h, _ = admin("POST", "/events/2026-11-03-open-gym/repeat", {"weeks": "13"})
 check("but not more than 12 weeks at once", "msg=invalid" in h.get("Location", ""))
 
 print("\n=== a priced camp, and a tournament ===")
+st, _, html = admin("GET", "/events/new/form?kind=camp&from=")
+check("the first camp's description starts with the owner's refund policy",
+      "cancel at least 7 days before the camp for a full refund" in html.replace("&#39;", "'"), st)
 CAMP = {"kind": "camp", "name": "Winter Camp", "starts_on": "2026-12-28", "ends_on": "2026-12-30", "location": "Franklin, TN",
         "s1_name": "Morning", "s1_start": "09:00", "s1_end": "12:00", "s1_cap": "30", "price": "75"}
 admin("POST", "/events/new", CAMP)
