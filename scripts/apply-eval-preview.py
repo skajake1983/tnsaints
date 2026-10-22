@@ -9,6 +9,10 @@ tags correct for the current date, reading eval-preview.json:
   * EVERGREEN (academy, no dates) shows by default.
   * The EVAL preview shows only while eval.activeUntil is in the future; the
     first run after that timestamp reverts to evergreen.
+  * Otherwise, the FEATURED EVENT from the academy's live events API
+    (https://api.tnsaints.com/api/events: the event in the website banner,
+    Admin -> Events -> "Put in the website banner") shows while it is open for
+    sign-ups. Its own preview image if it has one, the evergreen image if not.
   * Otherwise, an EVALUATION PROGRAM from the academy's live programs API
     (https://api.tnsaints.com/api/programs) shows while its sign-up is open, if
     staff gave it a preview image (Admin -> Programs). So the next evaluation's
@@ -32,6 +36,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROGRAMS_API = "https://api.tnsaints.com/api/programs"
+EVENTS_API = "https://api.tnsaints.com/api/events"
 CONFIG = ROOT / "eval-preview.json"
 INDEX = ROOT / "index.html"
 
@@ -98,6 +103,37 @@ def program_preview(now):
     return None
 
 
+def event_preview(cfg):
+    """The featured event, open for sign-ups, from the live events API, or None."""
+    if "--no-api" in sys.argv:
+        return None
+    try:
+        req = urllib.request.Request(EVENTS_API, headers={"Accept": "application/json", "User-Agent": "tnsaints-link-preview"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.load(resp)
+    except Exception as exc:  # network, HTTP or JSON: fall back, never fail the job
+        print(f"NOTE: events API unavailable ({exc.__class__.__name__})")
+        return None
+    featured = data.get("featured")
+    for e in data.get("events") or []:
+        if e.get("id") != featured or not e.get("registration_open"):
+            continue
+        banner = e.get("banner") or {}
+        title = f"{banner.get('title') or e.get('name') or ''} | Tennessee Saints"[:120]
+        description = str(banner.get("text") or e.get("description") or "")[:300]
+        image = str(e.get("image") or "")
+        if not image.startswith("https://"):
+            image = cfg["evergreen"]["image"]
+        # Text from the API goes into an HTML attribute: escape it.
+        return {
+            "title": html_lib.escape(title, quote=True),
+            "description": html_lib.escape(description, quote=True),
+            "image": html_lib.escape(image, quote=True),
+            "alt": html_lib.escape(title, quote=True),
+        }
+    return None
+
+
 def set_meta(html, attr, value, content):
     # Target the tag by its property/name, replacing whatever content it holds,
     # so the current dash encodings never have to be matched by hand.
@@ -112,9 +148,10 @@ def main():
     cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
     now = datetime.datetime.now(datetime.timezone.utc)
     active = eval_is_active(cfg, now)
-    from_api = None if active else program_preview(now)
-    mode = "eval" if active else "program" if from_api else "evergreen"
-    chosen = cfg["eval"] if active else from_api or cfg["evergreen"]
+    from_event = None if active else event_preview(cfg)
+    from_api = None if active or from_event else program_preview(now)
+    mode = "eval" if active else "event" if from_event else "program" if from_api else "evergreen"
+    chosen = cfg["eval"] if active else from_event or from_api or cfg["evergreen"]
 
     # newline="" preserves the file's existing line endings byte-for-byte; only
     # the tag content changes.

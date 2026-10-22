@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Release Your Spot | Tennessee Saints</title>
-  <meta name="description" content="Release your Tennessee Saints evaluation spot so another family can take it." />
+  <meta name="description" content="Release your Tennessee Saints event spot so another family can take it." />
   <!-- Never index a page that only makes sense with a private token attached. -->
   <meta name="robots" content="noindex, nofollow" />
   <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
@@ -120,7 +120,7 @@
       <img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="" />
       <div>
         <strong>Tennessee Saints</strong>
-        <span>Free Academy Evaluation &middot; Saturday, August 29</span>
+        <span id="event-label">Event sign-up</span>
       </div>
     </div>
 
@@ -153,7 +153,7 @@
 
         <label for="reason">Anything you'd like us to know? (optional)</label>
         <textarea id="reason" maxlength="500" placeholder="A scheduling conflict, a different time slot would work better, etc."></textarea>
-        <p class="hint">This just helps us plan future evaluation dates.</p>
+        <p class="hint">This just helps us plan future events.</p>
 
         <div class="actions">
           <button class="btn btn-danger" type="button" id="confirm-btn">Yes, release my spot</button>
@@ -167,7 +167,7 @@
         <h1>Your spot has been released</h1>
         <p class="ok" id="done-text"></p>
         <p>Thank you for letting us know &mdash; that seat can now go to another family.
-          We'd love to see your player at a future evaluation.</p>
+          We'd love to see you at a future event.</p>
         <div class="actions">
           <a class="btn btn-quiet" href="/">Back to tnsaints.com</a>
         </div>
@@ -204,6 +204,7 @@
         const data = await res.json();
 
         if (!res.ok || !data.ok) return fail('That cancellation link is not valid.');
+        if (data.event_label) document.getElementById('event-label').textContent = data.event_label;
 
         if (data.already_cancelled) {
           document.getElementById('done-text').textContent =
@@ -212,9 +213,13 @@
         }
 
         document.getElementById('d-player').textContent = data.player_name;
-        document.getElementById('d-session').textContent =
-          `${data.session_time} session${data.grade ? ' · ' + data.grade + ' grade' : ''}` +
-          (data.status === 'waitlist' ? ' · currently on the waiting list' : '');
+        // A place in a session, interest in an event, or a team entry.
+        document.getElementById('d-session').textContent = data.kind === 'team'
+          ? `Team entry${data.status === 'waitlist' ? ' · currently on the waiting list' : ''}`
+          : data.kind === 'interest'
+            ? 'Registered interest'
+            : `${data.session_time} session${data.grade ? ' · ' + data.grade + ' grade' : ''}` +
+              (data.status === 'waitlist' ? ' · currently on the waiting list' : '');
         show('view-confirm');
       } catch {
         fail('We could not reach the registration system. Please try again, or email info@tnsaints.com.');

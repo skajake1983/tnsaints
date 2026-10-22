@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unsubscribe | Tennessee Saints</title>
+  <meta name="description" content="Stop event invitations from Tennessee Saints." />
+  <!-- Never index a page that only makes sense with a private token attached. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="Saints%20Logo%20Updated%20v2_transparent.png" type="image/png" />
+  <style>
+    :root {
+      --saints-blue: #0b3a8d;
+      --saints-blue-dark: #06255c;
+      --saints-gold: #f5cf00;
+      --saints-light: #f3f5f9;
+      --saints-gray: #dfe3ea;
+      --saints-text: #13233d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+      background: linear-gradient(160deg, #002448 0%, var(--saints-blue) 100%); color: var(--saints-text);
+      font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; line-height: 1.55;
+    }
+    .card { background: #fff; border-radius: 14px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); max-width: 520px; width: 100%; overflow: hidden; }
+    .card-head { background: var(--saints-blue-dark); border-bottom: 4px solid var(--saints-gold); padding: 20px 26px; display: flex; align-items: center; gap: 14px; }
+    .card-head img { width: 48px; height: 48px; object-fit: contain; }
+    .card-head strong { color: #fff; font-size: 1.05rem; display: block; }
+    .card-head span { color: rgba(255, 255, 255, 0.75); font-size: 0.85rem; }
+    .card-body { padding: 26px; }
+    h1 { margin: 0 0 6px; font-size: 1.4rem; color: var(--saints-blue-dark); }
+    p { margin: 0 0 14px; }
+    .detail { background: var(--saints-light); border-left: 4px solid var(--saints-gold); border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn { flex: 1 1 auto; padding: 12px 18px; border: 0; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; }
+    .btn-primary { background: var(--saints-blue-dark); color: #fff; }
+    .btn-primary:hover { background: var(--saints-blue); }
+    .btn-quiet { background: var(--saints-light); color: var(--saints-blue-dark); }
+    .btn-quiet:hover { background: var(--saints-gray); }
+    .btn[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .state-msg { font-size: 0.95rem; }
+    .state-msg.error { color: #b42318; font-weight: 600; }
+    .ok { color: #14663a; font-weight: 700; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-head">
+      <img src="Saints%20Logo%20Updated%20v2_transparent.png" alt="" />
+      <div>
+        <strong>Tennessee Saints</strong>
+        <span>Event invitations</span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div id="view-loading">
+        <p class="state-msg">Checking your link&hellip;</p>
+      </div>
+
+      <div id="view-error" hidden>
+        <h1>We couldn't find that link</h1>
+        <p class="state-msg error" id="error-text">That unsubscribe link is not valid.</p>
+        <p>To stop our emails, just reply to one of them or write to
+          <a href="mailto:info@tnsaints.com">info@tnsaints.com</a> and we'll take care of it.</p>
+        <div class="actions"><a class="btn btn-quiet" href="/">Back to tnsaints.com</a></div>
+      </div>
+
+      <!-- Opening this page changes nothing (mail scanners open links): the button does. -->
+      <div id="view-confirm" hidden>
+        <h1>Stop event invitations?</h1>
+        <div class="detail"><strong id="d-address"></strong></div>
+        <p>We won't invite this address to evaluations, open gyms, camps or other events again.
+          If your child has a place with us, you'll still get messages about it.</p>
+        <div class="actions">
+          <button class="btn btn-primary" type="button" id="confirm-btn">Yes, unsubscribe</button>
+          <a class="btn btn-quiet" href="/">Never mind</a>
+        </div>
+        <p class="state-msg error" id="confirm-error" hidden></p>
+      </div>
+
+      <div id="view-done" hidden>
+        <h1>You're unsubscribed</h1>
+        <p class="ok" id="done-text">You won't get event invitations from us at this address.</p>
+        <div class="actions"><a class="btn btn-quiet" href="/">Back to tnsaints.com</a></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const IS_LOCAL = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+    const API = IS_LOCAL ? 'http://127.0.0.1:8787' : 'https://api.tnsaints.com';
+    const token = new URLSearchParams(location.search).get('t') || '';
+    const show = (id) => ['view-loading', 'view-error', 'view-confirm', 'view-done']
+      .forEach((v) => { document.getElementById(v).hidden = v !== id; });
+    const fail = (msg) => { document.getElementById('error-text').textContent = msg; show('view-error'); };
+
+    async function init() {
+      if (!token) return fail('This link is missing its code.');
+      try {
+        const res = await fetch(`${API}/api/unsubscribe?t=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok) return fail('That unsubscribe link is not valid.');
+        if (data.already) return show('view-done');
+        document.getElementById('d-address').textContent = data.address;
+        show('view-confirm');
+      } catch {
+        fail('We could not reach our system. Please try again, or email info@tnsaints.com.');
+      }
+    }
+
+    document.getElementById('confirm-btn').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const err = document.getElementById('confirm-error');
+      err.hidden = true;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API}/api/unsubscribe`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ t: token }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error('failed');
+        show('view-done');
+      } catch {
+        err.textContent = 'That did not go through. Please try again, or email info@tnsaints.com.';
+        err.hidden = false;
+        btn.disabled = false;
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

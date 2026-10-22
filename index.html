@@ -1537,6 +1537,29 @@
         clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%);
       }
     }
+
+    /* --- Events (the Events plan): cards, the event form, the waiver --- */
+    .events-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .event-card .top .event-kind {
+      display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--saints-gold); margin-bottom: 0.35rem;
+    }
+    .event-card .body p { margin: 0 0 0.45rem; }
+    .event-card .event-when { font-weight: 700; }
+    .event-card .event-sessions { list-style: none; padding: 0; margin: 0.4rem 0 0.8rem; }
+    .event-card .event-sessions li { padding: 0.15rem 0; }
+    .event-status-open { color: #14663a; font-weight: 700; }
+    .event-status-full { color: #b42318; font-weight: 700; }
+    .event-card .event-closes { font-size: 0.9rem; opacity: 0.8; }
+    .event-card .body .btn { margin-top: auto; align-self: flex-start; }
+    .event-intro { margin: 0 0 1rem; }
+    .event-waiver { border: 1px solid var(--saints-gray); border-radius: 12px; padding: 0.9rem 1rem; margin: 1rem 0; background: var(--saints-light); }
+    .event-waiver h5 { margin: 0 0 0.25rem; font-size: 1rem; }
+    .event-waiver .event-waiver-text {
+      white-space: pre-wrap; max-height: 220px; overflow-y: auto; font-size: 0.9rem; line-height: 1.5;
+      background: var(--saints-white); border: 1px solid var(--saints-gray); border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem;
+    }
+    .event-note { font-weight: 600; }
   </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
@@ -1547,22 +1570,21 @@
        renders its headline about 8px tall, so the artwork is not a responsive
        option below ~760px — it is not a fallback, it is the correct treatment
        at that width. Only one is ever in the accessibility tree. -->
-  <div class="event-banner" id="event-banner" role="region" aria-label="Free academy evaluation registration">
+  <div class="event-banner" id="event-banner" role="region" aria-label="Upcoming event">
 
     <div class="event-banner-art">
       <div class="container ebc-inner">
         <div>
-          <p class="ebc-title">Free Academy <span>Evaluation</span></p>
+          <p class="ebc-title" id="event-banner-title"></p>
           <p class="ebc-meta">
-            <span class="ebc-date">8/29 &middot; 9&ndash;11 AM</span>
+            <span class="ebc-date" id="event-banner-when"></span>
             <span class="ebc-pipe" aria-hidden="true"></span>
-            <span>Franklin, TN</span>
-            <span class="ebc-badge">Register by 8/27</span>
-            <span class="ebc-limited">Spots are limited</span>
+            <span id="event-banner-where"></span>
+            <span class="ebc-badge" id="event-banner-closes"></span>
             <span id="event-banner-countdown"></span>
           </p>
         </div>
-        <a class="event-banner-btn" href="#contact" data-open-form="evaluation">Register Now</a>
+        <a class="event-banner-btn" id="event-banner-btn" href="#contact">Sign up</a>
       </div>
     </div>
 
@@ -1604,6 +1626,7 @@
           <a href="#mission">Mission</a>
           <a href="#values">Values</a>
           <a href="#program">Program</a>
+          <a href="#events" id="nav-events" hidden>Events</a>
           <a href="#leadership">Leadership</a>
           <a href="#contact">Contact</a>
           <a href="join.html" class="nav-store" aria-label="Join the academy" title="Join the academy">
@@ -1718,6 +1741,19 @@
         <div style="text-align: center; margin-top: 1.6rem;">
           <a class="btn btn-primary" href="join.html">Join the Academy</a>
         </div>
+      </div>
+    </section>
+
+    <!-- Upcoming events: filled from api.tnsaints.com/api/events. Hidden until there
+         is something to show, so the page reads the same with no events or no API. -->
+    <section id="events" hidden>
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Events</div>
+          <h3>Upcoming Events</h3>
+          <p>Evaluations, open gyms, camps, scrimmages and tournaments. Choose one to sign up.</p>
+        </div>
+        <div class="team-grid events-grid" id="events-list"></div>
       </div>
     </section>
 
@@ -2288,6 +2324,10 @@
 
     function renderDynamicForm() {
       const selected = purposeSelect.value;
+      if (selected.startsWith('event:')) {
+        renderEventForm(selected.slice(6));
+        return;
+      }
       dynamicFields.innerHTML = formTemplates[selected] || formTemplates.general;
       formRenderedAt = Date.now();
       clearFormError();
@@ -2395,7 +2435,9 @@
 
       try {
         const purpose = purposeSelect.value;
-        const ok = REGISTRATION_API && purpose === 'evaluation'
+        const ok = purpose.startsWith('event:')
+          ? await submitToEventApi(purpose.slice(6))
+          : REGISTRATION_API && purpose === 'evaluation'
           ? await submitToRegistrationApi()
           : LEAD_API && LEAD_PURPOSES.includes(purpose)
             ? await submitToLeadApi()
@@ -2537,7 +2579,7 @@
       return true;
     }
 
-    function openSuccessModal(title, message, { share = false } = {}) {
+    function openSuccessModal(title, message, { share = false, shareText = '', shareUrl = '' } = {}) {
       const titleEl = document.getElementById('success-modal-title');
       const bodyEl = document.getElementById('success-modal-body');
       if (title && titleEl) titleEl.textContent = title;
@@ -2548,6 +2590,16 @@
       // an answer to their question.
       const shareBlock = document.getElementById('share-block');
       if (shareBlock) shareBlock.hidden = !share;
+
+      // An event shares its own words and link; the 8/29 flyer is for 8/29 only.
+      if (share && shareText) {
+        const textEl = document.getElementById('share-text');
+        if (textEl) textEl.textContent = shareText;
+        const fb = document.getElementById('share-facebook');
+        if (fb) fb.href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl || 'https://tnsaints.com/');
+        const flyer = document.querySelector('.share-dl');
+        if (flyer) flyer.hidden = true;
+      }
 
       successModal.classList.add('show');
       successModal.setAttribute('aria-hidden', 'false');
@@ -2619,7 +2671,333 @@
       }
     });
 
+
+    // --- Events (the Events plan, 2026-10-21) -----------------------------------
+    // Everything below is built with createElement and textContent: the page has
+    // no Content-Security-Policy, so nothing the API sends is ever parsed as HTML.
+    const EVENTS_API = REGISTRATION_API;
+    const eventDetails = new Map();
+    const pageParams = new URLSearchParams(location.search);
+
+    function el(tag, attrs = {}, text) {
+      const node = document.createElement(tag);
+      for (const [key, value] of Object.entries(attrs)) {
+        if (value === false || value === null || value === undefined) continue;
+        if (key === 'class') node.className = value;
+        else node.setAttribute(key, value === true ? '' : String(value));
+      }
+      if (text !== undefined && text !== null) node.textContent = String(text);
+      return node;
+    }
+
+    function sessionStatus(session, waitlist) {
+      if (!session.full) return el('span', { class: 'event-status-open' }, 'Open');
+      return el('span', { class: 'event-status-full' }, waitlist ? 'Full (waiting list)' : 'Full');
+    }
+
+    function openEventForm(id) {
+      const value = `event:${id}`;
+      if (!purposeSelect.querySelector(`option[value="${CSS.escape(value)}"]`)) return;
+      purposeSelect.value = value;
+      renderDynamicForm();
+      document.getElementById('contact').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderEventCards(events) {
+      const list = document.getElementById('events-list');
+      const section = document.getElementById('events');
+      if (!list || !section || !events.length) return;
+      list.replaceChildren(...events.map((e) => {
+        const card = el('article', { class: 'team-card event-card', 'aria-labelledby': `event-${e.id}-name` });
+        const top = el('div', { class: 'top' });
+        top.append(el('span', { class: 'event-kind' }, e.kind_label), el('h4', { id: `event-${e.id}-name` }, e.name));
+        if (e.date_line) top.append(el('p', {}, e.date_line));
+        const body = el('div', { class: 'body' });
+        if (e.time_line) body.append(el('p', { class: 'event-when' }, e.time_line));
+        if (e.location) body.append(el('p', {}, e.location));
+        const meta = [e.grade_line, e.price_line].filter(Boolean).join(' · ');
+        if (meta) body.append(el('p', {}, meta));
+        if (e.description) body.append(el('p', {}, e.description));
+        if (e.signup_mode !== 'interest' && e.sessions.length > 1) {
+          const ul = el('ul', { class: 'event-sessions' });
+          e.sessions.forEach((s) => {
+            // A session named for its start time ("6:00 PM") needs only its times.
+            const what = s.time && s.time.startsWith(s.name) ? s.time : `${s.name}${s.time ? ` (${s.time})` : ''}`;
+            const li = el('li', {}, `${what}: `);
+            li.append(sessionStatus(s, e.waitlist));
+            ul.append(li);
+          });
+          body.append(ul);
+        }
+        if (e.closes_line) body.append(el('p', { class: 'event-closes' }, e.closes_line));
+        if (!e.registration_open) {
+          body.append(el('p', { class: 'event-note' }, 'Sign-ups are not open right now.'));
+        } else if (e.all_full) {
+          body.append(el('p', { class: 'event-note' }, 'This event is full.'));
+        } else {
+          const button = el('button', { class: 'btn btn-primary', type: 'button' }, e.cta);
+          button.addEventListener('click', () => openEventForm(e.id));
+          body.append(button);
+        }
+        card.append(top, body);
+        return card;
+      }));
+      section.hidden = false;
+      const navLink = document.getElementById('nav-events');
+      if (navLink) navLink.hidden = false;
+    }
+
+    function addEventPurposes(events) {
+      const open = events.filter((e) => e.registration_open && !e.all_full);
+      const first = purposeSelect.firstElementChild;
+      open.forEach((e) => {
+        const value = `event:${e.id}`;
+        if (purposeSelect.querySelector(`option[value="${CSS.escape(value)}"]`)) return;
+        purposeSelect.insertBefore(el('option', { value }, `${e.name}${e.date_line ? ` (${e.date_line})` : ''}`), first);
+      });
+    }
+
+    function showBanner(e) {
+      const banner = document.getElementById('event-banner');
+      if (!banner || !e || !e.registration_open || e.all_full) return;
+      const key = `tns-banner-dismissed-${e.id}`;
+      try {
+        if (sessionStorage.getItem(key) === '1') return;
+      } catch { /* storage blocked: show it */ }
+      banner.setAttribute('aria-label', e.banner.title);
+      document.getElementById('event-banner-title').textContent = e.banner.title;
+      document.getElementById('event-banner-when').textContent = [e.date_line, e.time_line].filter(Boolean).join(' · ');
+      const where = document.getElementById('event-banner-where');
+      where.textContent = e.location ? e.location.split(',').slice(-2, -1)[0]?.trim() || e.location : '';
+      document.getElementById('event-banner-closes').textContent = e.closes_line || '';
+      const countdown = document.getElementById('event-banner-countdown');
+      if (e.closes_at) {
+        const days = Math.ceil((new Date(e.closes_at) - new Date()) / 86400000);
+        countdown.textContent = days > 1 ? `${days} days left` : days === 1 ? 'Closes tomorrow' : 'Closes today';
+      }
+      const button = document.getElementById('event-banner-btn');
+      button.textContent = e.cta;
+      button.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        openEventForm(e.id);
+      });
+      banner.classList.add('show');
+      document.getElementById('event-banner-close').addEventListener('click', () => {
+        banner.classList.remove('show');
+        try { sessionStorage.setItem(key, '1'); } catch { /* fine */ }
+      });
+    }
+
+    async function eventDetail(id) {
+      if (eventDetails.has(id)) return eventDetails.get(id);
+      const res = await fetch(`${EVENTS_API}/api/events/${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'unavailable');
+      eventDetails.set(id, data.event);
+      return data.event;
+    }
+
+    const FIELD_TYPES = new Set(['text', 'email', 'tel', 'url', 'number', 'textarea', 'select', 'radio', 'checkbox']);
+
+    function fieldInput(f, id, event) {
+      if (f.type === 'textarea') {
+        return el('textarea', { id, name: f.name, required: f.required, maxlength: f.max, minlength: f.min });
+      }
+      if (f.type === 'select') {
+        const select = el('select', { id, name: f.name, required: f.required });
+        select.append(el('option', { value: '', selected: true, disabled: true }, 'Select'));
+        (f.options || []).forEach((o) => select.append(el('option', { value: o.value }, o.label)));
+        return select;
+      }
+      return el('input', {
+        id, name: f.name, type: f.type, required: f.required, maxlength: f.type === 'number' ? null : f.max,
+        min: f.type === 'number' ? f.min : null, max: f.type === 'number' ? f.max : null,
+        autocomplete: f.autocomplete || null, inputmode: f.type === 'tel' ? 'tel' : null,
+        pattern: f.type === 'tel' ? phonePattern : null,
+      });
+    }
+
+    async function renderEventForm(id) {
+      formRenderedAt = Date.now();
+      clearFormError();
+      dynamicFields.replaceChildren(el('p', { class: 'event-intro' }, 'Loading…'));
+      let event;
+      try {
+        event = await eventDetail(id);
+      } catch {
+        dynamicFields.replaceChildren(el('p', { class: 'event-note' },
+          'This event could not be loaded. Please try again, or email info@tnsaints.com.'));
+        return;
+      }
+      if (purposeSelect.value !== `event:${id}`) return;
+      const nodes = [];
+      const intro = el('p', { class: 'event-intro' });
+      intro.append(el('strong', {}, event.name));
+      const line = [event.date_line, event.time_line, event.location].filter(Boolean).join(' · ');
+      if (line) intro.append(el('br'), document.createTextNode(line));
+      nodes.push(intro);
+      if (!event.registration_open) {
+        nodes.push(el('p', { class: 'event-note' }, 'Sign-ups for this event are not open right now.'));
+        dynamicFields.replaceChildren(...nodes);
+        return;
+      }
+      let waiverShown = false;
+      for (const f of event.fields || []) {
+        if (!FIELD_TYPES.has(f.type)) continue;
+        const id2 = `ev-${f.name}`;
+        // The waiver is read before anything is agreed to.
+        if (f.type === 'checkbox' && event.waiver && !waiverShown) {
+          const box = el('div', { class: 'event-waiver' });
+          box.append(el('h5', {}, event.waiver.title), el('small', {}, event.waiver.legal_entity),
+            el('div', { class: 'event-waiver-text', tabindex: '0', role: 'region', 'aria-label': event.waiver.title }, event.waiver.text));
+          nodes.push(box, el('input', { type: 'hidden', name: 'waiver_version_id', value: event.waiver.id }));
+          waiverShown = true;
+        }
+        if (f.type === 'radio') {
+          const set = el('fieldset', { class: 'field-group' });
+          set.append(el('legend', {}, f.label));
+          (f.options || []).forEach((o, i) => {
+            const row = el('div', { class: 'checkbox-row' });
+            const rid = `${id2}-${i}`;
+            const label = el('label', { for: rid }, `${o.label} `);
+            const s = (event.sessions || []).find((x) => x.name === o.value);
+            if (s && event.signup_mode !== 'interest') label.append(sessionStatus(s, event.waitlist));
+            row.append(el('input', { id: rid, name: f.name, type: 'radio', value: o.value, required: f.required }), label);
+            set.append(row);
+          });
+          nodes.push(set);
+        } else if (f.type === 'checkbox') {
+          const row = el('div', { class: 'checkbox-row' });
+          row.append(el('input', { id: id2, name: f.name, type: 'checkbox', required: f.required }),
+            el('label', { for: id2 }, f.label));
+          nodes.push(row);
+        } else {
+          const wrap = el('div');
+          wrap.append(el('label', { for: id2 }, f.required ? f.label : `${f.label} (optional)`), fieldInput(f, id2, event));
+          nodes.push(wrap);
+        }
+      }
+      dynamicFields.replaceChildren(...nodes);
+    }
+
+    async function submitToEventApi(id) {
+      const event = await eventDetail(id);
+      const fd = new FormData(form);
+      const payload = {
+        company: fd.get('company') || '',
+        elapsed_ms: Date.now() - formRenderedAt,
+        turnstile_token: currentTurnstileToken(),
+        waiver_version_id: fd.get('waiver_version_id') || '',
+      };
+      for (const f of event.fields || []) {
+        if (f.type === 'checkbox') payload[f.name] = fd.get(f.name) === 'on';
+        else if (f.type === 'number') payload[f.name] = fd.get(f.name) === '' || fd.get(f.name) === null ? '' : Number(fd.get(f.name));
+        else payload[f.name] = fd.get(f.name) || '';
+      }
+      const invitation = pageParams.get('inv');
+      if (invitation && pageParams.get('event') === id) payload.invitation = invitation;
+      const response = await fetch(`${EVENTS_API}/api/events/${encodeURIComponent(id)}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        showFormError();
+        return false;
+      }
+      if (!response.ok || !data.ok) {
+        if (data.code === 'waiver-changed') eventDetails.delete(id);
+        showFormError(Array.isArray(data.errors) && data.errors.length ? data.errors.join(' ') : data.error);
+        return false;
+      }
+      eventDetails.delete(id);
+      if (data.status === 'pending_payment' && data.checkout_url) {
+        // Only ever Stripe's own page (or the local stand-in on a local preview).
+        if (/^https:\/\/checkout\.stripe\.com\//.test(data.checkout_url) || IS_LOCAL) {
+          location.assign(data.checkout_url);
+          return true;
+        }
+        showFormError();
+        return false;
+      }
+      const titles = { confirmed: "You're signed up!", waitlist: 'You are on the waiting list', interested: 'Thanks for your interest!' };
+      openSuccessModal(titles[data.status] || 'Thank you!', data.message,
+        { share: true, shareText: event.share_text, shareUrl: `https://tnsaints.com/?event=${encodeURIComponent(id)}` });
+      return true;
+    }
+
+    /** Back from Stripe: paid, or left before paying (a held place can still be paid). */
+    function paymentReturn(id) {
+      if (pageParams.get('paid') === '1') {
+        openSuccessModal('Payment received', "Thank you — you're signed up. Your receipt comes from Stripe.");
+        return true;
+      }
+      const token = pageParams.get('pay');
+      if (token && /^[a-f0-9]{64}$/.test(token)) {
+        openSuccessModal('Your place is still held', 'You left before paying. Pay now to keep it — it goes to the next family when the hold ends.');
+        const body = document.getElementById('success-modal-body');
+        const pay = el('button', { class: 'btn btn-primary', type: 'button' }, 'Pay now');
+        pay.addEventListener('click', async () => {
+          pay.disabled = true;
+          try {
+            const res = await fetch(`${EVENTS_API}/api/events/${encodeURIComponent(id)}/pay`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+            });
+            const data = await res.json();
+            if (res.ok && data.ok && (/^https:\/\/checkout\.stripe\.com\//.test(data.checkout_url) || IS_LOCAL)) {
+              location.assign(data.checkout_url);
+              return;
+            }
+            body.textContent = data.error || 'That did not work. Please email info@tnsaints.com.';
+          } catch {
+            body.textContent = 'That did not work. Please email info@tnsaints.com.';
+          }
+        });
+        body.after(pay);
+        return true;
+      }
+      return false;
+    }
+
+    /** ?event=<id> (a shared or invitation link) opens that event's form, listed or not. */
+    async function openEventFromLink() {
+      const id = pageParams.get('event');
+      if (!id || !/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) return;
+      if (paymentReturn(id)) return;
+      const value = `event:${id}`;
+      if (!purposeSelect.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+        try {
+          const e = await eventDetail(id);
+          purposeSelect.insertBefore(el('option', { value }, `${e.name}${e.date_line ? ` (${e.date_line})` : ''}`),
+            purposeSelect.firstElementChild);
+        } catch {
+          return;
+        }
+      }
+      openEventForm(id);
+    }
+
+    async function loadEvents() {
+      if (!EVENTS_API) return;
+      try {
+        const res = await fetch(`${EVENTS_API}/api/events`);
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.events)) {
+          renderEventCards(data.events);
+          addEventPurposes(data.events);
+          showBanner(data.events.find((e) => e.featured));
+        }
+      } catch {
+        // The page works without events: no banner, no section.
+      }
+      openEventFromLink();
+    }
+
     renderDynamicForm();
+    loadEvents();
 
     // subtle shadow when page scrolls
     const siteHeader = document.querySelector('.site-header');
@@ -2785,35 +3163,6 @@
     const footerYear = document.getElementById('footer-year');
     if (footerYear) footerYear.textContent = new Date().getFullYear();
 
-    // --- 8/29 evaluation banner. Auto-hides after the 8/27 deadline; safe to delete after. ---
-    (function initEventBanner() {
-      const banner = document.getElementById('event-banner');
-      const closeBtn = document.getElementById('event-banner-close');
-      const countdown = document.getElementById('event-banner-countdown');
-      if (!banner || !closeBtn || !countdown) return;
-
-      // 11:59:59 PM Central on 8/27/2026. Explicit offset so the cutoff is the
-      // same moment for every visitor regardless of their local timezone.
-      const deadline = new Date('2026-08-27T23:59:59-05:00');
-      const now = new Date();
-
-      if (now > deadline || sessionStorage.getItem('tns-eval-banner-dismissed') === '1') {
-        return;
-      }
-
-      const msLeft = deadline - now;
-      const daysLeft = Math.ceil(msLeft / 86400000);
-      countdown.textContent =
-        daysLeft > 1 ? `Register by Aug 27 — ${daysLeft} days left`
-                     : 'Registration closes tonight';
-
-      banner.classList.add('show');
-
-      closeBtn.addEventListener('click', () => {
-        banner.classList.remove('show');
-        sessionStorage.setItem('tns-eval-banner-dismissed', '1');
-      });
-    })();
   </script>
 </body>
 </html>
